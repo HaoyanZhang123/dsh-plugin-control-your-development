@@ -3,7 +3,7 @@
 > 把开发过程翻译成你看得懂、能掌控的产品仪表盘。
 > 三份人话 Markdown 是事实源，一键生成单文件离线网页；也可以把仪表盘钉在 DSH 窗口右侧，随时抬头可见。
 
-版本：skill v1.2.0 · 面板插件 v0.3.0　|　许可：[MIT](LICENSE)　|　语言：[English](README.en.md)
+版本：skill v1.2.0 · 面板插件 v0.3.1　|　许可：[MIT](LICENSE)　|　语言：[English](README.en.md)
 
 ---
 
@@ -76,7 +76,7 @@ AI 把需要你决定的事整理成选项卡：点选、补充、复制指令�
 
 | 装什么 | 最快路径 |
 |---|---|
-| **插件 + skill（推荐，一步到位）** | DSH → Plugins → Add plugin → 粘贴 `https://github.com/HaoyanZhang123/dsh-control-your-development`（插件会把配套 skill 自动装到全局技能目录） |
+| **插件 + skill（推荐，一步到位）** | DSH → Plugins → Add plugin → 填 `dsh-plugin-dev-dashboard`（npm 包名，国内走镜像；插件会把配套 skill 自动装到全局技能目录） |
 | 只装 skill（不用面板） | 把 `skill/control-your-development/` 拷到项目的 `.dsh/skills/` |
 
 详解（全局安装、离线安装、卸载与升级）：[INSTALL.md](INSTALL.md)

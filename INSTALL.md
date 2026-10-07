@@ -81,7 +81,17 @@ cp -R dsh-control-your-development/skill/control-your-development ~/.dsh/skills/
 
 统一入口：**DSH 侧边栏 → Plugins → Add plugin**。
 
-### 方式 1：仓库地址（推荐，一行搞定）
+### 方式 1：npm 包名（推荐，一行搞定且不依赖 GitHub）
+
+在 Add plugin 里直接填：
+
+```
+dsh-plugin-dev-dashboard
+```
+
+走 npm registry，**国内会自动命中镜像**（已发布 0.3.1，官方源与 npmmirror 均可查）。包已自带配套 skill，安装后插件会把它放进全局技能目录。
+
+### 方式 2：仓库地址（能连 GitHub 时可用）
 
 在 Add plugin 里粘贴：
 
@@ -93,7 +103,7 @@ https://github.com/HaoyanZhang123/dsh-control-your-development
 
 安全策略（避免覆盖你的东西）：只在"该目录不存在"或"是插件装的且插件版本变了"时才写入；如果那里已经有你自己放的一份（没有插件的标记文件），插件**不会动它**，只会跳过并记一行日志。
 
-### 方式 2：本地路径（离线 / 开发用）
+### 方式 3：本地路径（离线 / 开发用）
 
 1. 克隆本仓库：`git clone https://github.com/HaoyanZhang123/dsh-control-your-development.git`
 2. DSH → Plugins → Add plugin

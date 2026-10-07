@@ -3,7 +3,7 @@
 > Turn the development process into a product dashboard you can actually read and control.
 > Three human-readable Markdown files are the single source of truth; one command renders a single-file offline web page. Optionally, pin the dashboard inside the DSH window's right sidebar.
 
-Versions: skill v1.2.0 · panel plugin v0.3.0 | License: [MIT](LICENSE) | 语言：[中文](README.md)
+Versions: skill v1.2.0 · panel plugin v0.3.1 | License: [MIT](LICENSE) | 语言：[中文](README.md)
 
 ---
 
@@ -21,13 +21,13 @@ It is a DSH skill (teaches the AI to maintain your dashboard) plus an optional D
 
 Prerequisite: DSH desktop is installed.
 
-1. **Install the plugin (one step — it also installs the bundled skill)**: DSH → Plugins → Add plugin → paste the repository URL:
+1. **Install the plugin (one step — it also installs the bundled skill)**: DSH → Plugins → Add plugin → enter:
 
    ```
-   https://github.com/HaoyanZhang123/dsh-control-your-development
+   dsh-plugin-dev-dashboard
    ```
 
-   On activation the plugin installs the skill it ships into the **global skills directory** (`<dshHome>/skills/`) — available in **every workspace**, no manual copying.
+   This installs from the npm registry (a local mirror is used automatically in China — no GitHub access needed). On activation the plugin installs the skill it ships into the **global skills directory** (`<dshHome>/skills/`) — available in **every workspace**, no manual copying.
 
 2. Open your project in DSH and say to the AI: **"control my development"** (or "set up a development dashboard for me").
 
@@ -74,7 +74,7 @@ Install `dsh-plugin-dev-dashboard` and the dashboard lives in the DSH right side
 
 | What | Fastest path |
 |---|---|
-| **Plugin + skill (recommended, one step)** | DSH → Plugins → Add plugin → paste `https://github.com/HaoyanZhang123/dsh-control-your-development`; the plugin installs the bundled skill globally |
+| **Plugin + skill (recommended, one step)** | DSH → Plugins → Add plugin → enter `dsh-plugin-dev-dashboard` (npm package name; a mirror is used in China). The plugin installs the bundled skill globally |
 | Skill only (no panel) | Copy `skill/control-your-development/` into your project's `.dsh/skills/` |
 
 Full options (global install, offline install, uninstall & upgrade): [INSTALL.md](INSTALL.md)
