@@ -3,6 +3,20 @@
 > 目的：让别人在 DSH 的 Add plugin 里**只填包名** `dsh-plugin-dev-dashboard` 就能装，走 npm registry（国内自动命中镜像），**完全不碰 GitHub**。
 > 本机环境事实：DSH 捆绑运行时里只有 **pnpm**（没有 npm）；`registry.npmjs.org` 与 `registry.npmmirror.com` 均可连通；包名 `dsh-plugin-dev-dashboard` **当前可用**。
 
+
+> ⚠️ **必须在包根执行**：`release/dsh-control-your-development`（仓库根 = 包根，它自己是一个独立的 git 仓库）。
+> 在工作区根 `skill开发` 下执行会报 **`ERR_PNPM_GIT_UNCLEAN` Unclean working tree**——因为那是另一个 git 仓库，且带着未提交改动。pnpm 发布前会检查 git 状态，这是它的保护机制，不是网络或权限问题。
+> 想跳过该检查（不推荐）：加 `--no-git-checks`。
+
+**一体化命令（先切目录再发布，复制整段即可）**
+
+```powershell
+Set-Location "E:\DSH\workspaces\myself\skill开发\release\dsh-control-your-development"
+& "E:\DSH\.dsh\dsh-runtimes\dsh-primary-runtime\dependencies\node\bin\node.exe" `
+  "E:\DSH\.dsh\dsh-runtimes\dsh-primary-runtime\dependencies\pnpm\bin\pnpm.mjs" `
+  publish --access public
+```
+
 ## 第 0 步：预检（我已经跑通，你随时可复跑）
 
 ```powershell
