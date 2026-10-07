@@ -108,6 +108,8 @@ def glob_match(path: str, pattern: str) -> bool:
 
 def evidence_path_error(rel: str):
     """证据路径越界校验（契约：一律相对工作区根）。合法返回 None，非法返回中文原因。"""
+    if re.match(r"^[A-Za-z][A-Za-z0-9+.-]*://", rel):
+        return "网址（证据必须是工作区内的文件）"
     if rel.startswith('/') or rel.startswith('\\'):
         return '绝对路径'
     if re.match(r'^[A-Za-z]:', rel):

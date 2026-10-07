@@ -44,6 +44,7 @@ function globMatch(path, pat){
 
 /* ---------- JS 解析器（与渲染器同契约，用于页面内刷新） ---------- */
 function evError(rel){
+  if (/^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(rel)) return '网址（证据必须是工作区内的文件）';
   if (rel.startsWith('/') || rel.startsWith('\\')) return '绝对路径';
   if (/^[A-Za-z]:/.test(rel)) return '盘符绝对路径';
   if (rel.split(/[\\/]/).includes('..')) return '上跳目录';

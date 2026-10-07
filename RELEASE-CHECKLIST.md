@@ -6,6 +6,9 @@
 
 ## 0. 发布前阻塞待办（未清不许发）
 
+> **已发布（2026-10-07）**：https://github.com/HaoyanZhang123/dsh-control-your-development/releases/tag/v1.2.0
+> 发布前已脱敏：去除本机路径示例、补全账号占位、提交身份使用 `HaoyanZhang123@users.noreply.github.com`。
+
 - [ ] README 的 4 张截图仍缺（`docs/images/` 只有规范、没有 png）：项目首页 / 功能地图 / 现在 / 面板实拍
 - [ ] `README.md`「看一看」里的截图占位说明未撤（截图补齐时要连占位一起删）
 - [ ] 占位符 `HaoyanZhang123` 还有 5 处未替换（`README.md` 1 处、`INSTALL.md` 3 处、本清单 1 处；`README.en.md` 另有 `HaoyanZhang123` / `<your-project-path>`）
