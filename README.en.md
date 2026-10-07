@@ -3,7 +3,7 @@
 > Turn the development process into a product dashboard you can actually read and control.
 > Three human-readable Markdown files are the single source of truth; one command renders a single-file offline web page. Optionally, pin the dashboard inside the DSH window's right sidebar.
 
-Versions: skill v1.2.0 · panel plugin v0.2.0 | License: [MIT](LICENSE) | 语言：[中文](README.md)
+Versions: skill v1.2.0 · panel plugin v0.3.0 | License: [MIT](LICENSE) | 语言：[中文](README.md)
 
 ---
 
@@ -21,21 +21,19 @@ It is a DSH skill (teaches the AI to maintain your dashboard) plus an optional D
 
 Prerequisite: DSH desktop is installed.
 
-1. Clone this repo and copy the whole `skill/control-your-development` directory into your project's `.dsh/skills/`. **Create that directory first** — on a fresh project `cp` has no `.dsh/skills/` to copy into and fails (macOS/Linux example):
+1. **Install the plugin (one step — it also installs the bundled skill)**: DSH → Plugins → Add plugin → paste the repository URL:
 
-   ```bash
-   # Replace <your-project-path> with your project root, e.g. /Users/you/code/my-product
-   cd <your-project-path>
-   mkdir -p .dsh/skills
-   git clone https://github.com/HaoyanZhang123/dsh-control-your-development.git
-   cp -R dsh-control-your-development/skill/control-your-development .dsh/skills/
+   ```
+   https://github.com/HaoyanZhang123/dsh-control-your-development
    ```
 
-   `<your-project-path>` and `HaoyanZhang123` are placeholders — replace them, don't copy them literally.
+   On activation the plugin installs the skill it ships into the **global skills directory** (`<dshHome>/skills/`) — available in **every workspace**, no manual copying.
 
 2. Open your project in DSH and say to the AI: **"control my development"** (or "set up a development dashboard for me").
 
-3. The AI creates a `dev-dashboard/` directory in your project and renders `index.html` — double-click it. That's your dashboard.
+3. The AI creates `dev-dashboard/` and renders `index.html`; the right sidebar panel shows the dashboard of **the workspace you have open** — switch projects and it follows (a workspace without a dashboard gets a copy-instruction button).
+
+> Prefer no plugin? Copy `skill/control-your-development/` into your project's `.dsh/skills/` (create that directory first, or `cp` fails on a fresh project).
 
 For full installation options (global install, panel plugin, uninstall & upgrade), see [INSTALL.md](INSTALL.md).
 
@@ -74,10 +72,12 @@ Install `dsh-plugin-dev-dashboard` and the dashboard lives in the DSH right side
 
 ## Installation
 
-| What | Fastest path | Details |
-|---|---|---|
-| Skill (required) | Copy `skill/control-your-development/` into your project's `.dsh/skills/` | [INSTALL.md](INSTALL.md) |
-| Panel plugin (optional) | DSH → Plugins in the sidebar → Add plugin → paste the absolute local path of `panel/dsh-plugin-dev-dashboard` | [INSTALL.md](INSTALL.md) |
+| What | Fastest path |
+|---|---|
+| **Plugin + skill (recommended, one step)** | DSH → Plugins → Add plugin → paste `https://github.com/HaoyanZhang123/dsh-control-your-development`; the plugin installs the bundled skill globally |
+| Skill only (no panel) | Copy `skill/control-your-development/` into your project's `.dsh/skills/` |
+
+Full options (global install, offline install, uninstall & upgrade): [INSTALL.md](INSTALL.md)
 
 ## Daily use
 
@@ -96,15 +96,16 @@ You never edit the web page by hand — it is a machine artifact, always regener
 
 ```
 dsh-control-your-development/
-├─ skill/
-│  └─ control-your-development/      ← the capability itself; copy-and-use
-│     ├─ SKILL.md / manifest.yaml    ← skill definition
-│     ├─ static/                     ← the AI's working discipline and workflow
-│     ├─ templates/                  ← three-file templates + page templates
-│     ├─ scripts/                    ← render / collect / watch (pure Python stdlib)
-│     └─ references/                 ← data format specification
-└─ panel/
-   └─ dsh-plugin-dev-dashboard/      ← DSH embedded panel plugin (optional)
+├─ package.json / cordis.patch.yml   ← panel manifest (repo root IS the plugin package)
+├─ lib/ src/ tools/                  ← panel: browser bundle / source / build script
+├─ PLUGIN.md                         ← panel notes and development gotchas
+└─ skill/
+   └─ control-your-development/      ← the capability itself
+      ├─ SKILL.md / manifest.yaml    ← skill definition
+      ├─ static/                     ← the AI's working discipline and workflow
+      ├─ templates/                  ← three-file templates + page templates
+      ├─ scripts/                    ← render / collect / watch (pure Python stdlib)
+      └─ references/                 ← data format specification
 ```
 
 ## FAQ

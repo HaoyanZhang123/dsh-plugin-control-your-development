@@ -8,9 +8,10 @@
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent          # plugins/dev-dashboard-panel
-REPO = ROOT.parent.parent                             # 发布仓库根
-CORE = REPO / "skill" / "control-your-development" / "templates" / "dashboard.core.js"
+# v1.3.0 起仓库根就是插件包：tools/ 的上一级即包根，skill/ 就在包根下。
+ROOT = Path(__file__).resolve().parent.parent          # 仓库根（= 插件包根）
+REPO = ROOT                                            # 兼容旧变量名
+CORE = ROOT / "skill" / "control-your-development" / "templates" / "dashboard.core.js"
 SRC = ROOT / "src" / "client.src.js"
 OUT = ROOT / "lib" / "client.js"
 

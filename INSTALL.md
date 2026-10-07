@@ -8,6 +8,8 @@
 
 ## 一、安装 skill
 
+> **打算用面板插件？直接跳到[第二节](#二安装面板插件推荐)**——插件激活时会自动把这份 skill 装到全局技能目录（`<dshHome>/skills/`），无需手动拷贝。本节是"不装插件"或"想指定装到某个项目"时的做法。
+
 skill 就是一个目录：`skill/control-your-development/`。拷到对的位置即可，无需安装任何依赖。
 
 ### 方式 A：项目级（推荐第一次使用）
@@ -77,30 +79,33 @@ cp -R dsh-control-your-development/skill/control-your-development ~/.dsh/skills/
 
 面板插件叫 **dsh-plugin-dev-dashboard**，装好后仪表盘出现在 DSH 右侧边栏（与 文件 / 终端 / 浏览器 同列），文件一变自动刷新。
 
-统一入口：**DSH 侧边栏 → Plugins → Add plugin**，它接受三种填法：
+统一入口：**DSH 侧边栏 → Plugins → Add plugin**。
 
-### 方式 1：本地路径（今天就能用，推荐）
+### 方式 1：仓库地址（推荐，一行搞定）
+
+在 Add plugin 里粘贴：
+
+```
+https://github.com/HaoyanZhang123/dsh-control-your-development
+```
+
+**这一条同时也把 skill 装好了**：插件激活时会把自带的 skill 放进全局技能目录 `<dshHome>/skills/control-your-development/`，于是**任何工作区都能用**，不需要再手动拷目录。
+
+安全策略（避免覆盖你的东西）：只在"该目录不存在"或"是插件装的且插件版本变了"时才写入；如果那里已经有你自己放的一份（没有插件的标记文件），插件**不会动它**，只会跳过并记一行日志。
+
+### 方式 2：本地路径（离线 / 开发用）
 
 1. 克隆本仓库：`git clone https://github.com/HaoyanZhang123/dsh-control-your-development.git`
 2. DSH → Plugins → Add plugin
-3. 填入面板目录的**绝对路径**，例如：
-   - Windows：`<你克隆到的目录>\panel\dsh-plugin-dev-dashboard`
-   - macOS：`~/repos/dsh-control-your-development/panel/dsh-plugin-dev-dashboard`
+3. 填**仓库根目录**的绝对路径（仓库根就是插件包，不要再往子目录里指）：
+   - Windows：`<你克隆到的目录>\dsh-control-your-development`
+   - macOS：`~/repos/dsh-control-your-development`
 
-### 方式 2：包名（待 npm 发布后可用）
-
-Add plugin 里直接填：`dsh-plugin-dev-dashboard`
-
-> 面板尚未发布到 npm；发布后会更新本节。安装时会自动探测 npm 镜像，国内网络无需额外配置。
-
-### 方式 3：Git 地址（待面板独立成仓后可用）
-
-Add plugin 支持填 Git 地址，但要求**仓库根目录就是插件包**。本仓库是 skill + 面板的合体仓（面板在子目录里），直接填本仓库地址无法识别。
-过渡期请用方式 1；后续计划：面板发布 npm（方式 2）或拆出独立仓库后再开放此方式。
+> 为什么是仓库根：DSH 安装插件时会在"装出来的包根目录"读 `package.json` 的 `dsh` 字段，读不到就只当普通依赖装上、不挂载。本仓库已把插件包放在根目录，所以上面两种填法都成立。
 
 ### 装好后
 
-右侧边栏会出现「开发仪表盘」标签页（四格仪表盘图标）。打开任意项目会话，面板会自动读取该项目的 `dev-dashboard/`；还没建立仪表盘的项目会显示空态提示。
+右侧边栏会出现「开发仪表盘」标签页（四格仪表盘图标），标签上会带上**当前工作区项目名**。打开任意项目会话，面板读的就是**该项目**的 `dev-dashboard/`；还没建立仪表盘的项目会显示一个"复制指令"按钮，粘到聊天框发送即可建立。
 
 ---
 
@@ -133,15 +138,17 @@ Add plugin 支持填 Git 地址，但要求**仓库根目录就是插件包**。
 ### 面板插件
 
 - **禁用 / 启用**：Plugins 页开关，即时生效，无需重启。
-- **卸载**：Plugins 页点卸载。
-- **升级**：已装插件不会自动更新。升级 = 在 Plugins 页卸载后，按上面任一方式重新安装新版。
-  - 本地路径安装的注意：如果当时填的是克隆目录的路径，先 `git pull` 拿到新版，再卸载重装一次即可。
+- **卸载**：Plugins 页点卸载。插件卸载后，它装到全局技能目录的那份 skill **不会被自动删除**（那是你的环境，插件不越权删）；想一并清理就手动删掉 `<dshHome>/skills/control-your-development/`。
+- **升级**：已装插件不会自动更新——在 Plugins 页卸载后按方式 1 重新粘贴仓库地址即可；插件带的 skill 会在下次激活时自动更新到新版本。
+- **本地路径安装的升级**：先 `git pull`，再卸载重装一次。
 
 ---
 
 ## English quick reference
 
-**Skill (required)** — copy the folder, nothing to install:
+**Plugin + skill (recommended, one step)** — DSH → Plugins → Add plugin → paste `https://github.com/HaoyanZhang123/dsh-control-your-development`; the plugin installs the bundled skill into `<dshHome>/skills/` for every workspace. Details in the sections above (Chinese).
+
+**Skill only (no panel)** — copy the folder, nothing to install:
 
 | Scope | Target location |
 |---|---|

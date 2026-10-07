@@ -6,7 +6,7 @@
 
 ## 0. 发布前阻塞待办（未清不许发）
 
-> **已发布（2026-10-07）**：https://github.com/HaoyanZhang123/dsh-control-your-development/releases/tag/v1.2.0
+> **已发布（2026-10-07）**：https://github.com/HaoyanZhang123/dsh-control-your-development/releases/tag/v1.3.0
 > 发布前已脱敏：去除本机路径示例、补全账号占位、提交身份使用 `HaoyanZhang123@users.noreply.github.com`。
 
 - [ ] README 的 4 张截图仍缺（`docs/images/` 只有规范、没有 png）：项目首页 / 功能地图 / 现在 / 面板实拍
@@ -37,7 +37,7 @@ python tools/contract_check.py .dsh/skills/control-your-development
 - [ ] `release/dsh-control-your-development/README.md` 头部的版本行
 - [ ] `release/dsh-control-your-development/README.en.md` 头部的版本行
 
-skill 与面板版本可以不同（本轮 skill 1.2.0 / panel 0.2.0），但每处自述必须等于实际。面板版本在 `package.json` 里、不属于 skill，改版时别漏。
+skill 与面板版本可以不同（本轮 skill 1.2.0 / panel 0.3.0），但每处自述必须等于实际。面板版本在 `package.json` 里、不属于 skill，改版时别漏。
 
 ## 3. 冒烟重跑
 
@@ -55,16 +55,25 @@ skill 与面板版本可以不同（本轮 skill 1.2.0 / panel 0.2.0），但每
   ```
 
 - [ ] `lib/client.js` 时间线新于 `src/client.src.js` 与全部模板四件
-- [ ] 用发布仓的副本复核：`python release/dsh-control-your-development/panel/dsh-plugin-dev-dashboard/tools/build_panel.py` 产物与工作区 `lib/client.js` 逐字节一致
+- [ ] 用发布仓的副本复核：`python release/dsh-control-your-development/（仓库根）/tools/build_panel.py` 产物与工作区 `lib/client.js` 逐字节一致
 - [ ] 面板在本机 profile 实际加载过一轮：右侧标签出现、数据正确、changes() 自动刷新、动作按钮复制闭环
 
 ## 5. 发布仓内容同步
 
 - [ ] `.dsh/skills/control-your-development/` → `release/dsh-control-your-development/skill/control-your-development/`（整目录覆盖式同步）
-- [ ] `plugins/dev-dashboard-panel/` → `release/dsh-control-your-development/panel/dsh-plugin-dev-dashboard/`（含 `src/`、`tools/`、`lib/`）
+- [ ] `plugins/dev-dashboard-panel/` → `release/dsh-control-your-development/（仓库根）/`（含 `src/`、`tools/`、`lib/`）
 - [ ] 例外：发布仓的 `tools/build_panel.py` 是仓库布局适配版（查找 `skill/` 优先、兼容 `.dsh/skills/`），同步时保留该适配，不要用原版覆盖
-- [ ] 面板目录带 MIT LICENSE：`panel/dsh-plugin-dev-dashboard/LICENSE` 已放副本；但 `package.json` 的 `files` 仍是 `lib` / `cordis.patch.yml` / `README.md`——**待办**：加 `LICENSE`（`package.json` 属面板范围，本轮未改；对照已装可用的 `dsh-plugin-whale-pet` 有 LICENSE）
+- [ ] 面板目录带 MIT LICENSE：`（仓库根）/LICENSE` 已放副本；但 `package.json` 的 `files` 仍是 `lib` / `cordis.patch.yml` / `README.md`——**待办**：加 `LICENSE`（`package.json` 属面板范围，本轮未改；对照已装可用的 `dsh-plugin-whale-pet` 有 LICENSE）
 - [ ] 机器产物不进仓：`dev-dashboard/` 的 `index.html` / `.facts.json` / `.state.json`、`node_modules/`、`*.cyd-backup` 一律不出现（`.gitignore` 已挡，仍肉眼确认 `git status`）
+
+## 7. 一键安装形态（v1.3.0 起硬门槛）
+
+- [ ] **仓库根就是插件包**：根目录存在 `package.json`（含 `dsh.bundle`）、`cordis.patch.yml`、`lib/index.js`、`lib/client.js`；插件**不再**放在子目录（子目录会让 pnpm 生成 `_pnpmPlaceholder` 占位清单，DSH 读不到 `dsh.bundle` → 装不上）
+- [ ] **`files` 字段包含 `skill`**：否则安装时不会打包配套 skill，"插件自动装 skill"就失效
+- [ ] **实装验证**：`pnpm add <本仓库路径或 URL>` 后，装出来的包内必须有 `package.json`（含 `dsh.bundle`）、`cordis.patch.yml`、`lib/client.js`、`skill/control-your-development/SKILL.md` 四项
+- [ ] **行为验证**：DSH → Plugins → Add plugin → 粘贴仓库 URL → 右侧栏出现「开发仪表盘 · <项目名>」；换一个工作区会话，看板跟着换
+- [ ] 面板路径守门测试通过：`node smoke/panel_paths_test.js`（sessionId 传递 + dev-dashboard/ 前缀 + 无写死路径 + 标签带项目名）
+- [ ] CSS 作用域断言通过：`render_dashboard.py --self-test`（未作用域选择器会让自检失败）
 
 ## 6. 文档与链接
 
@@ -79,7 +88,7 @@ skill 与面板版本可以不同（本轮 skill 1.2.0 / panel 0.2.0），但每
 - [ ] 描述：把开发过程翻译成你看得懂、能掌控的产品仪表盘（DSH skill + 面板插件）
 - [ ] topics：`dsh` `dsh-skill` `dsh-plugin` `dashboard` `ai-productivity`
 - [ ] 默认分支 `main`；首次推送 `git status` 干净、`.gitignore` 生效
-- [ ] Releases 建 `v1.2.0` tag（对应本轮 skill 1.2.0 / panel 0.2.0），附本轮变更摘要
+- [ ] Releases 建 `v1.3.0` tag（对应本轮 skill 1.2.0 / panel 0.3.0），附本轮变更摘要
 
 ## 8. 发布后立即做
 

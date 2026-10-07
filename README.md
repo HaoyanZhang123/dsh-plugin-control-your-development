@@ -3,7 +3,7 @@
 > 把开发过程翻译成你看得懂、能掌控的产品仪表盘。
 > 三份人话 Markdown 是事实源，一键生成单文件离线网页；也可以把仪表盘钉在 DSH 窗口右侧，随时抬头可见。
 
-版本：skill v1.2.0 · 面板插件 v0.2.0　|　许可：[MIT](LICENSE)　|　语言：[English](README.en.md)
+版本：skill v1.2.0 · 面板插件 v0.3.0　|　许可：[MIT](LICENSE)　|　语言：[English](README.en.md)
 
 ---
 
@@ -21,21 +21,19 @@
 
 前提：你已安装 DSH 桌面版。
 
-1. 下载本仓库，把 `skill/control-your-development` 整个目录拷进你项目的 `.dsh/skills/` 下。**`.dsh\skills` 这个目录要先建好**——它不存在时 PowerShell 会把整条目标路径当成一个新目录名，skill 会被平铺到错位置（Windows PowerShell 示例）：
+1. **装插件（一步搞定，配套 skill 会一起装好）**：DSH → 左侧 Plugins → Add plugin → 粘贴仓库地址：
 
-   ```powershell
-   # 先把 <你的项目路径> 换成你项目根目录的真实路径，再执行下面几行
-   cd <你的项目路径>
-   New-Item -ItemType Directory -Force .dsh\skills
-   git clone https://github.com/HaoyanZhang123/dsh-control-your-development.git
-   Copy-Item -Recurse dsh-control-your-development\skill\control-your-development .dsh\skills\
+   ```
+   https://github.com/HaoyanZhang123/dsh-control-your-development
    ```
 
-   括号里的 `<你的项目路径>`、`HaoyanZhang123` 都是占位符，必须换成真实值；带尖括号照抄会直接报错，但不会静默装错位置。
+   插件激活时会把自己带的 skill 装进**全局技能目录**（`<dshHome>/skills/`）——**所有工作区都能用**，不用你手动拷目录。
 
 2. 用 DSH 打开你的项目，对 AI 说一句：**"control my development"**（或"帮我建立开发仪表盘"）。
 
-3. AI 会在项目里建好 `dev-dashboard/` 目录并生成 `index.html`——双击打开，这就是你的仪表盘。
+3. AI 会在项目里建好 `dev-dashboard/` 并生成 `index.html`；右侧边栏面板会自动显示**当前工作区**的看板——换个项目就换一份看板（没建过的项目，面板里会给你一个"复制指令"按钮）。
+
+> 不想装插件也行：把 `skill/control-your-development/` 整个目录拷到你项目的 `.dsh/skills/` 下（**先建好 `.dsh\skills` 目录**，否则 PowerShell 会把整条路径当成新目录名、把 skill 平铺到错位置）。
 
 更详细的安装方式（全局安装、面板插件、卸载与升级）见 [INSTALL.md](INSTALL.md)。
 
@@ -76,10 +74,12 @@ AI 把需要你决定的事整理成选项卡：点选、补充、复制指令�
 
 ## 安装
 
-| 装什么 | 最快路径 | 详解 |
-|---|---|---|
-| skill（必装） | 把 `skill/control-your-development/` 拷到项目的 `.dsh/skills/` | [INSTALL.md](INSTALL.md) |
-| 面板插件（可选） | DSH → 侧边栏 Plugins → Add plugin → 填 `panel/dsh-plugin-dev-dashboard` 的本地绝对路径 | [INSTALL.md](INSTALL.md) |
+| 装什么 | 最快路径 |
+|---|---|
+| **插件 + skill（推荐，一步到位）** | DSH → Plugins → Add plugin → 粘贴 `https://github.com/HaoyanZhang123/dsh-control-your-development`（插件会把配套 skill 自动装到全局技能目录） |
+| 只装 skill（不用面板） | 把 `skill/control-your-development/` 拷到项目的 `.dsh/skills/` |
+
+详解（全局安装、离线安装、卸载与升级）：[INSTALL.md](INSTALL.md)
 
 ## 日常使用
 
@@ -98,15 +98,16 @@ AI 把需要你决定的事整理成选项卡：点选、补充、复制指令�
 
 ```
 dsh-control-your-development/
-├─ skill/
-│  └─ control-your-development/      ← 仪表盘能力本体，拷目录即用
-│     ├─ SKILL.md / manifest.yaml    ← skill 定义
-│     ├─ static/                     ← AI 的工作纪律与流程
-│     ├─ templates/                  ← 三份人话文件模板 + 网页模板
-│     ├─ scripts/                    ← 生成网页 / 采集变更 / 自动看护（纯 Python 标准库）
-│     └─ references/                 ← 数据格式约定
-└─ panel/
-   └─ dsh-plugin-dev-dashboard/      ← DSH 内嵌面板插件（可选）
+├─ package.json / cordis.patch.yml   ← 面板插件清单（仓库根就是插件包，所以能一键装）
+├─ lib/ src/ tools/                  ← 面板：浏览器端 bundle / 源码 / 构建脚本
+├─ PLUGIN.md                         ← 面板说明与开发须知
+└─ skill/
+   └─ control-your-development/      ← 仪表盘能力本体
+      ├─ SKILL.md / manifest.yaml    ← skill 定义
+      ├─ static/                     ← AI 的工作纪律与流程
+      ├─ templates/                  ← 三份人话文件模板 + 网页模板
+      ├─ scripts/                    ← 生成网页 / 采集变更 / 自动看护（纯 Python 标准库）
+      └─ references/                 ← 数据格式约定
 ```
 
 ## FAQ
