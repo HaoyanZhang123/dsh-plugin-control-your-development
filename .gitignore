@@ -1,0 +1,9 @@
+# 机器产物与本地环境不进仓
+node_modules/
+__pycache__/
+*.pyc
+*.cyd-backup
+dev-dashboard/index.html
+dev-dashboard/.facts.json
+dev-dashboard/.state.json
+**/.DS_Store

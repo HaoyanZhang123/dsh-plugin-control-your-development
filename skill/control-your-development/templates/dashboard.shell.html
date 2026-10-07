@@ -1,0 +1,38 @@
+<div class="wrap">
+  <header class="top">
+    <h1 id="projName">开发仪表盘 <span class="by">由 control-your-development 生成</span></h1>
+    <button id="themeBtn" title="切换深浅色">🌓</button>
+  </header>
+  <div class="strip" id="strip"></div>
+  <nav class="tabs">
+    <button data-tab="project" class="on">🏠 项目</button>
+    <button data-tab="features">🗺 功能地图</button>
+    <button data-tab="now">⚡ 现在</button>
+    <button data-tab="guide">❓ 使用指南</button>
+  </nav>
+
+  <section id="project" class="on"></section>
+  <section id="features"></section>
+  <section id="now"></section>
+
+  <section id="guide">
+    <div class="card">
+      <h3>功能简介</h3>
+      <p class="lede">control-your-development 把开发过程中繁杂的技术细节，持续整理成清晰的产品视图。你随时可以知道：<b>产品能做什么、怎么用、进展到哪一步</b>；每到需要人做决定的地方，选择权都会交到你手上。</p>
+    </div>
+    <div class="card">
+      <h3>上手方式</h3>
+      <ol class="steps">
+        <li data-n="1"><b>建立仪表盘</b><br><span class="muted">在聊天框输入 <code>/control-your-development</code>，或直接说一句 "control my development"</span></li>
+        <li data-n="2"><b>照常开发</b><br><span class="muted">每完成一个阶段，仪表盘会自动更新（前提是建立时启动的看护任务还在运行）；改完文件点顶部「🔄 更新」立即刷新</span></li>
+        <li data-n="3"><b>随时掌握全局</b><br><span class="muted">双击 <code>dev-dashboard/index.html</code>，5 秒掌握全局；顶部「数据健康 / 等你拍板 / 功能地图 / 数据来源」四个徽章都能点开看详情，第二个「数据更新于」是静态时间位，点它里面的 🔄 可立即重读文件</span></li>
+        <li data-n="4"><b>处理「等你拍板」</b><br><span class="muted">点顶部「等你拍板」徽章打开拍板中心 → 点选选项（可写补充）→「复制拍板」→ 粘贴到聊天框发送</span></li>
+        <li data-n="5"><b>亲手验证</b><br><span class="muted">试用某功能后，点开它的功能卡按「✅ 我已验证」（或在聊天框说"我验证过了"）→ 🤖 变 ✅，进度条前进</span></li>
+      </ol>
+    </div>
+  </section>
+
+  <footer id="foot"></footer>
+</div>
+<div class="toast" id="toast"></div>
+<div class="ovl" id="ovl"><div class="sheet" id="sheet"></div></div>

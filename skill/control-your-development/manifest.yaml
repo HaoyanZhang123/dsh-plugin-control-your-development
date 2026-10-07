@@ -1,0 +1,20 @@
+name: control-your-development
+version: 1.2.0
+description: 把开发进展持续翻译成用户能看懂、能掌控的产品仪表盘（三份 Markdown → 单文件 HTML）
+always_load:
+  - static/core/stance.md
+  - static/core/workflow.md
+axes:
+  mode:
+    detect: "用户意图归哪类：项目还没有 dev-dashboard 或明确要求建立 → init；完成阶段/汇报进展/更新了代码 → update；用户拍板选选项（如 拍板 D1 选A）→ decide；用户说某功能验证过或反馈不好用 → verify。默认 update。"
+    multi: false
+    default: update
+    values:
+      init: static/fragments/mode/init.md
+      update: static/fragments/mode/update.md
+      decide: static/fragments/mode/decide.md
+      verify: static/fragments/mode/verify.md
+references:
+  on_demand:
+    - condition: "首次初始化，或要写/改 dev-dashboard 下任何 Markdown 之前必读"
+      path: references/dashboard-format.md

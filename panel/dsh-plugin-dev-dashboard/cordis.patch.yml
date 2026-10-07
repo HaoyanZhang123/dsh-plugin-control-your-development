@@ -1,0 +1,4 @@
+# Add only our plugin row. Does not replace any official DSH component.
+- insert:
+    - id: dev-dashboard
+      name: dsh-plugin-dev-dashboard
