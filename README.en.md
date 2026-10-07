@@ -110,6 +110,14 @@ dsh-control-your-development/
 
 ## FAQ
 
+**Add plugin fails with `'git' is not recognized` or `git ls-remote ... failed`?**
+That means you pasted the **GitHub URL** — installing a git URL requires git on the machine (absent by default on Windows/macOS) and GitHub access.
+**Enter the npm package name instead** — no git, no GitHub:
+
+```
+dsh-plugin-control-your-development
+```
+
 **What do I need?**
 DSH desktop. Rendering uses the Python bundled with DSH: standard library only, nothing to install, no network needed.
 

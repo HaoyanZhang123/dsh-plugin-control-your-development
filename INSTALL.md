@@ -171,6 +171,13 @@ https://github.com/HaoyanZhang123/dsh-control-your-development
 
 > 只想用仪表盘、不想要面板？只装 skill 就行（第一节），它对 DSH 版本没有额外要求。
 
+### 报错 `'git' 不是内部或外部命令` / `git ls-remote failed`
+
+**你填的是 GitHub 地址**。pnpm 装 git 地址必须本机有 git（Windows 与 macOS 默认都没有）：
+
+- **最简单的解法**：改填 npm 包名 `dsh-plugin-control-your-development`（推荐，走 registry + 国内镜像，不需要 git，也不需要 GitHub）
+- 确实想用仓库地址：先装 git（Windows：`winget install Git.Git`；macOS：`xcode-select --install`），并且网络能连 GitHub
+
 ### 如果连 GitHub 都连不上（国内网络常见）
 
 "浏览器能打开 GitHub" ≠ "终端里的 git/pnpm 能连上"。三种不依赖 GitHub 的安装方式：
