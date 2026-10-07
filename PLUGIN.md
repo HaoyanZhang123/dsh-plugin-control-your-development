@@ -24,7 +24,7 @@ https://github.com/HaoyanZhang123/dsh-control-your-development
 
 | 目标目录状态 | 行为 |
 |---|---|
-| 不存在 | 安装，并写入标记文件 `.installed-by-dsh-plugin-dev-dashboard.json` |
+| 不存在 | 安装，并写入标记文件 `.installed-by-dsh-plugin-control-your-development.json` |
 | 存在 + 有标记 + 版本相同 | 什么都不做 |
 | 存在 + 有标记 + 版本不同 | 覆盖更新（插件自己的副本） |
 | 存在 + **没有标记**（你自己放的） | **不动**它，只记一行日志 |

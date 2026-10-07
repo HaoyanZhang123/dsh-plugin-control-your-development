@@ -1,7 +1,7 @@
 # 发布到 npm（一次配置，之后一条命令）
 
-> 目的：让别人在 DSH 的 Add plugin 里**只填包名** `dsh-plugin-dev-dashboard` 就能装，走 npm registry（国内自动命中镜像），**完全不碰 GitHub**。
-> 本机环境事实：DSH 捆绑运行时里只有 **pnpm**（没有 npm）；`registry.npmjs.org` 与 `registry.npmmirror.com` 均可连通；包名 `dsh-plugin-dev-dashboard` **当前可用**。
+> 目的：让别人在 DSH 的 Add plugin 里**只填包名** `dsh-plugin-control-your-development` 就能装，走 npm registry（国内自动命中镜像），**完全不碰 GitHub**。
+> 本机环境事实：DSH 捆绑运行时里只有 **pnpm**（没有 npm）；`registry.npmjs.org` 与 `registry.npmmirror.com` 均可连通；包名 `dsh-plugin-control-your-development` **当前可用**。
 
 
 > ⚠️ **必须在包根执行**：`release/dsh-control-your-development`（仓库根 = 包根，它自己是一个独立的 git 仓库）。
@@ -40,7 +40,7 @@ npm login          # 浏览器里登录你的 npm 账号
 ### 方式 B：不装 Node，只用 DSH 捆绑的 pnpm（推荐，少一个依赖）
 
 1. 打开 https://www.npmjs.com/settings/~/tokens → Generate New Token → **Granular Access Token**：
-   - 权限：**Read and write**；Packages and scopes 选 **Only select packages** → 填 `dsh-plugin-dev-dashboard`（第一次发布时它还不存在，勾 *All packages* 或选"允许创建"即可）
+   - 权限：**Read and write**；Packages and scopes 选 **Only select packages** → 填 `dsh-plugin-control-your-development`（第一次发布时它还不存在，勾 *All packages* 或选"允许创建"即可）
    - 有效期按需（例如 7 天，发布完可吊销）
 2. 把 token 写进**你自己的用户级** npm 配置（不会进仓库，也不会被提交）：
 
@@ -61,11 +61,11 @@ npm login          # 浏览器里登录你的 npm 账号
 
 ```powershell
 # 官方源与国内镜像都应能查到（镜像通常几十秒内同步）
-Invoke-WebRequest "https://registry.npmjs.org/dsh-plugin-dev-dashboard" -UseBasicParsing | Select-Object -ExpandProperty StatusCode
-Invoke-WebRequest "https://registry.npmmirror.com/dsh-plugin-dev-dashboard" -UseBasicParsing | Select-Object -ExpandProperty StatusCode
+Invoke-WebRequest "https://registry.npmjs.org/dsh-plugin-control-your-development" -UseBasicParsing | Select-Object -ExpandProperty StatusCode
+Invoke-WebRequest "https://registry.npmmirror.com/dsh-plugin-control-your-development" -UseBasicParsing | Select-Object -ExpandProperty StatusCode
 ```
 
-然后告诉别人：**DSH → Plugins → Add plugin → 填 `dsh-plugin-dev-dashboard`**。
+然后告诉别人：**DSH → Plugins → Add plugin → 填 `dsh-plugin-control-your-development`**。
 
 ## 之后每次更新发版
 
@@ -79,11 +79,30 @@ Invoke-WebRequest "https://registry.npmmirror.com/dsh-plugin-dev-dashboard" -Use
 
 > 别忘了同步升仓库里 `skill/control-your-development/manifest.yaml` 的版本（skill 与插件版本各自独立）。
 
+## ⚠️ 重要：用 bypass-2FA token 发布会被"暂存"
+
+npm 现在把"用 bypass-2FA token 直接发布"改为**暂存发布（staged publishing）**：包名先被占位版本 `0.0.0-stage` 占住，你的版本进入待批准队列，**需要持 2FA 的人批准后才真正上线**。
+
+两条正确做法（都需要验证器里的 6 位码）：
+
+```powershell
+# A. 批准已暂存的版本（推荐，正好补上刚才那一步）
+npm config set //registry.npmjs.org/:_authToken "<token>"   # 让 npm CLI 也能认证（token 在 AppData\Local\pnpm\config\auth.ini）
+npm stage list                        # 看 stage-id
+npm stage approve <stage-id>          # 会提示输入 6 位验证码
+
+# B. 或者撤掉暂存，改用"发布时就带验证码"（不产生暂存）
+npm stage reject <stage-id>
+npm publish --access public --otp <6位码>
+```
+
+> 结论：**以后发布一律带 `--otp`**，或改用 GitHub Actions + Trusted Publishing（OIDC，不需要 token 也不需要验证码）。
+
 ## 常见问题
 
 | 现象 | 原因 / 处理 |
 |---|---|
-| `E403` / `You do not have permission` | token 权限不足或没勾选该包；重新生成 Granular Token 并勾上 `dsh-plugin-dev-dashboard` |
+| `E403` / `You do not have permission` | token 权限不足或没勾选该包；重新生成 Granular Token 并勾上 `dsh-plugin-control-your-development` |
 | `EPUBLISHCONFLICT` | 这个版本已经发布过；升 version 再发 |
 | `EOTP` | 账号开了双因素：用带 `--otp <6 位码>` 再发一次 |
 | 发布成功但别人搜不到 | npm 页面/搜索有延迟；直接把包名告诉他即可，安装不看搜索 |

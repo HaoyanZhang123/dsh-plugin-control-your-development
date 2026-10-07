@@ -65,7 +65,7 @@ AI 把需要你决定的事整理成选项卡：点选、补充、复制指令�
 仪表盘是一个 `index.html`：零依赖、零联网、深浅色自适应、打印友好。放进微信、邮件、U 盘都能原样打开。
 
 **内嵌面板（可选）**
-装上 `dsh-plugin-dev-dashboard` 后，仪表盘钉在 DSH 右侧边栏（与文件、终端同列）：文件一变自动刷新，动作按钮一键复制指令回聊天框——面板看、对话办，互不越权。
+装上 `dsh-plugin-control-your-development` 后，仪表盘钉在 DSH 右侧边栏（与文件、终端同列）：文件一变自动刷新，动作按钮一键复制指令回聊天框——面板看、对话办，互不越权。
 
 **诚实机制，漏了会报警**
 - 每条代码变更都必须被收录进仪表盘、或被显式忽略，**不允许静默遗漏**；
@@ -76,7 +76,7 @@ AI 把需要你决定的事整理成选项卡：点选、补充、复制指令�
 
 | 装什么 | 最快路径 |
 |---|---|
-| **插件 + skill（推荐，一步到位）** | DSH → Plugins → Add plugin → 填 `dsh-plugin-dev-dashboard`（npm 包名，国内走镜像；插件会把配套 skill 自动装到全局技能目录） |
+| **插件 + skill（推荐，一步到位）** | DSH → Plugins → Add plugin → 填 `dsh-plugin-control-your-development`（npm 包名，国内走镜像；插件会把配套 skill 自动装到全局技能目录） |
 | 只装 skill（不用面板） | 把 `skill/control-your-development/` 拷到项目的 `.dsh/skills/` |
 
 详解（全局安装、离线安装、卸载与升级）：[INSTALL.md](INSTALL.md)

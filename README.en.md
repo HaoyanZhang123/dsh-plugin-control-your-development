@@ -24,7 +24,7 @@ Prerequisite: DSH desktop is installed.
 1. **Install the plugin (one step — it also installs the bundled skill)**: DSH → Plugins → Add plugin → enter:
 
    ```
-   dsh-plugin-dev-dashboard
+   dsh-plugin-control-your-development
    ```
 
    This installs from the npm registry (a local mirror is used automatically in China — no GitHub access needed). On activation the plugin installs the skill it ships into the **global skills directory** (`<dshHome>/skills/`) — available in **every workspace**, no manual copying.
@@ -63,7 +63,7 @@ The AI turns open questions into option cards: pick, add a note, or copy a ready
 The dashboard is one `index.html`: zero dependencies, zero network, light/dark adaptive, print-friendly. Send it over chat, email or a USB stick — it opens identically everywhere.
 
 **Embedded panel (optional)**
-Install `dsh-plugin-dev-dashboard` and the dashboard lives in the DSH right sidebar (alongside Files and Terminal): it auto-refreshes when files change, and action buttons copy instructions back to the chat — look in the panel, act in the conversation.
+Install `dsh-plugin-control-your-development` and the dashboard lives in the DSH right sidebar (alongside Files and Terminal): it auto-refreshes when files change, and action buttons copy instructions back to the chat — look in the panel, act in the conversation.
 
 **Honesty mechanism — omissions raise alarms**
 - Every code change must be either incorporated into the dashboard or explicitly ignored — **silent omission is not allowed**;
@@ -74,7 +74,7 @@ Install `dsh-plugin-dev-dashboard` and the dashboard lives in the DSH right side
 
 | What | Fastest path |
 |---|---|
-| **Plugin + skill (recommended, one step)** | DSH → Plugins → Add plugin → enter `dsh-plugin-dev-dashboard` (npm package name; a mirror is used in China). The plugin installs the bundled skill globally |
+| **Plugin + skill (recommended, one step)** | DSH → Plugins → Add plugin → enter `dsh-plugin-control-your-development` (npm package name; a mirror is used in China). The plugin installs the bundled skill globally |
 | Skill only (no panel) | Copy `skill/control-your-development/` into your project's `.dsh/skills/` |
 
 Full options (global install, offline install, uninstall & upgrade): [INSTALL.md](INSTALL.md)
