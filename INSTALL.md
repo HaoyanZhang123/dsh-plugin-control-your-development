@@ -161,6 +161,24 @@ https://github.com/HaoyanZhang123/dsh-control-your-development
 
 > 只想用仪表盘、不想要面板？只装 skill 就行（第一节），它对 DSH 版本没有额外要求。
 
+### 如果连 GitHub 都连不上（国内网络常见）
+
+"浏览器能打开 GitHub" ≠ "终端里的 git/pnpm 能连上"。三种不依赖 GitHub 的安装方式：
+
+**路 1：离线安装包（最稳，谁都能用）**
+拿到 `dsh-plugin-dev-dashboard-0.3.1.tgz`（本仓库 Releases 附件，或直接找作者要），然后：
+
+- Add plugin 里填**这个文件的绝对路径**，例如 `/Users/你/Downloads/dsh-plugin-dev-dashboard-0.3.1.tgz`
+- 只想装 skill：把 tgz 解压（`tar -xzf ...`），把里面的 `package/skill/control-your-development` 拷到你的 skills 目录即可
+
+**路 2：npm 包名（发布到 npm 后可用）**
+Add plugin 里填 `dsh-plugin-dev-dashboard`。该方式走 npm registry，国内会自动命中镜像，完全不碰 GitHub。
+
+**路 3：GitHub 加速代理**
+把仓库地址交给任意 GitHub 代理（例如 `https://gh-proxy.com/<原始地址>`）再填进 Add plugin。第三方代理可用性会变，只作最后手段。
+
+> 把 Add plugin 的报错原文发出来能省一半时间：超时/证书/404 分别指向不同原因。
+
 ## English quick reference
 
 **Plugin + skill (recommended, one step)** — DSH → Plugins → Add plugin → paste `https://github.com/HaoyanZhang123/dsh-control-your-development`; the plugin installs the bundled skill into `<dshHome>/skills/` for every workspace. Details in the sections above (Chinese).

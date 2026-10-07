@@ -7,3 +7,5 @@ dev-dashboard/index.html
 dev-dashboard/.facts.json
 dev-dashboard/.state.json
 **/.DS_Store
+# 分发包产物（由 pnpm pack 生成，不进仓库）
+*.tgz
