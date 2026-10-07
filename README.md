@@ -41,12 +41,14 @@
 
 ## 看一看
 
-> 📷 截图位：仪表盘「项目」首页——一句话定位、当前方向、掌控条。
+> 📷 ：仪表盘「项目」首页——一句话定位、当前方向、掌控条。
+<img width="2968" height="1736" alt="image" src="https://github.com/user-attachments/assets/ad57e7da-bc41-4ed7-b03d-fd44a9b5075e" />
 > 📷 截图位：「功能地图」页——功能卡片五态（设想 / 进行中 / 可用 / 已验证 / 已废弃）+ 依赖关系图。
+<img width="2648" height="1078" alt="image" src="https://github.com/user-attachments/assets/c5647de2-f4c6-47b9-9599-8e83f1aa6b57" />
 > 📷 截图位：「现在」页——时间线与等你拍板的决策卡。
+<img width="2620" height="1256" alt="image" src="https://github.com/user-attachments/assets/dbe24c34-2da5-470f-90b6-1a94ee92339e" />
 > 📷 截图位：DSH 右侧边栏内嵌面板实拍。
->
-> （截图待发布前补齐，要求见 [docs/images/README.md](docs/images/README.md)；补齐是 [RELEASE-CHECKLIST.md](RELEASE-CHECKLIST.md) 的一项硬门槛。）
+<img width="1042" height="1088" alt="image" src="https://github.com/user-attachments/assets/83429749-b03f-4132-a4c5-612ba7d36453" />
 
 ## 功能亮点
 
