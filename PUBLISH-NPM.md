@@ -79,6 +79,14 @@ Invoke-WebRequest "https://registry.npmmirror.com/dsh-plugin-control-your-develo
 
 > 别忘了同步升仓库里 `skill/control-your-development/manifest.yaml` 的版本（skill 与插件版本各自独立）。
 
+## 首次发布的实录（2026-10-08）
+
+1. 用 bypass-2FA token 执行 `pnpm publish` → npm 返回成功，但实际是**暂存**：包名下只有占位版 `0.0.0-stage`，描述写着"awaiting a staged release"。
+2. 用 `npm stage approve <stage-id>` + 验证器 6 位码批准 → `0.4.0` 正式上线（官方源 `dist-tags.latest = 0.4.0`）。
+3. 验证：官方源安装 ✔；国内镜像安装 ✔（707ms，六项内容齐全、三处命名一致）。
+
+> 小坑：镜像同步有先后。若某台机器上 pnpm 之前解析过占位版，它会**用本地缓存的元数据**继续去找 `0.0.0-stage.tgz` 并报校验错误。清掉 pnpm 缓存（或换 `--config.cacheDir`）后立刻正常——与包本身无关。
+
 ## ⚠️ 重要：用 bypass-2FA token 发布会被"暂存"
 
 npm 现在把"用 bypass-2FA token 直接发布"改为**暂存发布（staged publishing）**：包名先被占位版本 `0.0.0-stage` 占住，你的版本进入待批准队列，**需要持 2FA 的人批准后才真正上线**。
