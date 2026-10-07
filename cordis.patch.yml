@@ -2,7 +2,3 @@
 - insert:
     - id: dev-dashboard
       name: dsh-plugin-dev-dashboard
-      config:
-        # 全局技能目录（<dshHome>/skills）：由组合用官方 dshHomePath 计算，
-        # 插件激活时把包内自带的 skill 装进去，实现「装插件即装 skill」。
-        skillRoot: !!js dshHomePath('skills')

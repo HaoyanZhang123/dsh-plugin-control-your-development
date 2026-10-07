@@ -144,6 +144,23 @@ https://github.com/HaoyanZhang123/dsh-control-your-development
 
 ---
 
+## 四、装不上怎么办（排障）
+
+按可能性从高到低：
+
+1. **macOS 没有 git**：从仓库地址安装需要 pnpm 调用 git；macOS 默认不带 git。用**归档压缩包地址**安装即可，这条路不需要 git（已实测）：
+
+   ```
+   https://github.com/HaoyanZhang123/dsh-control-your-development/archive/refs/tags/v1.3.1.tar.gz
+   ```
+
+   或者先装 git（`xcode-select --install`）再重试。
+2. **DSH 版本过旧**：本插件用到右侧边栏的标签注册与文件变更订阅接口，需要带这套接口的 DSH（0.2.x 起）。在 设置 → 关于 里确认版本；过旧就先升级 DSH。
+3. **本地路径安装**：克隆仓库后，Add plugin 填**仓库根目录**的绝对路径（仓库根就是插件包）。
+4. **把报错原文发出来**：Add plugin 的失败信息（或 DSH 日志里 `plugin-manager`/`dev-dashboard` 相关行）能直接定位问题；只说"装不上"就得靠猜。
+
+> 只想用仪表盘、不想要面板？只装 skill 就行（第一节），它对 DSH 版本没有额外要求。
+
 ## English quick reference
 
 **Plugin + skill (recommended, one step)** — DSH → Plugins → Add plugin → paste `https://github.com/HaoyanZhang123/dsh-control-your-development`; the plugin installs the bundled skill into `<dshHome>/skills/` for every workspace. Details in the sections above (Chinese).
