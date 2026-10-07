@@ -34,5 +34,25 @@
         "@deepseek-ai/dsh-client-ui-sidebar-right"
       ]
     }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HaoyanZhang123/dsh-control-your-development.git"
+  },
+  "homepage": "https://github.com/HaoyanZhang123/dsh-control-your-development#readme",
+  "bugs": {
+    "url": "https://github.com/HaoyanZhang123/dsh-control-your-development/issues"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "dev-dashboard",
+    "dashboard",
+    "control-your-development",
+    "deepseek-harness",
+    "product-dashboard"
+  ],
+  "publishConfig": {
+    "access": "public"
   }
 }
