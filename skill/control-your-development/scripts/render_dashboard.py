@@ -106,6 +106,36 @@ def glob_match(path: str, pattern: str) -> bool:
         j += 1
     return j == len(ps)
 
+def css_selectors(css_text: str):
+    """列出 CSS 里所有会作用到页面的选择器（跳过 @keyframes/@page 内部）。
+    用途：面板会把这份样式注入 DSH 宿主页面，任何没有 .cyd-app 作用域的规则都会污染宿主 UI。"""
+    sels = []
+
+    def walk(text):
+        i = 0
+        while i < len(text):
+            b = text.find("{", i)
+            if b < 0:
+                break
+            prelude = text[i:b].strip()
+            depth, j = 1, b + 1
+            while j < len(text) and depth > 0:
+                if text[j] == "{":
+                    depth += 1
+                elif text[j] == "}":
+                    depth -= 1
+                j += 1
+            body = text[b + 1:j - 1]
+            if re.match(r"^@(media|supports|layer)", prelude):
+                walk(body)
+            elif not prelude.startswith("@"):
+                sels.append(re.sub(r"/\*[\s\S]*?\*/", "", prelude).strip())
+            i = j
+
+    walk(css_text)
+    return sels
+
+
 def evidence_path_error(rel: str):
     """证据路径越界校验（契约：一律相对工作区根）。合法返回 None，非法返回中文原因。"""
     if re.match(r"^[A-Za-z][A-Za-z0-9+.-]*://", rel):
@@ -533,6 +563,12 @@ def self_test():
             "# 功能地图\n\n## 功能: 越界证据\n- 状态: 可用\n- 简介: 上跳。\n"
             "- 证据: ../outside.txt\n", encoding="utf-8")  # lint:allow-crossref 自检夹具，刻意构造越界路径
         assert render(dash, root) == 2, "证据路径越界应为 blocker"
+        # CSS 作用域红线：这份样式会被面板注入宿主页面，未作用域的规则会改坏 DSH 自己的界面
+        css_text = (Path(__file__).resolve().parent.parent / "templates" / "dashboard.core.css").read_text(encoding="utf-8")
+        scoped_bad = [s for s in css_selectors(css_text)
+                      if any((not p.strip().startswith(".cyd-app")) and (not re.match(r"^(from|to|\d+%)$", p.strip()))
+                             for p in s.split(",") if p.strip())]
+        assert not scoped_bad, "CSS 存在未作用域选择器（会污染宿主页面）: " + str(scoped_bad[:5])
         print("SELF-TEST PASS: render_dashboard")
         return 0
 
