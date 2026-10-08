@@ -40,7 +40,16 @@ jobs:
       - name: 发布到 npm（OIDC，无 token / 无 OTP）
         run: npm publish --access public --provenance
 
-      - name: 建 GitHub Release（自动生成 changelog）
+      - name: 建 GitHub Release（优先用 docs/releases/<tag>.md 里写好的说明）
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
+        run: |
+          NOTES="docs/releases/${GITHUB_REF_NAME}.md"
+          if [ -f "$NOTES" ]; then
+            TITLE="$(head -n 1 "$NOTES" | sed 's/^#\{1,\} *//')"
+            echo "用 $NOTES 作为 Release 说明，标题：$TITLE"
+            gh release create "$GITHUB_REF_NAME" --title "$TITLE" --notes-file "$NOTES"
+          else
+            echo "没有 $NOTES，退回自动生成的 changelog"
+            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
+          fi

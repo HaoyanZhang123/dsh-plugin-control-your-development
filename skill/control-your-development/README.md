@@ -1,7 +1,7 @@
 # control-your-development
 
 > 一句话定位：把开发过程翻译成用户看得懂、能掌控的产品仪表盘（人话 Markdown → DSH 面板，可选导出单文件 HTML）。
-> 所属项目：control-your-development　版本：1.3.0　状态：分发级
+> 所属项目：control-your-development　版本：1.3.1　状态：分发级
 
 ## 何时用
 

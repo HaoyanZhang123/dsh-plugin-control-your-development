@@ -3,7 +3,7 @@
 > Turn the development process into a product dashboard you can actually read and control.
 > Human-readable Markdown files are the single source of truth; the dashboard is pinned inside DSH (right sidebar + a full-page "Feature Map" tab on top of the conversation), and decisions you make on the panel go straight to the AI. Export a single-file offline web page only when you need to share.
 
-Versions: skill v1.3.0 · panel plugin v0.5.0 | License: [MIT](LICENSE) | 语言：[中文](README.md)
+Versions: skill v1.3.1 · panel plugin v0.5.2 | License: [MIT](LICENSE) | 语言：[中文](README.md)
 
 ---
 
@@ -156,7 +156,7 @@ No. The skill alone maintains the dashboard (the offline web page can still be e
 The web version reads and writes `dev-dashboard/` in your project, which requires you to **grant folder access**: the browser shows one permission prompt — choose the **project root containing `dev-dashboard/`**. The browser remembers it afterwards. The right sidebar panel needs no such grant — it reads through DSH's own interface.
 
 **How do I update to a new version?**
-Plugin: DSH → Plugins → Uninstall, then Add plugin with `dsh-plugin-control-your-development` (you can also pin a version, e.g. `dsh-plugin-control-your-development@0.4.2`); afterwards **refresh the page (Ctrl+R) or restart DSH**. Skill: updates automatically with the plugin; if you installed it manually, copy the folder again.
+Plugin: DSH → Plugins → Uninstall, then Add plugin with `dsh-plugin-control-your-development` (you can also pin a version, e.g. `dsh-plugin-control-your-development@0.5.2`); afterwards **refresh the page (Ctrl+R) or restart DSH**. Skill: updates automatically with the plugin; if you installed it manually, copy the folder again.
 
 **macOS / Linux?**
 Yes for macOS: **verified on real machines, both macOS and Windows** (web page + right sidebar panel). Linux is not verified on a real machine, but the scripts use cross-platform APIs only and paths are written portably.

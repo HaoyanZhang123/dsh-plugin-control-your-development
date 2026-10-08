@@ -1,5 +1,5 @@
 name: control-your-development
-version: 1.3.0
+version: 1.3.1
 description: 把开发进展持续翻译成用户能看懂、能掌控的产品仪表盘（人话 Markdown → DSH 面板，可选导出单文件 HTML）
 always_load:
   - static/core/stance.md
