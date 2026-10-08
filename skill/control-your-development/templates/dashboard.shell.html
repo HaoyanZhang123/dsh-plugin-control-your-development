@@ -1,6 +1,8 @@
 <div class="wrap">
   <header class="top">
     <h1 id="projName">开发仪表盘 <span class="by">由 control-your-development 生成</span></h1>
+    <button id="setBtn" title="设置" style="display:none">⚙</button>
+    <button id="verBtn" title="版本快照" style="display:none">🕓</button>
     <button id="themeBtn" title="切换深浅色">🌓</button>
   </header>
   <div class="strip" id="strip"></div>
@@ -25,8 +27,8 @@
       <ol class="steps">
         <li data-n="1"><b>建立仪表盘</b><br><span class="muted">在聊天框输入 <code>/control-your-development</code>，或直接说一句 "control my development"</span></li>
         <li data-n="2"><b>照常开发</b><br><span class="muted">每完成一个阶段，仪表盘会自动更新（前提是建立时启动的看护任务还在运行）；改完文件点顶部「🔄 更新」立即刷新</span></li>
-        <li data-n="3"><b>随时掌握全局</b><br><span class="muted">双击 <code>dev-dashboard/index.html</code>，5 秒掌握全局；顶部「数据健康 / 等你拍板 / 功能地图 / 数据来源」四个徽章都能点开看详情，第二个「数据更新于」是静态时间位，点它里面的 🔄 可立即重读文件</span></li>
-        <li data-n="4"><b>处理「等你拍板」</b><br><span class="muted">点顶部「等你拍板」徽章打开拍板中心 → 点选选项（可写补充）→「复制拍板」→ 粘贴到聊天框发送</span></li>
+        <li data-n="3"><b>随时掌握全局</b><br><span class="muted">在 DSH 右侧栏打开「开发仪表盘」，或点会话页顶部的「功能地图」看整页大图（可缩放平移）；顶部「数据健康 / 等你拍板 / 功能验证」等徽章都能点开看详情。想要离线分享时对我说「导出网页版」</span></li>
+        <li data-n="4"><b>处理「等你拍板」</b><br><span class="muted">点顶部「等你拍板」徽章打开拍板中心 → 点选选项（可写补充）→「发送拍板」直接告诉我；会话不在线时会先记下，下次更新生效</span></li>
         <li data-n="5"><b>亲手验证</b><br><span class="muted">试用某功能后，点开它的功能卡按「✅ 我已验证」（或在聊天框说"我验证过了"）→ 🤖 变 ✅，进度条前进</span></li>
       </ol>
     </div>

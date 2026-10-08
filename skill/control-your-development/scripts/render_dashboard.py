@@ -206,7 +206,8 @@ def parse_product(text: str, warnings):
 def parse_features(text: str, warnings):
     text = strip_comments(text)
     feats = []
-    cur = None
+    cur = None        # 当前功能
+    cur_child = None  # 当前子项（v1.3）
     for line in text.splitlines():
         s = line.strip()
         hm = re.match(r"^##\s*功能\s*[:：]\s*(.+)$", s)
@@ -214,38 +215,105 @@ def parse_features(text: str, warnings):
             if cur:
                 feats.append(cur)
             cur = {"name": hm.group(1).strip(), "status": "", "desc": "", "evidence": [],
-                   "deps": [], "verify": ""}
+                   "deps": [], "verify": "", "children": []}
+            cur_child = None
             continue
-        if cur is None:
+        cm = re.match(r"^###\s*子项\s*[:：]\s*(.+)$", s)
+        if cm:
+            if cur is None:
+                warnings.append(f"子项「{cm.group(1).strip()}」出现在任何功能之前，已忽略")
+                continue
+            cur_child = {"name": cm.group(1).strip(), "status": "", "desc": "",
+                         "evidence": [], "verify": ""}
+            cur["children"].append(cur_child)
+            continue
+        target = cur_child if cur_child is not None else cur
+        if target is None:
             continue
         fm = re.match(r"^-\s*(状态|简介|证据|依赖|验证)\s*[:：]\s*(.*)$", s)
         if not fm:
             continue
         key, val = fm.group(1), fm.group(2).strip()
-        if key == "状态":
+        if key == "依赖":
+            if cur_child is not None:
+                warnings.append(f"子项「{cur_child['name']}」（功能「{cur['name']}」）不允许写依赖，已忽略")
+                continue
+            target["deps"] = [] if val in ("", "无") else split_evidence(val)
+        elif key == "状态":
             if val not in STATUSES:
-                warnings.append(f"功能「{cur['name']}」状态非法: {val!r}（允许: {'/'.join(STATUSES)}）")
-                cur["status"] = "设想"  # 与共享核一致：非法值直接降级，不再触发第二条"缺少状态字段"误报
+                warnings.append(f"「{target['name']}」状态非法: {val!r}（允许: {'/'.join(STATUSES)}）")
+                target["status"] = "设想"  # 与共享核一致：非法值直接降级，不再触发第二条"缺少状态字段"误报
             else:
-                cur["status"] = val
+                target["status"] = val
         elif key == "简介":
-            cur["desc"] = val
+            target["desc"] = val
         elif key == "证据":
-            cur["evidence"] = split_evidence(val)
-        elif key == "依赖":
-            cur["deps"] = [] if val in ("", "无") else split_evidence(val)
+            target["evidence"] = split_evidence(val)
         elif key == "验证":
-            cur["verify"] = val
+            target["verify"] = val
     if cur:
         feats.append(cur)
+
+    def _check(item, label, miss_desc):
+        if not item["status"]:
+            warnings.append(f"{label}缺少状态字段")
+            item["status"] = "设想"
+        if not item["desc"]:
+            warnings.append(f"{label}缺少简介")
+            item["desc"] = miss_desc
+
     for f in feats:
-        if not f["status"]:
-            warnings.append(f"功能「{f['name']}」缺少状态字段")
-            f["status"] = "设想"
-        if not f["desc"]:
-            warnings.append(f"功能「{f['name']}」缺少简介")
-            f["desc"] = "[待确认: 功能简介]"
+        _check(f, f"功能「{f['name']}」", "[待确认: 功能简介]")
+        seen_child = set()
+        for c in f["children"]:
+            _check(c, f"功能「{f['name']}」的子项「{c['name']}」", "[待确认: 子项简介]")
+            if c["name"] in seen_child:
+                warnings.append(f"功能「{f['name']}」内子项重名：「{c['name']}」，按首个解析")
+            seen_child.add(c["name"])
     return feats
+
+
+def parse_glossary(text: str, warnings):
+    """解析 GLOSSARY.md 的第一张表格 → [{term, meaning, aliases}]。文件无表格 → WARN 并按空表处理。"""
+    text = strip_comments(text)
+    entries = []
+    lines = text.splitlines()
+    for i, line in enumerate(lines):
+        if not line.strip().startswith("|"):
+            continue
+        header = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(header) < 3 or header[0] != "标准用词":
+            warnings.append("GLOSSARY.md 第一张表的表头不是「标准用词 | 指什么 | 别名/曾用名」，按无术语表处理")
+            return entries
+        j = i + 1
+        if j < len(lines) and re.match(r"^\s*\|[|\-:\s]+\|\s*$", lines[j]):
+            j += 1  # 跳过分隔行（有无均可）
+        while j < len(lines) and lines[j].strip().startswith("|"):
+            cells = [c.strip() for c in lines[j].strip().strip("|").split("|")]
+            if len(cells) < 2 or not cells[0]:
+                warnings.append("GLOSSARY.md 有一行列数不足或标准用词为空，已忽略该行")
+            else:
+                aliases = [a for a in re.split(r"[、，,/]", cells[2] if len(cells) > 2 else "") if a]
+                entries.append({"term": cells[0], "meaning": cells[1], "aliases": aliases})
+            j += 1
+        return entries
+    warnings.append("GLOSSARY.md 里没有表格，按无术语表处理")
+    return entries
+
+
+def glossary_drift(entries, texts):
+    """用词漂移检查：别名字面出现在正文（PRODUCT/FEATURES/NOW，已剥注释）即记一条。
+    texts: [(文件名, 正文)]。同一（别名, 文件）只报一次。"""
+    drift = []
+    for e in entries:
+        for alias in e["aliases"]:
+            if not alias or alias == e["term"]:
+                continue
+            for fname, body in texts:
+                n = body.count(alias)
+                if n:
+                    drift.append({"alias": alias, "term": e["term"], "file": fname, "count": n})
+    return drift
 
 
 def parse_now(text: str, warnings):
@@ -283,9 +351,9 @@ def parse_now(text: str, warnings):
                     entry["dt"] = ""
                 timeline.append(entry)
         elif section == "dec" and cur_dec is not None:
-            sm = re.match(r"^-\s*状态\s*[:：]\s*已定\s*([A-Z](?:\s*[、,]\s*[A-Z])*)\s*$", s)
+            sm = re.match(r"^-\s*状态\s*[:：]\s*已定\s*([A-Za-z](?:\s*[、,，\s]\s*[A-Za-z])*)\s*$", s)
             if sm:
-                cur_dec["decided"] = re.sub(r"[\s,]+", "、", sm.group(1))
+                cur_dec["decided"] = re.sub(r"[\s,，]+", "、", sm.group(1).upper())
                 continue
             mm = re.match(r"^-\s*多选\s*[:：]\s*是\s*$", s)
             if mm:
@@ -305,8 +373,45 @@ def parse_now(text: str, warnings):
     return timeline, decisions, todos
 
 
+def text_width(s: str) -> int:
+    """确定性文本宽度（与共享核 JS 逐字同构）：>U+2E00 按宽字符 14px，其余 8px。
+    不用字体度量——布局坐标要写进数据，两端必须算出完全一致的值。"""
+    return sum(14 if ord(c) > 0x2E00 else 8 for c in str(s))
+
+
+NODE_PAD, NODE_MIN_W, NODE_MAX_W = 46, 150, 280
+NODE_TEXT_MAX = NODE_MAX_W - NODE_PAD
+
+
+def wrap_name(name: str):
+    """名称折行：最多 2 行，第二行放不下就 … 省略（悬浮 title 见全文）。确定性，与 JS 同构。"""
+    name = str(name)
+    if text_width(name) <= NODE_TEXT_MAX:
+        return [name]
+    i, w = 0, 0
+    while i < len(name) and w + (14 if ord(name[i]) > 0x2E00 else 8) <= NODE_TEXT_MAX:
+        w += 14 if ord(name[i]) > 0x2E00 else 8
+        i += 1
+    l1, rest = name[:i], name[i:]
+    if text_width(rest) <= NODE_TEXT_MAX:
+        return [l1, rest]
+    j, w2 = 0, 0
+    limit = NODE_TEXT_MAX - 14  # 给 … 留位
+    while j < len(rest) and w2 + (14 if ord(rest[j]) > 0x2E00 else 8) <= limit:
+        w2 += 14 if ord(rest[j]) > 0x2E00 else 8
+        j += 1
+    return [l1, rest[:j] + "…"]
+
+
+def node_dims(name: str):
+    lines = wrap_name(name)
+    w = max(NODE_MIN_W, min(NODE_MAX_W, text_width(name) + NODE_PAD))
+    return w, (58 if len(lines) > 1 else 42), lines
+
+
 def layout_graph(feats, warnings):
-    """分层拓扑布局（迭代实现：深依赖链不再触发递归爆栈）。"""
+    """分层拓扑布局（迭代实现：深依赖链不再触发递归爆栈）。
+    v1.3：节点宽度按名称自适应（两端同一份确定性字宽算法），层间距按相邻层实际最大宽度算。"""
     active = [f for f in feats if f["status"] != "已废弃"]
     by_name = {}
     for f in active:
@@ -331,13 +436,26 @@ def layout_graph(feats, warnings):
         warnings.append(f"依赖关系存在环（涉及「{active[i]['name']}」），该节点按第 0 层布局")
         resolved[i] = 0
 
-    per_layer = {}
+    for f in active:
+        f["w"], f["h"], f["lines"] = node_dims(f["name"])
+    layer_max_w = {}
     for i, f in enumerate(active):
         lv = resolved.get(i, 0)
-        idx = per_layer.get(lv, 0)
-        per_layer[lv] = idx + 1
-        f["x"] = 110 + lv * 235
-        f["y"] = 75 + idx * 88
+        layer_max_w[lv] = max(layer_max_w.get(lv, 0), f["w"])
+    layer_x = {}
+    prev = None
+    for lv in sorted(layer_max_w):
+        if prev is None:
+            layer_x[lv] = 90 + layer_max_w[lv] / 2
+        else:
+            layer_x[lv] = layer_x[prev] + layer_max_w[prev] / 2 + layer_max_w[lv] / 2 + 64
+        prev = lv
+    layer_y = {}
+    for i, f in enumerate(active):
+        lv = resolved.get(i, 0)
+        y0 = layer_y.get(lv, 80)
+        f["x"], f["y"] = layer_x[lv], y0 + f["h"] / 2
+        layer_y[lv] = y0 + f["h"] + 30
     return feats
 
 
@@ -388,28 +506,44 @@ def audit(evidence_paths, workspace, facts_path, ignore_path):
         except Exception:
             pending = -1  # 文件损坏视为不可审计
     return matrix, missing, invalid, pending, facts_detail, patterns
-def render(dashboard: Path, workspace: Path):
+def render(dashboard: Path, workspace: Path, write_html=None):
+    """渲染（审计）dev-dashboard。write_html：True=强制写 index.html；False=不写；
+    None=自动（仅当 index.html 已存在时更新它，不主动生成）——v1.3 起网页版是可选导出。"""
     dash = dashboard.resolve()
     ws = workspace.resolve()
     warnings, blockers = [], []
-    template_path = Path(__file__).resolve().parent.parent / "templates" / "dashboard.html"
-    if not template_path.is_file():
-        print("FATAL: 模板缺失 " + str(template_path))
-        return 1
     for req in ("PRODUCT.md", "FEATURES.md", "NOW.md"):
         if not (dash / req).is_file():
             print(f"FATAL: 缺少 {req}（先用模板初始化 dev-dashboard）")
             return 1
 
     # utf-8-sig：容忍 Windows 编辑器写出的 BOM，普通 UTF-8 不受影响
-    proj = parse_product((dash / "PRODUCT.md").read_text(encoding="utf-8-sig"), warnings)
-    feats = parse_features((dash / "FEATURES.md").read_text(encoding="utf-8-sig"), warnings)
-    timeline, decisions, todos = parse_now((dash / "NOW.md").read_text(encoding="utf-8-sig"), warnings)
+    prod_text = (dash / "PRODUCT.md").read_text(encoding="utf-8-sig")
+    feat_text = (dash / "FEATURES.md").read_text(encoding="utf-8-sig")
+    now_text = (dash / "NOW.md").read_text(encoding="utf-8-sig")
+    proj = parse_product(prod_text, warnings)
+    feats = parse_features(feat_text, warnings)
+    timeline, decisions, todos = parse_now(now_text, warnings)
     feats = layout_graph(feats, warnings)
+
+    # 术语表（可选）与用词漂移检查（v1.3）
+    glossary = []
+    drift = []
+    if (dash / "GLOSSARY.md").is_file():
+        glossary = parse_glossary((dash / "GLOSSARY.md").read_text(encoding="utf-8-sig"), warnings)
+        drift = glossary_drift(glossary, [
+            ("PRODUCT.md", strip_comments(prod_text)),
+            ("FEATURES.md", strip_comments(feat_text)),
+            ("NOW.md", strip_comments(now_text))])
+        for d in drift:
+            warnings.append(f"用词漂移：别名「{d['alias']}」在 {d['file']} 出现 {d['count']} 次，"
+                            f"标准用词是「{d['term']}」")
 
     evidence_pairs = []
     for f in feats:
         evidence_pairs += [(f["name"], p) for p in f["evidence"]]
+        for c in f["children"]:
+            evidence_pairs += [(f["name"] + " / " + c["name"], p) for p in c["evidence"]]
     for j in proj["journey"]:
         evidence_pairs += [("使用流程", p) for p in j["evidence"]]
     for t in timeline:
@@ -422,6 +556,8 @@ def render(dashboard: Path, workspace: Path):
     if missing:
         blockers.append(f"{len(missing)} 条证据路径不存在: " + ", ".join(missing[:5]))
     no_verify = [f["name"] for f in feats if f["status"] == "已验证" and not f["verify"]]
+    no_verify += [f"{f['name']} 的子项 {c['name']}" for f in feats for c in f["children"]
+                  if c["status"] == "已验证" and not c["verify"]]
     if no_verify:
         blockers.append(f"{len(no_verify)} 个功能标为「已验证」但缺少验证记录: " + ", ".join(no_verify[:5]))
     facts_error = "corrupt" if pending == -1 else ("" if (dash / ".facts.json").is_file() else "missing")
@@ -460,8 +596,11 @@ def render(dashboard: Path, workspace: Path):
         },
         "workspace_uri": ws.as_uri(),
         "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "features": [{**f, "evidence": ev_objs(f["evidence"])} for f in feats],
+        "features": [{**f, "evidence": ev_objs(f["evidence"]),
+                      "children": [{**c, "evidence": ev_objs(c["evidence"])} for c in f["children"]]}
+                     for f in feats],
         "counts": counts,
+        "glossary": glossary,
         "timeline": [{**t, "evidence": ev_objs(t["evidence"])} for t in timeline],
         "decisions": decisions,
         "todos": todos,
@@ -469,9 +608,25 @@ def render(dashboard: Path, workspace: Path):
                    "evidence_missing": missing, "evidence_invalid": invalid,
                    "facts_pending": max(pending, 0), "facts_error": facts_error, "source": facts_source,
                    "verify_missing": no_verify,
+                   "glossary_drift": drift,
                    "facts": facts_detail, "ignore": ignore_patterns, "warnings": warnings},
     }
 
+    # index.html 写出规则（v1.3）：--html 强制；--no-html 不写；默认仅在该文件已存在时更新
+    do_write = (dash / "index.html").is_file() if write_html is None else write_html
+    if not do_write:
+        for w in warnings:
+            print("WARN: " + w)
+        for b in blockers:
+            print("BLOCKER: " + b)
+        print(f"OK: 审计完成（功能 {len(feats)} · 时间线 {len(timeline)} 条 · "
+              f"待拍板 {sum(1 for d in decisions if not d['decided'])} 件；未生成 index.html，需要导出加 --html）")
+        return 2 if blockers else 0
+
+    template_path = Path(__file__).resolve().parent.parent / "templates" / "dashboard.html"
+    if not template_path.is_file():
+        print("FATAL: 模板缺失 " + str(template_path))
+        return 1
     parts = {}
     for name in ("dashboard.core.js", "dashboard.web.js", "dashboard.core.css", "dashboard.shell.html"):
         p = template_path.parent / name
@@ -518,18 +673,39 @@ def self_test():
             "## 使用流程\n1. 打开 :: 双击即可 :: 证据: src/app.js\n", encoding="utf-8")
         (dash / "FEATURES.md").write_text(
             "# 功能地图\n\n## 功能: 核心功能\n- 状态: 进行中\n- 简介: 自检功能。\n"
-            "- 证据: src/app.js\n\n## 功能: 扩展功能\n- 状态: 设想\n- 简介: 依赖核心。\n"
+            "- 证据: src/app.js\n"
+            "### 子项: 汇总\n- 状态: 已验证\n- 简介: 子项自检。\n- 证据: src/app.js\n"
+            "- 验证: 自检 2026-01-01\n"
+            "### 子项: 展示\n- 状态: 进行中\n- 简介: 子项自检二。\n\n"
+            "## 功能: 扩展功能\n- 状态: 设想\n- 简介: 依赖核心。\n"
             "- 依赖: 核心功能\n", encoding="utf-8")
         (dash / "NOW.md").write_text(
             "# 现在\n\n## 时间线\n- 2026-01-01 09:00 | 自检开始 | 证据: src/app.js\n\n"
             "## 决策\n### D1 自检决策？\n- 状态: 待拍板\n- 多选: 是\n- A: 通过\n- B: 不通过\n\n"
             "## 待办\n- [ ] 完成自检\n", encoding="utf-8")
+        (dash / "GLOSSARY.md").write_text(
+            "# 术语表\n\n| 标准用词 | 指什么 | 别名/曾用名 |\n| --- | --- | --- |\n"
+            "| 仪表盘 | 自检术语 | 看板 |\n", encoding="utf-8")
         code = render(dash, root)
         assert code == 0, f"期望退出码 0，实际 {code}"
+        assert not (dash / "index.html").is_file(), "v1.3：index.html 默认不生成（可选导出）"
+        code = render(dash, root, write_html=True)
+        assert code == 0 and (dash / "index.html").is_file(), "--html 应强制生成 index.html"
         html = (dash / "index.html").read_text(encoding="utf-8")
         for marker in ("演示项目", "核心功能", "扩展功能", "自检决策", "src/app.js", "🌓",
-                       "\"multi\": true", "workspace_uri"):
+                       "\"multi\": true", "workspace_uri",
+                       "子项", "汇总", '"glossary"', "仪表盘"):
             assert marker in html, f"产物缺少标记: {marker}"
+        # 用词漂移：别名「看板」写进 NOW.md 正文 → 进 warnings（不阻断）
+        (dash / "NOW.md").write_text(
+            "# 现在\n\n## 时间线\n- 2026-01-01 09:10 | 看板更新完毕\n", encoding="utf-8")
+        assert render(dash, root) == 0
+        html_g = (dash / "index.html").read_text(encoding="utf-8")  # 已存在 → 默认一并更新
+        assert "用词漂移" in html_g and "看板" in html_g, "漂移提示未进产物"
+        (dash / "NOW.md").write_text(
+            "# 现在\n\n## 时间线\n- 2026-01-01 09:00 | 自检开始 | 证据: src/app.js\n\n"
+            "## 决策\n### D1 自检决策？\n- 状态: 待拍板\n- 多选: 是\n- A: 通过\n- B: 不通过\n\n"
+            "## 待办\n- [ ] 完成自检\n", encoding="utf-8")
         # blocker 路径：证据失效 + 事实未归置 → 退出码 2
         (dash / "FEATURES.md").write_text(
             "# 功能地图\n\n## 功能: 坏证据\n- 状态: 可用\n- 简介: 指向不存在文件。\n"
@@ -559,6 +735,10 @@ def self_test():
             "# 功能地图\n\n## 功能: 缺验证\n- 状态: 已验证\n- 简介: 没有验证行。\n"
             "- 证据: src/app.js\n", encoding="utf-8")
         assert render(dash, root) == 2, "已验证缺验证记录应为 blocker"
+        (dash / "FEATURES.md").write_text(
+            "# 功能地图\n\n## 功能: 带子项\n- 状态: 进行中\n- 简介: 有子项。\n"
+            "- 证据: src/app.js\n### 子项: 缺验证\n- 状态: 已验证\n- 简介: 子项没验证行。\n", encoding="utf-8")
+        assert render(dash, root) == 2, "子项已验证缺验证记录应为 blocker"
         (dash / "FEATURES.md").write_text(
             "# 功能地图\n\n## 功能: 越界证据\n- 状态: 可用\n- 简介: 上跳。\n"
             "- 证据: ../outside.txt\n", encoding="utf-8")  # lint:allow-crossref 自检夹具，刻意构造越界路径
@@ -592,7 +772,8 @@ def main(argv):
             ws = Path(argv[i + 1])
     if ws is None:
         ws = find_workspace(dash)
-    return render(dash, ws)
+    write_html = True if "--html" in argv else (False if "--no-html" in argv else None)
+    return render(dash, ws, write_html=write_html)
 
 
 if __name__ == "__main__":

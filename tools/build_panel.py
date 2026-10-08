@@ -2,16 +2,15 @@
 # -*- coding: utf-8 -*-
 """build_panel.py — 把 skill 的共享渲染核注入面板源，生成 lib/client.js。
 
-单一事实源（发布仓布局）：skill/control-your-development/templates/dashboard.core.js
+单一事实源：.dsh/skills/control-your-development/templates/dashboard.core.js
 用法：python tools/build_panel.py    （在 plugins/dsh-plugin-control-your-development 内或任意 cwd 均可）
 """
 import sys
 from pathlib import Path
 
-# v1.3.0 起仓库根就是插件包：tools/ 的上一级即包根，skill/ 就在包根下。
-ROOT = Path(__file__).resolve().parent.parent          # 仓库根（= 插件包根）
-REPO = ROOT                                            # 兼容旧变量名
-CORE = ROOT / "skill" / "control-your-development" / "templates" / "dashboard.core.js"
+ROOT = Path(__file__).resolve().parent.parent          # plugins/dsh-plugin-control-your-development
+WS = ROOT.parent.parent                                # 工作区根
+CORE = WS / ".dsh" / "skills" / "control-your-development" / "templates" / "dashboard.core.js"
 SRC = ROOT / "src" / "client.src.js"
 OUT = ROOT / "lib" / "client.js"
 

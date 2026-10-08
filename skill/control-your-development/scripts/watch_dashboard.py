@@ -16,7 +16,7 @@ import tempfile
 import time
 from pathlib import Path
 
-MD_FILES = ("PRODUCT.md", "FEATURES.md", "NOW.md")
+MD_FILES = ("PRODUCT.md", "FEATURES.md", "GLOSSARY.md", "NOW.md")
 
 
 def _utf8():
