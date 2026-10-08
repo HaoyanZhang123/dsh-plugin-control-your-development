@@ -28,12 +28,31 @@
 .cyd-app.cyd-immersive .plabel,.cyd-app.cyd-immersive .grid{display:none !important}
 .cyd-app.cyd-immersive section#features{display:flex;flex-direction:column;flex:1;min-height:0;margin:0}
 .cyd-app.cyd-immersive .graphbox{display:flex;flex-direction:column;flex:1;min-height:0;margin:0}
-.cyd-app.cyd-immersive .graphbox svg{flex:1;height:auto;min-height:240px}
-/* 节点面板里的「直接和 agent 说一句」区块 */
-.cyd-app .askbox{border:1px solid var(--accent);border-radius:12px;background:var(--accent-soft);padding:12px 14px;margin:0 0 16px}
+/* height 由 JS 算死（见 renderGraph.layoutHeight）；flex:0 0 auto 保证 JS 值不被 flex 覆盖。
+   提示文字必须单行省略——窄栏（右侧栏展开 / 小窗口）时它会换行成几百像素，把图挤没。 */
+.cyd-app.cyd-immersive .graphbox svg{flex:0 0 auto;min-height:0}
+.cyd-app.cyd-immersive .ghead{flex:none;min-width:0;gap:10px}
+.cyd-app.cyd-immersive .ghead b{flex:none}
+.cyd-app.cyd-immersive .ghead span:not(.gtools){flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cyd-app.cyd-immersive .ghead .gtools{flex:none}
+.cyd-app.cyd-immersive .legend{flex:none}
+/* 节点面板里的「直接和 agent 说一句」区块：输入框 + 醒目的主发送按钮 + 小胶囊快捷追问 */
+.cyd-app .askbox{border:1px solid var(--accent);border-radius:12px;background:var(--accent-soft);padding:14px 16px;margin:0 0 16px}
 .cyd-app .askbox .kv{margin-top:0}
-.cyd-app .askbox textarea.note{width:100%;margin:8px 0 10px;min-height:64px;background:var(--panel)}
-.cyd-app .askbox .actrow{margin-top:0;padding-top:0;border-top:0}
-.cyd-app .askbox .actbtn{background:var(--panel)}
+.cyd-app .askrow{display:flex;gap:10px;align-items:stretch;margin:8px 0 10px}
+.cyd-app .askrow textarea.note{flex:1;width:auto;margin:0;min-height:74px;background:var(--panel)}
+.cyd-app .asksend{flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-width:120px;padding:10px 18px;border:1px solid var(--accent);border-radius:12px;background:var(--accent);color:var(--on-solid);font-family:inherit;font-size:14px;font-weight:700;line-height:1.2;cursor:pointer;box-shadow:0 2px 10px rgba(20,92,235,.3)}
+.cyd-app .asksend:hover{filter:brightness(1.09)}
+.cyd-app .asksend:active{transform:translateY(1px)}
+.cyd-app .asksend:disabled{opacity:.55;cursor:default;box-shadow:none}
+.cyd-app .asksend .ico{font-size:20px;line-height:1}
+.cyd-app .asksend .txt{white-space:nowrap}
+.cyd-app .askquick{display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin-top:2px}
+.cyd-app .askquick .lab{font-size:12.5px;color:var(--ink2)}
+.cyd-app .askchip{border:1px dashed var(--line);background:var(--panel);color:var(--ink2);border-radius:999px;padding:3px 11px;font-family:inherit;font-size:12.5px;cursor:pointer}
+.cyd-app .askchip:hover{border-style:solid;border-color:var(--accent);color:var(--accent)}
+/* 弹层内的返回条（版本差异 → 返回版本列表） */
+.cyd-app .sheetnav{display:flex;align-items:center;gap:10px;margin:2px 0 12px;padding-bottom:10px;border-bottom:1px dashed var(--line)}
+.cyd-app .sheetnav .actbtn{padding:5px 12px;font-size:13px}
 .cyd-app #verBtn{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:999px;padding:6px 13px;cursor:pointer;font-size:14px;box-shadow:var(--shadow);margin-right:8px}.cyd-app .verrow{display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px solid var(--line);padding:9px 0}.cyd-app .verrow:last-child{border-bottom:0}.cyd-app .diffbox{font:12.5px/1.6 Consolas,"Courier New",monospace;border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:46vh}.cyd-app .dline{white-space:pre-wrap;word-break:break-all;padding:1px 10px}.cyd-app .dline.add{background:var(--ok-soft);color:var(--ok)}.cyd-app .dline.del{background:var(--warn-soft);color:var(--warn);text-decoration:line-through}
 .cyd-app #setBtn{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:999px;padding:6px 13px;cursor:pointer;font-size:14px;box-shadow:var(--shadow);margin-right:8px}.cyd-app .setrow{border-bottom:1px solid var(--line);padding:12px 0;font-size:14px}.cyd-app .setrow:last-of-type{border-bottom:0}.cyd-app .setrow label{display:block;line-height:1.8}.cyd-app .setrow input[type="text"],.cyd-app .setrow input[type="number"]{border:1px solid var(--line);border-radius:8px;padding:5px 9px;background:var(--panel);color:var(--ink);font:inherit;margin-top:4px}

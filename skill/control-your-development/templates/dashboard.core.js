@@ -412,6 +412,7 @@ const expanded = new Set();   // 关系图里展开子项的功能名（本挂�
    drag = 正在拖节点（期间到来的自动刷新先押后，避免把图重排）。 */
 const gview = { tx: 0, ty: 0, k: 1, adjusted: false, pos: new Map(), drag: false, deferred: false };
 let graphRO = null;   // 关系图尺寸观察器（重渲染时换新，避免叠加）
+let graphWinHandler = null;   // 窗口缩放兜底（重渲染时换新）
 /* 单板块模式（会话页顶部「功能地图」tab）：隐藏内部导航，只显示指定 section */
 if (env.onlyTab){
   const navEl = qs('nav.tabs'); if (navEl) navEl.style.display = 'none';
@@ -595,6 +596,19 @@ function renderGraph(){
     svg.setAttribute('viewBox', '0 0 ' + rect.width + ' ' + rect.height);
     return rect;
   }
+  /* 整页模式：SVG 的高度由 JS 按「图容器高度 − 标题条 − 图例」算死。
+     不用 flex:1——父链高度在极短窗口/重挂载时可能瞬时不确定，会让 SVG 塌成 0。 */
+  function layoutHeight(){
+    if (!IMMERSIVE || !box) return;
+    const gh = box.querySelector('.ghead'), lg = box.querySelector('.legend');
+    const used = (gh ? gh.offsetHeight : 0) + (lg ? lg.offsetHeight : 0);
+    let avail = box.clientHeight - used;                 // 容器高度确定时直接用
+    if (!(avail > 120)){                                 // 父链高度还没确定（内容驱动 / 首帧）→ 按视口兜底
+      avail = window.innerHeight - box.getBoundingClientRect().top - used - 24;
+    }
+    const h = Math.max(240, Math.round(avail));
+    if (h > 0) svg.style.height = h + 'px';
+  }
   function edgeD(a, b){
     const x1 = a.x + a.w / 2, y1 = a.y, x2 = b.x - b.w / 2, y2 = b.y, mx = (x1 + x2) / 2;
     return 'M' + x1 + ',' + y1 + ' C' + mx + ',' + y1 + ' ' + mx + ',' + y2 + ' ' + x2 + ',' + y2;
@@ -609,6 +623,7 @@ function renderGraph(){
   let dragNode = null;
   function applyT(){ gWorld.setAttribute('transform', 'translate(' + gview.tx + ',' + gview.ty + ') scale(' + gview.k + ')'); }
   function fit(){
+    layoutHeight();
     const rect = syncBox();
     if (!rect) return;
     const b = contentBox();
@@ -632,20 +647,41 @@ function renderGraph(){
     if (!m){ const v = toView(e); return { x: (v.x - gview.tx) / gview.k, y: (v.y - gview.ty) / gview.k }; }
     const q = p.matrixTransform(m.inverse()); return { x: q.x, y: q.y };
   }
+  /* 速览气泡：放在节点**旁边**（不压住节点），并给收起加延迟——指针进气泡时取消收起。
+     否则"气泡盖住节点 → 节点触发 mouseleave → 气泡消失 → 指针又回到节点"会无限闪烁，点都点不到。 */
+  let popTimer = 0, popHover = false;
+  function hidePopSoon(){
+    if (popHover) return;                       // 指针还在气泡里 → 不收起
+    clearTimeout(popTimer);
+    popTimer = setTimeout(() => { if (!popHover) pop.classList.remove('on'); }, 260);
+  }
   function showPop(f){
     const host = box || svg.parentNode;
     const rect = host.getBoundingClientRect();
     const p = svg.createSVGPoint(); p.x = f.x; p.y = f.y;
     const m = gWorld.getScreenCTM();
-    const s = m ? p.matrixTransform(m) : p;   // 世界坐标 → 屏幕坐标（含缩放平移）
-    let left = (s.x - rect.left) + 14, top = (s.y - rect.top) - 20;
-    left = Math.max(8, Math.min(left, Math.max(8, rect.width - 245)));
-    top = Math.max(8, Math.min(top, Math.max(8, rect.height - 110)));
+    const s = m ? p.matrixTransform(m) : p;            // 世界坐标 → 屏幕坐标（含缩放平移）
+    const halfW = Math.max(20, (f.w * gview.k) / 2);
+    const nodeLeft = (s.x - rect.left) - halfW, nodeRight = (s.x - rect.left) + halfW;
+    const nodeBottom = (s.y - rect.top) + Math.max(16, (f.h * gview.k) / 2);
+    let left, top;
+    if (nodeRight + 12 + 235 <= rect.width - 8){          // 优先放右侧
+      left = nodeRight + 12; top = (s.y - rect.top) - 30;
+    } else if (nodeLeft - 12 - 235 >= 8){                 // 右侧放不下就放左侧
+      left = nodeLeft - 12 - 235; top = (s.y - rect.top) - 30;
+    } else {                                              // 两边都放不下（窄栏）→ 放节点下方，别压住节点
+      left = (s.x - rect.left) - 235 / 2; top = nodeBottom + 10;
+    }
+    left = Math.max(8, Math.min(left, Math.max(8, rect.width - 243)));
+    top = Math.max(8, Math.min(top, Math.max(8, rect.height - 120)));
     pop.innerHTML = '<h4>' + esc(f.name) + ' <span class="badge b-x' + SMAP[f.status] + '">' + esc(f.status) + '</span></h4><p>' + esc(f.desc) + '</p><span class="go">点一下打开节点面板 →</span>';
     pop.style.left = left + 'px'; pop.style.top = top + 'px';
+    clearTimeout(popTimer);
     pop.classList.add('on');
     pop.onclick = ev => { ev.stopPropagation(); pop.classList.remove('on'); openNodePanel(f.name); };
   }
+  pop.addEventListener('mouseenter', () => { popHover = true; clearTimeout(popTimer); });
+  pop.addEventListener('mouseleave', () => { popHover = false; hidePopSoon(); });
   /* 子项（思维导图式树展开）：默认折叠，点节点上的徽标展开/收起 */
   const childGs = [];   // 当前展开的子项节点与连线（重画时整体清掉重摆）
   function drawChildren(f, nodeG){
@@ -723,13 +759,14 @@ function renderGraph(){
     g.addEventListener('pointerdown', e => {
       e.stopPropagation();
       if (e.button !== undefined && e.button !== 0) return;   // 只响应主键 / 触摸 / 笔
+      pop.classList.remove('on'); clearTimeout(popTimer);
       const p = toWorld(e);
       dragNode = { f, g, dx: p.x - f.x, dy: p.y - f.y, sx: e.clientX, sy: e.clientY, moved: false };
       gview.drag = true;
       try{ svg.setPointerCapture(e.pointerId); }catch(err){}
     });
     g.addEventListener('mouseenter', () => { if (!dragNode) showPop(f); });
-    g.addEventListener('mouseleave', () => { if (!dragNode) pop.classList.remove('on'); });
+    g.addEventListener('mouseleave', () => { if (!dragNode) hidePopSoon(); });
     drawChildren(f, g);
   });
   svg.addEventListener('wheel', e => {
@@ -796,16 +833,22 @@ function renderGraph(){
     bind('[data-gz="fit"]', fit);
     bind('[data-gz="reset"]', () => { gview.pos.clear(); gview.adjusted = false; renderGraph(); });
   }
-  /* 容器尺寸变化（切进整页、拉伸侧栏、缩放窗口）→ 同步 viewBox 并重新适配 */
+  /* 容器尺寸变化（切进整页、拉伸侧栏、缩放窗口）→ 重算 SVG 高度、同步 viewBox 并重新适配 */
+  const relayout = () => {
+    if (!svg.isConnected){ if (graphRO) graphRO.disconnect(); return; }
+    layoutHeight();
+    syncBox();
+    if (gview.adjusted) applyT(); else fit();
+  };
   if (typeof ResizeObserver !== 'undefined'){
     if (graphRO) graphRO.disconnect();
-    graphRO = new ResizeObserver(() => {
-      if (!svg.isConnected){ if (graphRO) graphRO.disconnect(); return; }
-      syncBox();
-      if (gview.adjusted) applyT(); else fit();
-    });
-    graphRO.observe(svg);
+    graphRO = new ResizeObserver(relayout);
+    graphRO.observe(box || svg);
   }
+  if (graphWinHandler) window.removeEventListener('resize', graphWinHandler);
+  graphWinHandler = relayout;
+  window.addEventListener('resize', graphWinHandler);
+  layoutHeight();
   if (gview.adjusted){ syncBox(); applyT(); } else fit();
 }
 
@@ -866,7 +909,7 @@ async function sendDecision(root, did, btn){
   if (btn) btn.disabled = true;
   try{
     const res = await env.decide({ id: d.dc.id, title: d.dc.title, keys: d.keys, note: d.note, text: d.msg });
-    toast(res === 'queued' ? '会话不在线：拍板已记下，下次更新时生效' : '✅ 拍板已发送，我来落实');
+    toast(sendResultText(res, '拍板'));
   }catch(e){
     console.warn(e);
     copyText(d.msg);
@@ -964,8 +1007,13 @@ async function showVersionDiff(n){
     if (a === b) return;
     h += '<h4 style="margin:14px 0 6px">' + name + '</h4>' + diffHtml(a, b);
   });
-  openSheet('🕓 v' + n + ' → 当前 的差异', (h || '<div class="empty">与当前内容一致。</div>') +
-    '<p class="dhint" style="margin-top:14px">要回到这版，对我说「恢复到版本 ' + n + '」。</p>');
+  openSheet('🕓 v' + n + ' → 当前 的差异',
+    '<div class="sheetnav"><button class="actbtn" data-vback>← 返回版本列表</button>'
+    + '<span class="muted">看完可以返回列表接着看别的版本</span></div>'
+    + (h || '<div class="empty">与当前内容一致。</div>')
+    + '<p class="dhint" style="margin-top:14px">要回到这版，对我说「恢复到版本 ' + n + '」。</p>');
+  const back = qs('#sheet').querySelector('[data-vback]');
+  if (back) back.onclick = () => openVersions();
 }
 
 /* ---------- 插件设置（宿主注入 env.settings 才可用；离线网页没有） ---------- */
@@ -1109,44 +1157,53 @@ function featBodyHtml(f){
 }
 /* 节点面板专用：一句话直发 + 一键追问。点节点就能和 agent 交互，不用再复制粘贴。 */
 function askBoxHtml(f){
-  const askable = !!(env.ask || env.command);
-  const q = t => '<button class="actbtn" data-askq="' + esc(t) + '">💬 ' + esc(t.length > 14 ? t.slice(0, 13) + '…' : t) + '</button>';
-  return '<div class="askbox"><div class="kv"><b>直接和 agent 说一句</b><span class="muted">（消息会自动带上这个功能的名字和状态）</span></div>'
+  const q = t => '<button class="askchip" data-askq="' + esc(t) + '">' + esc(t.length > 16 ? t.slice(0, 15) + '…' : t) + '</button>';
+  return '<div class="askbox"><div class="kv"><b>直接和 agent 说一句</b><span class="muted">（消息会自动带上这个功能的名字和状态，直接进你与我的主对话）</span></div>'
+    + '<div class="askrow">'
     + '<textarea class="note" data-asktext placeholder="例：这个功能现在到什么程度了？还有哪些坑？／帮我把它做得更稳／边界在哪？"></textarea>'
-    + '<div class="actrow"><button class="actbtn primary" data-ask>📤 直接发给 agent</button>'
-    + q('讲讲「' + f.name + '」现在到哪一步了，还剩哪些没做')
-    + q('「' + f.name + '」我该怎么验收？给我最简单的试用步骤')
-    + q('围绕「' + f.name + '」给我下一步的开发建议')
+    + '<button class="asksend" data-ask><span class="ico">📤</span><span class="txt">发送给 agent</span></button>'
     + '</div>'
-    + (askable
-      ? '<p class="dhint">Ctrl/⌘+Enter 也能发送。会话不在线时会先记下，下次更新时生效。</p>'
-      : '<p class="dhint">当前环境不能直发（离线网页版）：点按钮会把这句话复制好，粘贴到聊天框发送。</p>')
+    + '<div class="askquick"><span class="lab">快捷追问</span>'
+    + q('讲讲「' + f.name + '」现在到哪一步了')
+    + q('「' + f.name + '」我该怎么验收')
+    + q('围绕「' + f.name + '」下一步做什么')
+    + '</div>'
+    + '<p class="dhint">Ctrl/⌘+Enter 也能发送；点上面的快捷追问则是一键直发。拿不到直发通道时会改为复制并把原因说清楚。</p>'
     + '</div>';
 }
-/* 把一段话发给当前会话的 agent：在线 = steer 直达；不在线 = 记进 .inbox.jsonl */
+/* 直发结果 → 人话（顺便告诉用户走的是哪条通道，出问题好排查） */
+function sendResultText(r, what){
+  if (r === 'queued') return '会话不在线：已记进收件箱，下次更新时生效';
+  if (r === 'sent') return '✅ ' + (what || '') + '已发送到主对话';
+  return '✅ ' + (what || '') + '已直达 agent';
+}
+/* 统一的直发：消息直接进主对话；拿不到通道或发送失败才退回复制，并把原因说清楚 */
+function dispatchSend(text, summary, btn){
+  const send = env.ask || env.command;
+  if (!send){
+    copyText(text);
+    toast('这个环境拿不到直发通道，已复制——粘贴到聊天框发送');
+    return;
+  }
+  if (btn) btn.disabled = true;
+  Promise.resolve(send(text, summary))
+    .then(r => toast(sendResultText(r)))
+    .catch(e => {
+      const why = ((e && e.message) || e || '未知原因');
+      console.warn('[cyd] 直发失败，改为复制：' + why);
+      copyText(text);
+      toast('直发失败（' + why + '），已复制——粘贴到聊天框发送');
+    })
+    .finally(() => { if (btn) btn.disabled = false; });
+}
 function sendToAgent(name, text, btn){
   const f = DATA.features.find(x => x.name === name);
-  const msg = '【功能地图】「' + name + '」' + (f ? '（状态：' + f.status + '）' : '') + '——' + text;
-  const send = env.ask || env.command;
-  if (!send){ copyText(msg); toast('已复制（当前环境不能直发）——粘贴到聊天框发送'); return; }
-  if (btn) btn.disabled = true;
-  Promise.resolve(send(msg, '功能地图：' + name))
-    .then(r => toast(r === 'queued' ? '会话不在线：已记下，下次更新时生效' : '✅ 已发给 agent'))
-    .catch(e => { console.warn(e); copyText(msg); toast('发送失败，已复制——粘贴到聊天框发送'); })
-    .finally(() => { if (btn) btn.disabled = false; });
+  dispatchSend('【功能地图】「' + name + '」' + (f ? '（状态：' + f.status + '）' : '') + '——' + text, '功能地图：' + name, btn);
 }
 function bindFeatSheet(name, reopen, withAsk){
   const sh = qs('#sheet');
   sh.querySelectorAll('[data-dep]').forEach(b => b.onclick = () => openNodePanel(b.dataset.dep));
-  sh.querySelectorAll('[data-cmd]').forEach(b => b.onclick = () => {
-    const cmd = b.dataset.cmd;
-    if (!env.command){ copyText(cmd); return; }
-    b.disabled = true;
-    Promise.resolve(env.command(cmd, '功能地图：' + name))
-      .then(r => toast(r === 'queued' ? '会话不在线：已记下，下次更新时生效' : '✅ 已发送，我来落实'))
-      .catch(e => { console.warn(e); copyText(cmd); })
-      .finally(() => { b.disabled = false; });
-  });
+  sh.querySelectorAll('[data-cmd]').forEach(b => b.onclick = () => dispatchSend(b.dataset.cmd, '功能地图：' + name, b));
   if (withAsk){
     const ta = sh.querySelector('[data-asktext]');
     const ab = sh.querySelector('[data-ask]');
@@ -1209,7 +1266,7 @@ async function doVerify(name, reopen){
     if (res === 'ok'){ closeSheet(); await doRefreshQuiet(); toast('✅ 已写入「已验证」'); return; }
     if (env.command){
       const r = await env.command('「' + name + '」我验证过了');
-      toast(r === 'queued' ? '会话不在线：已记下，下次更新时生效' : '✅ 已发送，我来写入「已验证」');
+      toast(sendResultText(r, '验收'));
       restore(); return;
     }
     copyText('「' + name + '」我验证过了');
