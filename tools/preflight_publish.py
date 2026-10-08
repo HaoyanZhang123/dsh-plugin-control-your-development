@@ -42,16 +42,21 @@ def check_manifest():
     return m, problems
 
 
-def check_registry(name):
+def check_registry(name, version):
+    """名字被人占了才拦；是自己的包但版本已发布，也拦（npm 不允许同版本重发）。"""
     url = "https://registry.npmjs.org/" + name.replace("/", "%2F")
     try:
         with urllib.request.urlopen(url, timeout=20) as r:
             data = json.loads(r.read().decode("utf-8"))
-            latest = (data.get("dist-tags") or {}).get("latest", "?")
-            return f"包名 {name} 已存在（最新 {latest}）——若这是你的包请先改 version，否则换个名字"
+            versions = list((data.get("versions") or {}).keys())
+            if version in versions:
+                return f"版本 {name}@{version} 已发布过——请先升 version 再发"
+            if versions:
+                return None      # 名字是自己的、目标版本是新的 → 可以发
+            return f"包名 {name} 已被占用（无版本），请换个名字"
     except urllib.error.HTTPError as e:
         if e.code == 404:
-            return None      # 可用
+            return None      # 全新包名，可用
         return f"查询包名失败：HTTP {e.code}"
     except Exception as e:
         return f"查询包名失败（网络？）：{e}"
@@ -90,7 +95,7 @@ def main(argv):
     name = manifest.get("name", "")
     version = manifest.get("version", "")
     print(f"包：{name}@{version}")
-    reg = check_registry(name) if name else "包名缺失"
+    reg = check_registry(name, version) if name else "包名缺失"
     if reg:
         problems.append(reg)
     packed, tprobs = check_tarball(pnpm, node)

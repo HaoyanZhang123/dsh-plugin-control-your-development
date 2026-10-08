@@ -89,7 +89,7 @@ cp -R dsh-plugin-control-your-development/skill/control-your-development ~/.dsh/
 dsh-plugin-control-your-development
 ```
 
-走 npm registry，**国内会自动命中镜像**（已发布 0.3.1，官方源与 npmmirror 均可查）。包已自带配套 skill，安装后插件会把它放进全局技能目录。
+走 npm registry，**国内会自动命中镜像**（已发布 **0.4.2**，官方源与 npmmirror 均可查）。包已自带配套 skill，安装后插件会把它放进全局技能目录。
 
 ### 方式 2：仓库地址（能连 GitHub 时可用）
 
@@ -161,7 +161,7 @@ https://github.com/HaoyanZhang123/dsh-plugin-control-your-development
 1. **macOS 没有 git**：从仓库地址安装需要 pnpm 调用 git；macOS 默认不带 git。用**归档压缩包地址**安装即可，这条路不需要 git（已实测）：
 
    ```
-   https://github.com/HaoyanZhang123/dsh-plugin-control-your-development/archive/refs/tags/v1.3.1.tar.gz
+   https://github.com/HaoyanZhang123/dsh-plugin-control-your-development/archive/refs/tags/v0.4.2.tar.gz
    ```
 
    或者先装 git（`xcode-select --install`）再重试。
@@ -183,9 +183,9 @@ https://github.com/HaoyanZhang123/dsh-plugin-control-your-development
 "浏览器能打开 GitHub" ≠ "终端里的 git/pnpm 能连上"。三种不依赖 GitHub 的安装方式：
 
 **路 1：离线安装包（最稳，谁都能用）**
-拿到 `dsh-plugin-control-your-development-0.3.1.tgz`（本仓库 Releases 附件，或直接找作者要），然后：
+拿到 `dsh-plugin-control-your-development-0.4.2.tgz`（本仓库 Releases 附件，或直接找作者要），然后：
 
-- Add plugin 里填**这个文件的绝对路径**，例如 `/Users/你/Downloads/dsh-plugin-control-your-development-0.3.1.tgz`
+- Add plugin 里填**这个文件的绝对路径**，例如 `/Users/你/Downloads/dsh-plugin-control-your-development-0.4.2.tgz`
 - 只想装 skill：把 tgz 解压（`tar -xzf ...`），把里面的 `package/skill/control-your-development` 拷到你的 skills 目录即可
 
 **路 2：npm 包名（发布到 npm 后可用）**

@@ -72,7 +72,7 @@ Invoke-WebRequest "https://registry.npmmirror.com/dsh-plugin-control-your-develo
 ```powershell
 # 1) 改代码 → 重建产物 → 跑预检（第 0 步）
 # 2) 升版本（npm 不允许同版本重复发布）
-& "<node.exe>" "<pnpm.mjs>" version patch --no-git-tag-version   # 0.3.1 → 0.3.2
+& "<node.exe>" "<pnpm.mjs>" version patch --no-git-tag-version   # 0.4.2 → 0.4.3
 # 3) 发布
 & "<node.exe>" "<pnpm.mjs>" publish --access public
 ```

@@ -3,7 +3,7 @@
 > 把开发过程翻译成你看得懂、能掌控的产品仪表盘。
 > 三份人话 Markdown 是事实源，一键生成单文件离线网页；也可以把仪表盘钉在 DSH 窗口右侧，随时抬头可见。
 
-版本：skill v1.2.0 · 面板插件 v0.3.1　|　许可：[MIT](LICENSE)　|　语言：[English](README.en.md)
+版本：skill v1.2.0 · 面板插件 v0.4.2　|　许可：[MIT](LICENSE)　|　语言：[English](README.en.md)
 
 ---
 
@@ -21,13 +21,15 @@
 
 前提：你已安装 DSH 桌面版。
 
-1. **装插件（一步搞定，配套 skill 会一起装好）**：DSH → 左侧 Plugins → Add plugin → 粘贴仓库地址：
+1. **装插件（一步搞定，配套 skill 会一起装好）**：DSH → 左侧 Plugins → Add plugin → 填 npm 包名：
 
    ```
-   https://github.com/HaoyanZhang123/dsh-plugin-control-your-development
+   dsh-plugin-control-your-development
    ```
 
-   插件激活时会把自己带的 skill 装进**全局技能目录**（`<dshHome>/skills/`）——**所有工作区都能用**，不用你手动拷目录。
+   走 npm registry，**国内自动命中镜像、不碰 GitHub**。插件激活时会把自己带的 skill 装进**全局技能目录**（`<dshHome>/skills/`）——**所有工作区都能用**，不用你手动拷目录。
+
+   > 已在 **macOS 与 Windows 实机验证可用**；连不上 npm 时可用 Release 里的离线 `.tgz`（Add plugin 填文件绝对路径）。
 
 2. 用 DSH 打开你的项目，对 AI 说一句：**"control my development"**（或"帮我建立开发仪表盘"）。
 
@@ -39,13 +41,13 @@
 
 ## 看一看
 
-> 📷 ：仪表盘「项目」首页——一句话定位、当前方向、掌控条。
+**仪表盘「项目」首页**：一句话定位、当前方向、掌控条。
 <img width="2968" height="1736" alt="image" src="https://github.com/user-attachments/assets/ad57e7da-bc41-4ed7-b03d-fd44a9b5075e" />
-> 📷 截图位：「功能地图」页——功能卡片五态（设想 / 进行中 / 可用 / 已验证 / 已废弃）+ 依赖关系图。
+**「功能地图」页**：功能卡片五态（设想 / 进行中 / 可用 / 已验证 / 已废弃）+ 依赖关系图。
 <img width="2648" height="1078" alt="image" src="https://github.com/user-attachments/assets/c5647de2-f4c6-47b9-9599-8e83f1aa6b57" />
-> 📷 截图位：「现在」页——时间线与等你拍板的决策卡。
+**「现在」页**：时间线与等你拍板的决策卡。
 <img width="2620" height="1256" alt="image" src="https://github.com/user-attachments/assets/dbe24c34-2da5-470f-90b6-1a94ee92339e" />
-> 📷 截图位：DSH 右侧边栏内嵌面板实拍。
+**DSH 右侧边栏内嵌面板**（与 文件 / 终端 / 浏览器 同列，标签带当前项目名）。
 <img width="1042" height="1088" alt="image" src="https://github.com/user-attachments/assets/83429749-b03f-4132-a4c5-612ba7d36453" />
 
 ## 功能亮点
@@ -57,6 +59,12 @@
 
 **进度由你定义（状态机）**
 每个功能的主路径是 设想 → 进行中 → 可用 → 已验证。AI 最多把功能标到「可用」；「已验证」三个字只有你亲口说过才算数，进度条也只统计已验证的功能。状态也能往回走：撤销验证退回「可用」（功能没坏，只是撤回盖章）、返工重做退回「进行中」、废弃归入「已废弃」、废弃的还能恢复为「设想」——每次回退都会在时间线留一笔。
+
+**这次新增的能力**
+- **按工作区显示**：面板读的是当前会话所属工作区的看板，标签上带**项目名**，一眼看出是哪份；换个项目自动跟着换
+- **装插件即装 skill**：安装时把自带的 skill 放进全局技能目录（`<dshHome>/skills/`），所有工作区都能用；若那里已有**你自己改过的副本**，插件不会覆盖它
+- **证据一键打开**：面板里点证据直接打开文件预览（也可以只复制路径）
+- **覆盖性门禁**：工作区里的改动必须被收录进看板或明确标注忽略，否则渲染直接拦下（退出码 2）——不允许静默遗漏
 
 **拍板中心**
 AI 把需要你决定的事整理成选项卡：点选、补充、复制指令回复，三选一都支持。你的每个拍板都会记进时间线，有据可查。
@@ -78,6 +86,8 @@ AI 把需要你决定的事整理成选项卡：点选、补充、复制指令�
 |---|---|
 | **插件 + skill（推荐，一步到位）** | DSH → Plugins → Add plugin → 填 `dsh-plugin-control-your-development`（npm 包名，国内走镜像；插件会把配套 skill 自动装到全局技能目录） |
 | 只装 skill（不用面板） | 把 `skill/control-your-development/` 拷到项目的 `.dsh/skills/` |
+| 离线安装（连不上 npm） | 下载 Release 附件里的 `.tgz`，Add plugin 里填它的**绝对路径** |
+| ⚠️ 不推荐：填 GitHub 地址 | 需要本机装 git 且能连 GitHub；国内常失败——请改填 npm 包名 |
 
 详解（全局安装、离线安装、卸载与升级）：[INSTALL.md](INSTALL.md)
 
@@ -133,8 +143,14 @@ DSH 桌面版。生成网页只用 DSH 自带的 Python，纯标准库、零安�
 **面板插件必须装吗？**
 不必须。网页版双击就能用；面板只是让你不用切窗口，抬头即见。
 
+**网页端点「🔄 更新」报错、或点了没反应？**
+网页版要读写你项目里的 `dev-dashboard/`，需要你**授权文件夹访问**：浏览器会弹一次权限框，请选**包含 `dev-dashboard/` 的项目根目录**。授权后浏览器会记住它。右侧栏面板不需要授权——它走 DSH 自己的读接口。
+
+**怎么更新到新版本？**
+插件：DSH → Plugins → 卸载，再 Add plugin 填 `dsh-plugin-control-your-development`（也可指定版本 `dsh-plugin-control-your-development@0.4.2`）；更新后**刷新页面（Ctrl+R）或重启 DSH**。skill：跟随插件自动更新；手动装的那份重新拷一次即可。
+
 **macOS / Linux 能用吗？**
-脚本只用跨平台 API，预期可用；但目前只在 Windows + DSH 自带 Python 上实机验证过，欢迎反馈。
+能。**macOS 与 Windows 均已实机验证可用**（网页端 + 右侧栏面板）；Linux 未实机验证，但脚本只用跨平台 API、路径按可移植写法提供。
 
 ## 许可与贡献
 

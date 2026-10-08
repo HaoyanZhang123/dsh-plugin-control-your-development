@@ -63,9 +63,9 @@ async function reloadData(){
   if (!FSOK) return null;
   const root = await getDir();
   if (!root) return null;
-  const prod = norm(await readText(root, 'dev-dashboard/PRODUCT.md'));
-  const feat = norm(await readText(root, 'dev-dashboard/FEATURES.md'));
-  const now = norm(await readText(root, 'dev-dashboard/NOW.md'));
+  const prod = CYD.norm(await readText(root, 'dev-dashboard/PRODUCT.md'));
+  const feat = CYD.norm(await readText(root, 'dev-dashboard/FEATURES.md'));
+  const now = CYD.norm(await readText(root, 'dev-dashboard/NOW.md'));
   let factsRaw = null, ignoreRaw = null;
   try{ factsRaw = await readText(root, 'dev-dashboard/.facts.json'); }catch(e){}
   try{ ignoreRaw = await readText(root, 'dev-dashboard/.dashboard-ignore'); }catch(e){}
@@ -108,14 +108,14 @@ async function verifyWrite(name){
   if (!FSOK) return 'fallback';
   const root = await getDir();
   if (!root) return 'fallback';
-  let fm = norm(await readText(root, 'dev-dashboard/FEATURES.md'));
+  let fm = CYD.norm(await readText(root, 'dev-dashboard/FEATURES.md'));
   const cur = CYD.parseFeatures(fm).find(x => x.name === name);
   if (!cur) throw new Error('文件中找不到功能「' + name + '」');
   if (cur.status !== '可用') return 'fallback';
   fm = setVerified(fm, name, CYD.fmtDate(new Date()));
   const nf = CYD.parseFeatures(fm);
   const n = nf.filter(x => x.status === '已验证').length, t = nf.filter(x => x.status !== '已废弃').length;
-  let nm = norm(await readText(root, 'dev-dashboard/NOW.md'));
+  let nm = CYD.norm(await readText(root, 'dev-dashboard/NOW.md'));
   nm = prependTimeline(nm, '- ' + CYD.fmtDT(new Date()) + ' | 你验证了「' + name + '」，进度前进到 ' + n + '/' + t);
   await writeText(root, 'dev-dashboard/FEATURES.md', fm);
   await writeText(root, 'dev-dashboard/NOW.md', nm);

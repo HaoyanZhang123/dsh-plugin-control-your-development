@@ -6,12 +6,12 @@
 
 ## 0. 发布前阻塞待办（未清不许发）
 
-> **已发布（2026-10-07）**：https://github.com/HaoyanZhang123/dsh-plugin-control-your-development/releases/tag/v1.3.0
+> **当前版本**：GitHub tag `v0.4.2` = npm `dsh-plugin-control-your-development@0.4.2`（版本号从此保持一致；更早的 v1.2.x / v1.3.x 是改名前的历史 tag，保留不动）
 > 发布前已脱敏：去除本机路径示例、补全账号占位、提交身份使用 `HaoyanZhang123@users.noreply.github.com`。
 
-- [ ] README 的 4 张截图仍缺（`docs/images/` 只有规范、没有 png）：项目首页 / 功能地图 / 现在 / 面板实拍
-- [ ] `README.md`「看一看」里的截图占位说明未撤（截图补齐时要连占位一起删）
-- [ ] 占位符 `HaoyanZhang123` 还有 5 处未替换（`README.md` 1 处、`INSTALL.md` 3 处、本清单 1 处；`README.en.md` 另有 `HaoyanZhang123` / `<your-project-path>`）
+- [x] README 已放 **4 张实拍截图**（项目首页 / 功能地图 / 现在 / 面板），以 GitHub attachments 形式引用；`docs/images/` 保留为自有托管方案的规范
+- [x] 截图占位文案已换成正式图注
+- [x] 账号/仓库占位已全部替换为真实值（用户侧 `<你的项目路径>` 这类占位属设计保留）
 
 ## 1. 门禁命令全绿
 
@@ -37,7 +37,7 @@ python tools/contract_check.py .dsh/skills/control-your-development
 - [ ] `release/dsh-plugin-control-your-development/README.md` 头部的版本行
 - [ ] `release/dsh-plugin-control-your-development/README.en.md` 头部的版本行
 
-skill 与面板版本可以不同（本轮 skill 1.2.0 / panel 0.3.0），但每处自述必须等于实际。面板版本在 `package.json` 里、不属于 skill，改版时别漏。
+skill 与面板版本可以不同（本轮 skill 1.2.0 / panel 0.4.2），但每处自述必须等于实际。面板版本在 `package.json` 里、不属于 skill，改版时别漏；**面板版本号必须与 npm 包版本号、GitHub tag 三者一致**。
 
 ## 3. 冒烟重跑
 
@@ -66,7 +66,7 @@ skill 与面板版本可以不同（本轮 skill 1.2.0 / panel 0.3.0），但每
 - [ ] 面板目录带 MIT LICENSE：`（仓库根）/LICENSE` 已放副本；但 `package.json` 的 `files` 仍是 `lib` / `cordis.patch.yml` / `README.md`——**待办**：加 `LICENSE`（`package.json` 属面板范围，本轮未改；对照已装可用的 `dsh-plugin-whale-pet` 有 LICENSE）
 - [ ] 机器产物不进仓：`dev-dashboard/` 的 `index.html` / `.facts.json` / `.state.json`、`node_modules/`、`*.cyd-backup` 一律不出现（`.gitignore` 已挡，仍肉眼确认 `git status`）
 
-## 7. 一键安装形态（v1.3.0 起硬门槛）
+## 7. 一键安装形态（硬门槛：v0.4.x 起版本号三处一致）
 
 - [ ] **仓库根就是插件包**：根目录存在 `package.json`（含 `dsh.bundle`）、`cordis.patch.yml`、`lib/index.js`、`lib/client.js`；插件**不再**放在子目录（子目录会让 pnpm 生成 `_pnpmPlaceholder` 占位清单，DSH 读不到 `dsh.bundle` → 装不上）
 - [ ] **`files` 字段包含 `skill`**：否则安装时不会打包配套 skill，"插件自动装 skill"就失效
@@ -88,7 +88,7 @@ skill 与面板版本可以不同（本轮 skill 1.2.0 / panel 0.3.0），但每
 - [ ] 描述：把开发过程翻译成你看得懂、能掌控的产品仪表盘（DSH skill + 面板插件）
 - [ ] topics：`dsh` `dsh-skill` `dsh-plugin` `dashboard` `ai-productivity`
 - [ ] 默认分支 `main`；首次推送 `git status` 干净、`.gitignore` 生效
-- [ ] Releases 建 `v1.3.0` tag（对应本轮 skill 1.2.0 / panel 0.3.0），附本轮变更摘要
+- [ ] Releases 建与 npm 同号的 tag（本轮 `v0.4.2`），附本轮变更摘要；确认它成为 Latest，旧 tag 不动
 
 ## 8. 发布后立即做
 
