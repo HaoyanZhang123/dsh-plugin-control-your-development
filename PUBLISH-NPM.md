@@ -1,23 +1,35 @@
-# 发布到 npm（一次配置，之后一条命令）
+# 发布到 npm（打 tag 自动发版 + 手动兜底）
 
 > 目的：让别人在 DSH 的 Add plugin 里**只填包名** `dsh-plugin-control-your-development` 就能装，走 npm registry（国内自动命中镜像），**完全不碰 GitHub**。
-> 本机环境事实：DSH 捆绑运行时里只有 **pnpm**（没有 npm）；`registry.npmjs.org` 与 `registry.npmmirror.com` 均可连通；包名 `dsh-plugin-control-your-development` **当前可用**。
 
+## 方式一：打 tag 自动发版（推荐）
 
-> ⚠️ **必须在包根执行**：`release/dsh-plugin-control-your-development`（仓库根 = 包根，它自己是一个独立的 git 仓库）。
-> 在工作区根 `skill开发` 下执行会报 **`ERR_PNPM_GIT_UNCLEAN` Unclean working tree**——因为那是另一个 git 仓库，且带着未提交改动。pnpm 发布前会检查 git 状态，这是它的保护机制，不是网络或权限问题。
-> 想跳过该检查（不推荐）：加 `--no-git-checks`。
+工作流：`.github/workflows/release.yml`（推送 `v*` tag 触发）——自动跑 skill 自检、校验包形态与版本一致性（tag = package.json），然后 `npm publish --provenance`（**OIDC 认证：不需要 token、不需要验证码**），最后自动建 GitHub Release（自动生成 changelog）。
 
-**一体化命令（先切目录再发布，复制整段即可）**
+**一次性配置（npm 网页端）**：包 Settings → **Trusted Publisher** → GitHub Actions → 仓库 `HaoyanZhang123/dsh-plugin-control-your-development`、工作流文件名 `release.yml`、环境留空。
+
+**之后每次发版只需**：
 
 ```powershell
 Set-Location "E:\DSH\workspaces\myself\skill开发\release\dsh-plugin-control-your-development"
-& "E:\DSH\.dsh\dsh-runtimes\dsh-primary-runtime\dependencies\node\bin\node.exe" `
-  "E:\DSH\.dsh\dsh-runtimes\dsh-primary-runtime\dependencies\pnpm\bin\pnpm.mjs" `
-  publish --access public
+# 1. 升版本（改 package.json；skill 内自述的版本行同步）并提交
+git tag v0.4.3            # tag 必须与 package.json 的 version 完全一致（CI 会校验）
+git push origin main --tags
 ```
 
-## 第 0 步：预检（我已经跑通，你随时可复跑）
+> ⚠️ 截至 2026-10-08 该链路**尚未实测**（配置好后第一次打 tag 即验证；失败时看 Actions 日志，回退方式二）。
+
+## 方式二：手动发布（兜底）
+
+> ⚠️ **必须在包根执行**：`release/dsh-plugin-control-your-development`（仓库根 = 包根，它自己是一个独立的 git 仓库）。
+> 在工作区根 `skill开发` 下执行会报 **`ERR_PNPM_GIT_UNCLEAN` Unclean working tree**。
+
+```powershell
+Set-Location "E:\DSH\workspaces\myself\skill开发\release\dsh-plugin-control-your-development"
+npm publish --access public --otp <6位验证码>   # 带 OTP 直接发布，避开 npm 暂存（staged publishing）
+```
+
+### 手动发布前的预检：预检（我已经跑通，你随时可复跑）
 
 ```powershell
 # 在仓库根执行（下面两个路径是 DSH 捆绑运行时里的）
@@ -29,7 +41,7 @@ Set-Location "E:\DSH\workspaces\myself\skill开发\release\dsh-plugin-control-yo
 
 它会检查：`package.json` 必填字段 / `dsh.bundle` 与 `dsh.client` / `files` 是否带齐 `lib`、`skill`、`cordis.patch.yml` / 包名是否被占用 / 实际打包内容是否包含 `cordis.patch.yml`、`lib/client.js`、`lib/index.js`、`skill/**`。
 
-## 第 1 步：认证（二选一）
+### 第 1 步：认证（二选一）
 
 ### 方式 A：装了 Node（自带 npm）
 
@@ -50,14 +62,14 @@ npm login          # 浏览器里登录你的 npm 账号
 
 > 安全提醒：token 只落在 `C:\Users\<你>\.npmrc`（macOS 是 `~/.npmrc`）。**不要**把它写进仓库里任何文件；用完后可在 npm 网站吊销。
 
-## 第 2 步：发布（一条命令）
+### 第 2 步：发布（一条命令）
 
 ```powershell
 # 在仓库根执行；publishConfig.access=public 已写好，--access public 只是保险
 & "<node.exe>" "<pnpm.mjs>" publish --access public
 ```
 
-## 第 3 步：验证（发布后立刻可查）
+### 第 3 步：验证（发布后立刻可查）
 
 ```powershell
 # 官方源与国内镜像都应能查到（镜像通常几十秒内同步）
@@ -67,7 +79,7 @@ Invoke-WebRequest "https://registry.npmmirror.com/dsh-plugin-control-your-develo
 
 然后告诉别人：**DSH → Plugins → Add plugin → 填 `dsh-plugin-control-your-development`**。
 
-## 之后每次更新发版
+### 之后每次更新发版
 
 ```powershell
 # 1) 改代码 → 重建产物 → 跑预检（第 0 步）
@@ -79,7 +91,7 @@ Invoke-WebRequest "https://registry.npmmirror.com/dsh-plugin-control-your-develo
 
 > 别忘了同步升仓库里 `skill/control-your-development/manifest.yaml` 的版本（skill 与插件版本各自独立）。
 
-## 首次发布的实录（2026-10-08）
+### 首次发布的实录（2026-10-08）
 
 1. 用 bypass-2FA token 执行 `pnpm publish` → npm 返回成功，但实际是**暂存**：包名下只有占位版 `0.0.0-stage`，描述写着"awaiting a staged release"。
 2. 用 `npm stage approve <stage-id>` + 验证器 6 位码批准 → `0.4.0` 正式上线（官方源 `dist-tags.latest = 0.4.0`）。
@@ -87,7 +99,7 @@ Invoke-WebRequest "https://registry.npmmirror.com/dsh-plugin-control-your-develo
 
 > 小坑：镜像同步有先后。若某台机器上 pnpm 之前解析过占位版，它会**用本地缓存的元数据**继续去找 `0.0.0-stage.tgz` 并报校验错误。清掉 pnpm 缓存（或换 `--config.cacheDir`）后立刻正常——与包本身无关。
 
-## ⚠️ 重要：用 bypass-2FA token 发布会被"暂存"
+### ⚠️ 重要：用 bypass-2FA token 发布会被"暂存"
 
 npm 现在把"用 bypass-2FA token 直接发布"改为**暂存发布（staged publishing）**：包名先被占位版本 `0.0.0-stage` 占住，你的版本进入待批准队列，**需要持 2FA 的人批准后才真正上线**。
 
@@ -106,7 +118,7 @@ npm publish --access public --otp <6位码>
 
 > 结论：**以后发布一律带 `--otp`**，或改用 GitHub Actions + Trusted Publishing（OIDC，不需要 token 也不需要验证码）。
 
-## 常见问题
+### 常见问题
 
 | 现象 | 原因 / 处理 |
 |---|---|
