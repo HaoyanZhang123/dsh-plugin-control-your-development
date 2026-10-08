@@ -42,16 +42,16 @@ For full installation options (global install, panel plugin, uninstall & upgrade
 ## Take a look
 
 **Dashboard · Project home** — one-line positioning, current direction, the control strip.
-<img width="2968" height="1736" alt="Dashboard · Project home — one-line posi" src="https://github.com/user-attachments/assets/ad57e7da-bc41-4ed7-b03d-fd44a9b5075e" />
+<img width="2968" height="1736" alt="Dashboard · Project home — one-line posi" src="docs/images/home.png" />
 
 **Feature Map** — five-state cards (Idea / In Progress / Usable / Verified / Deprecated) + dependency graph.
-<img width="2648" height="1078" alt="Feature Map — five-state cards (Idea / I" src="https://github.com/user-attachments/assets/c5647de2-f4c6-47b9-9599-8e83f1aa6b57" />
+<img width="2648" height="1078" alt="Feature Map — five-state cards (Idea / I" src="docs/images/features.png" />
 
 **Now** — the timeline and the decision cards waiting for your call.
-<img width="2620" height="1256" alt="Now — the timeline and the decision card" src="https://github.com/user-attachments/assets/dbe24c34-2da5-470f-90b6-1a94ee92339e" />
+<img width="2620" height="1256" alt="Now — the timeline and the decision card" src="docs/images/now.png" />
 
 **Embedded panel** in the DSH right sidebar (next to Files / Terminal / Browser, title carries the project name).
-<img width="1042" height="1088" alt="Embedded panel in the DSH right sidebar " src="https://github.com/user-attachments/assets/83429749-b03f-4132-a4c5-612ba7d36453" />
+<img width="1042" height="1088" alt="Embedded panel in the DSH right sidebar " src="docs/images/panel.png" />
 
 ## Highlights
 

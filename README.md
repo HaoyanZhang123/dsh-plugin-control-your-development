@@ -42,13 +42,13 @@
 ## 看一看
 
 **仪表盘「项目」首页**：一句话定位、当前方向、掌控条。
-<img width="2968" height="1736" alt="image" src="https://github.com/user-attachments/assets/ad57e7da-bc41-4ed7-b03d-fd44a9b5075e" />
+<img width="2968" height="1736" alt="image" src="docs/images/home.png" />
 **「功能地图」页**：功能卡片五态（设想 / 进行中 / 可用 / 已验证 / 已废弃）+ 依赖关系图。
-<img width="2648" height="1078" alt="image" src="https://github.com/user-attachments/assets/c5647de2-f4c6-47b9-9599-8e83f1aa6b57" />
+<img width="2648" height="1078" alt="image" src="docs/images/features.png" />
 **「现在」页**：时间线与等你拍板的决策卡。
-<img width="2620" height="1256" alt="image" src="https://github.com/user-attachments/assets/dbe24c34-2da5-470f-90b6-1a94ee92339e" />
+<img width="2620" height="1256" alt="image" src="docs/images/now.png" />
 **DSH 右侧边栏内嵌面板**（与 文件 / 终端 / 浏览器 同列，标签带当前项目名）。
-<img width="1042" height="1088" alt="image" src="https://github.com/user-attachments/assets/83429749-b03f-4132-a4c5-612ba7d36453" />
+<img width="1042" height="1088" alt="image" src="docs/images/panel.png" />
 
 ## 功能亮点
 

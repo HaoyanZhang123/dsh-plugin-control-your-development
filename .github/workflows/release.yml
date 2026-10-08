@@ -1,0 +1,46 @@
+name: release
+
+# 打 tag（v*）即自动：跑自检 → 校验包形态与版本一致性 → 发布 npm（Trusted Publishing / OIDC，无需 token 与验证码）→ 建 GitHub Release
+# 启用前需要在 npm 上配置一次 Trusted Publisher：包设置 → Trusted Publisher → GitHub Actions → 仓库 HaoyanZhang123/dsh-plugin-control-your-development、工作流 release.yml
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write   # 创建 GitHub Release
+  id-token: write   # npm Trusted Publishing（OIDC）
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: skill 自检（含 CSS 作用域断言、注入回归）
+        run: |
+          python3 skill/control-your-development/scripts/render_dashboard.py --self-test
+          python3 skill/control-your-development/scripts/collect_facts.py --self-test
+          python3 skill/control-your-development/scripts/watch_dashboard.py --self-test
+
+      - name: 版本一致性（tag = package.json）
+        run: |
+          node -e "const v=require('./package.json').version, t=process.env.GITHUB_REF_NAME.replace(/^v/,''); if(v!==t){throw new Error('tag '+t+' != package.json '+v)} console.log('version ok', v)"
+
+      - name: 包形态校验（dsh.bundle / files 必须带 skill）
+        run: |
+          node -e "const p=require('./package.json'); if(!p.dsh||!p.dsh.bundle||!p.dsh.bundle.patch){throw new Error('missing dsh.bundle')} if(!(p.files||[]).includes('skill')){throw new Error('files missing skill')} console.log('package ok', p.name, p.version)"
+          npm pack --dry-run
+
+      - name: 发布到 npm（OIDC，无 token / 无 OTP）
+        run: npm publish --access public --provenance
+
+      - name: 建 GitHub Release（自动生成 changelog）
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
