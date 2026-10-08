@@ -17,7 +17,8 @@ git tag v0.4.3            # tag 必须与 package.json 的 version 完全一致�
 git push origin main --tags
 ```
 
-> ⚠️ 截至 2026-10-08 该链路**尚未实测**（配置好后第一次打 tag 即验证；失败时看 Actions 日志，回退方式二）。
+> ✅ 该链路已于 2026-10-08 随 v0.5.0 实测打通（打 tag → CI 自检 → OIDC 发布 → 自动 GitHub Release → 官方源/镜像可装）。
+> 实测踩坑记录：① Trusted Publisher 表单的 **「Allow npm publish」必须勾上**——不勾时 npm 只认 `npm stage publish`，直接 publish 会报 `403 OIDC permission denied for this action`；② workflow filename 只填 `release.yml`，不带 `.github/workflows/` 前缀；③ 发布成功后 npm 有**数分钟处理延迟**（"Your package is being processed"），`latest` 不会立刻翻动，别误判为失败去重发。
 
 ## 方式二：手动发布（兜底）
 
