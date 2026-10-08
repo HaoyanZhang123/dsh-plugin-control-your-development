@@ -637,6 +637,7 @@ function renderGraph(){
     r.setAttribute('x', -f.w / 2); r.setAttribute('y', -f.h / 2); r.setAttribute('width', f.w); r.setAttribute('height', f.h); r.setAttribute('rx', 12);
     r.style.fill = SSOFT[f.status]; r.style.stroke = SCOLOR[f.status];
     const ttl = document.createElementNS(NS, 'title'); ttl.textContent = f.name + '（' + f.status + '）' + (f.desc ? '——' + f.desc : '');
+    g.appendChild(r);
     g.appendChild(ttl);
     const lines = f.lines || [f.name];
     lines.forEach((ln, i) => {
