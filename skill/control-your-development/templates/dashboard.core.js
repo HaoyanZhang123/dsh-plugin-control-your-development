@@ -394,6 +394,10 @@ let docKeyHandler = null;   // 全局只保留一个 Esc 处理器：init 幂等
   const qsa = s => Array.from(rootEl.querySelectorAll(s));
   rootEl.classList.add('cyd-app');
   if (env.fullGraph) rootEl.classList.add('fullgraph');
+  /* 整页模式（会话页顶部「功能地图」tab）：只渲染关系图并铺满可用高度。
+     宿主自己的标签栏与输入框保持原样——本插件只裁剪自己的版面，不碰宿主 DOM。 */
+  const IMMERSIVE = !!(env.fullGraph && env.onlyTab);
+  if (IMMERSIVE) rootEl.classList.add('cyd-immersive');
   if (SHELL) rootEl.innerHTML = SHELL;
 
 const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -403,6 +407,11 @@ const SSOFT = {"设想":"var(--gray-soft)","进行中":"var(--accent-soft)","可
 const TL_SHOW = env.timelineShow || 30;
 let currentTab = 'project', currentFilter = 'all';
 const expanded = new Set();   // 关系图里展开子项的功能名（本挂载周期内保持，重渲染不丢）
+/* 关系图视图状态：跨重渲染保留。pos = 手动摆过的节点位置（按功能名记），
+   tx/ty/k = 缩放平移，adjusted = 用户是否亲手调过视野（调过就不再自动 fit）。
+   drag = 正在拖节点（期间到来的自动刷新先押后，避免把图重排）。 */
+const gview = { tx: 0, ty: 0, k: 1, adjusted: false, pos: new Map(), drag: false, deferred: false };
+let graphRO = null;   // 关系图尺寸观察器（重渲染时换新，避免叠加）
 /* 单板块模式（会话页顶部「功能地图」tab）：隐藏内部导航，只显示指定 section */
 if (env.onlyTab){
   const navEl = qs('nav.tabs'); if (navEl) navEl.style.display = 'none';
@@ -494,14 +503,22 @@ function renderProject(){
 }
 
 /* ---------- 功能地图 Tab ---------- */
+function graphBoxHtml(){
+  if (!ACT().length) return '';
+  return '<div class="graphbox"><div class="ghead"><b>功能关系图</b><span>滚轮缩放 · 拖背景平移 · 拖节点调整位置 · 点节点直接和 agent 交互 · 点 ▸n 徽标展开子项</span>'
+    + '<span class="gtools" id="gTools"><button data-gz="out" title="缩小">－</button><button data-gz="in" title="放大">＋</button><button data-gz="fit" title="适应屏幕">⤢ 适应</button><button data-gz="reset" title="把手动摆过的节点复位回分层布局">↺ 重置</button></span></div>'
+    + '<div class="legend"><span><i style="background:var(--gray)"></i>设想</span><span><i style="background:var(--accent)"></i>进行中</span><span><i style="background:var(--warn)"></i>可用</span><span><i style="background:var(--ok)"></i>已验证</span></div>'
+    + '<svg id="graph"></svg><div class="nodepop" id="nodePop"></div></div>';
+}
 function renderFeatures(){
-  let h = '';
-  if (ACT().length){
-    h += '<div class="graphbox"><div class="ghead"><b>功能关系图</b><span>滚轮缩放 · 拖背景平移 · 拖节点调整位置 · 点节点看速览 · 点 ▸n 徽标展开子项</span>'
-      + '<span class="gtools" id="gTools"><button data-gz="out" title="缩小">－</button><button data-gz="in" title="放大">＋</button><button data-gz="fit" title="适应屏幕">⤢ 适应</button></span></div>'
-      + '<div class="legend"><span><i style="background:var(--gray)"></i>设想</span><span><i style="background:var(--accent)"></i>进行中</span><span><i style="background:var(--warn)"></i>可用</span><span><i style="background:var(--ok)"></i>已验证</span></div>'
-      + '<svg id="graph" viewBox="0 0 960 340"></svg><div class="nodepop" id="nodePop"></div></div>';
+  /* 整页模式（会话页「功能地图」tab）：只渲染关系图并铺满可用高度；
+     标题栏/徽章/筛选/进度/功能卡网格/页脚都不渲染，宿主自己的标签栏与输入框不动。 */
+  if (IMMERSIVE){
+    qs('#features').innerHTML = graphBoxHtml() || '<div class="empty" style="padding:26px 18px">还没有可显示的功能</div>';
+    renderGraph();
+    return;
   }
+  let h = graphBoxHtml();
   h += '<div class="filters" id="featFilters"></div>';
   const v = DATA.counts['已验证'] || 0, t = DATA.counts.total_active || 0, pct = t ? Math.round(v / t * 100) : 0;
   h += '<div class="progress"><i style="width:' + pct + '%"></i></div><div class="plabel">进度只统计你亲手验证过的功能（' + v + '/' + t + '）——点开功能卡可查看详情、一键验证</div>';
@@ -544,25 +561,40 @@ function renderCards(f){
   });
 }
 
-/* ---------- 关系图（自适应节点 + 缩放平移 + 子项展开） ---------- */
+/* ---------- 关系图（自适应节点 + 缩放平移 + 子项展开 + 拖动跟手） ----------
+   坐标模型：世界坐标 = 节点数据坐标（与 Python 渲染器同口径）；gWorld 变换 = translate(tx,ty)·scale(k)。
+   viewBox 固定为元素 CSS 像素尺寸（1 单位 = 1 CSS 像素），指针换算一律走 getScreenCTM().inverse()，
+   因此不受 preserveAspectRatio、缩放、平移、容器尺寸变化影响。
+   （旧版按 sc = vb.w/rect.width 估算，SVG 用的是等比缩放 + 居中，增益与偏移都是错的，
+     表现为"拖节点乱窜"；且 pointerdown 没记抓取偏移，一按下去节点就瞬移到光标。） */
 function renderGraph(){
   const svg = qs('#graph'); if (!svg) return;
   const pop = qs('#nodePop');
+  const box = qs('.graphbox');
   const NS = 'http://www.w3.org/2000/svg';
   svg.innerHTML = '';
   const gWorld = document.createElementNS(NS, 'g'); svg.appendChild(gWorld);
   const feats = ACT();
   const byName = {}; feats.forEach(f => byName[f.name] = f);
+  /* 手动摆过的位置优先（跨重渲染保留），其余用分层布局算出来的位置 */
+  feats.forEach(f => { const m = gview.pos.get(f.name); if (m){ f.x = m.x; f.y = m.y; } });
   const edges = [];
-  /* 视野范围按实际布局算（不再是写死的 960×340） */
-  let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
-  feats.forEach(f => {
-    minX = Math.min(minX, f.x - f.w / 2); maxX = Math.max(maxX, f.x + f.w / 2);
-    minY = Math.min(minY, f.y - f.h / 2); maxY = Math.max(maxY, f.y + f.h / 2);
-  });
-  if (!feats.length){ minX = 0; maxX = 960; minY = 0; maxY = 340; }
-  const vb = { x: minX - 40, y: minY - 40, w: (maxX - minX) + 80, h: (maxY - minY) + 140 };  // 底部多留给子项展开
-  svg.setAttribute('viewBox', vb.x + ' ' + vb.y + ' ' + vb.w + ' ' + vb.h);
+  /* 内容外框：按实际布局（含手动位置）算，视野范围不再是写死的 960×340 */
+  function contentBox(){
+    let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
+    feats.forEach(f => {
+      minX = Math.min(minX, f.x - f.w / 2); maxX = Math.max(maxX, f.x + f.w / 2);
+      minY = Math.min(minY, f.y - f.h / 2); maxY = Math.max(maxY, f.y + f.h / 2);
+    });
+    if (!feats.length){ minX = 0; maxX = 960; minY = 0; maxY = 340; }
+    return { x: minX, y: minY, w: Math.max(1, maxX - minX), h: Math.max(1, maxY - minY) };
+  }
+  function syncBox(){
+    const rect = svg.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    svg.setAttribute('viewBox', '0 0 ' + rect.width + ' ' + rect.height);
+    return rect;
+  }
   function edgeD(a, b){
     const x1 = a.x + a.w / 2, y1 = a.y, x2 = b.x - b.w / 2, y2 = b.y, mx = (x1 + x2) / 2;
     return 'M' + x1 + ',' + y1 + ' C' + mx + ',' + y1 + ' ' + mx + ',' + y2 + ' ' + x2 + ',' + y2;
@@ -574,31 +606,45 @@ function renderGraph(){
     edges.push({ path: p, from: a, to: f });
   }));
   function redraw(f){ edges.forEach(e => { if (e.from === f || e.to === f) e.path.setAttribute('d', edgeD(e.from, e.to)); }); }
-  let dragNode = null, moved = false;
-  let tx = 0, ty = 0, k = 1;
-  /* 坐标模型：gWorld 变换 translate(tx,ty)·scale(k) 作用于世界坐标，再经 viewBox 映射到 CSS。
-     css→世界：q = css/sc + vb.xy（变换后世界）；原始世界 p = (q − t)/k。 */
-  const scOf = rect => vb.w / (rect.width || 1);
-  function applyT(){ gWorld.setAttribute('transform', 'translate(' + tx + ',' + ty + ') scale(' + k + ')'); }
+  let dragNode = null;
+  function applyT(){ gWorld.setAttribute('transform', 'translate(' + gview.tx + ',' + gview.ty + ') scale(' + gview.k + ')'); }
   function fit(){
-    const rect = svg.getBoundingClientRect();
-    if (!rect.width || !rect.height) return;
-    const sc = scOf(rect);
-    k = Math.min(1.6, Math.max(.25, 0.94 / sc));
-    tx = rect.width / (2 * sc) + vb.x - k * (vb.x + vb.w / 2);
-    ty = rect.height / (2 * sc) + vb.y - k * (vb.y + vb.h / 2);
+    const rect = syncBox();
+    if (!rect) return;
+    const b = contentBox();
+    const bw = b.w + 80, bh = b.h + 160;   // 底部多留给子项展开
+    gview.k = Math.min(1.6, Math.max(.25, 0.94 * Math.min(rect.width / bw, rect.height / bh)));
+    gview.tx = rect.width / 2 - gview.k * (b.x + b.w / 2);
+    gview.ty = rect.height / 2 - gview.k * (b.y + b.h / 2);
+    gview.adjusted = false;
     applyT();
   }
+  /* 指针 → 视口坐标（viewBox 单位）/ 世界坐标：CTM 反变换，缩放、平移、长宽比全都精确 */
+  function toView(e){
+    const p = svg.createSVGPoint(); p.x = e.clientX; p.y = e.clientY;
+    const m = svg.getScreenCTM();
+    if (!m){ const r = svg.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+    const q = p.matrixTransform(m.inverse()); return { x: q.x, y: q.y };
+  }
+  function toWorld(e){
+    const p = svg.createSVGPoint(); p.x = e.clientX; p.y = e.clientY;
+    const m = gWorld.getScreenCTM();
+    if (!m){ const v = toView(e); return { x: (v.x - gview.tx) / gview.k, y: (v.y - gview.ty) / gview.k }; }
+    const q = p.matrixTransform(m.inverse()); return { x: q.x, y: q.y };
+  }
   function showPop(f){
-    const rect = svg.getBoundingClientRect();
-    const sc = scOf(rect);
-    let left = (k * f.x + tx - vb.x) * sc + 14, top = (k * f.y + ty - vb.y) * sc - 20;
-    left = Math.max(8, Math.min(left, rect.width - 245));
-    top = Math.max(8, Math.min(top, rect.height - 110));
-    pop.innerHTML = '<h4>' + esc(f.name) + ' <span class="badge b-x' + SMAP[f.status] + '">' + esc(f.status) + '</span></h4><p>' + esc(f.desc) + '</p><span class="go">点击查看详情 →</span>';
+    const host = box || svg.parentNode;
+    const rect = host.getBoundingClientRect();
+    const p = svg.createSVGPoint(); p.x = f.x; p.y = f.y;
+    const m = gWorld.getScreenCTM();
+    const s = m ? p.matrixTransform(m) : p;   // 世界坐标 → 屏幕坐标（含缩放平移）
+    let left = (s.x - rect.left) + 14, top = (s.y - rect.top) - 20;
+    left = Math.max(8, Math.min(left, Math.max(8, rect.width - 245)));
+    top = Math.max(8, Math.min(top, Math.max(8, rect.height - 110)));
+    pop.innerHTML = '<h4>' + esc(f.name) + ' <span class="badge b-x' + SMAP[f.status] + '">' + esc(f.status) + '</span></h4><p>' + esc(f.desc) + '</p><span class="go">点一下打开节点面板 →</span>';
     pop.style.left = left + 'px'; pop.style.top = top + 'px';
     pop.classList.add('on');
-    pop.onclick = ev => { ev.stopPropagation(); pop.classList.remove('on'); openFeatDetail(f.name); };
+    pop.onclick = ev => { ev.stopPropagation(); pop.classList.remove('on'); openNodePanel(f.name); };
   }
   /* 子项（思维导图式树展开）：默认折叠，点节点上的徽标展开/收起 */
   const childGs = [];   // 当前展开的子项节点与连线（重画时整体清掉重摆）
@@ -633,6 +679,7 @@ function renderGraph(){
   feats.forEach(f => {
     const g = document.createElementNS(NS, 'g'); g.setAttribute('class', 'node');
     g.setAttribute('tabindex', '0'); g.setAttribute('role', 'button');
+    g.setAttribute('data-fname', f.name);   // 键盘激活（回车/空格）靠它找到功能名
     const r = document.createElementNS(NS, 'rect');
     r.setAttribute('x', -f.w / 2); r.setAttribute('y', -f.h / 2); r.setAttribute('width', f.w); r.setAttribute('height', f.h); r.setAttribute('rx', 12);
     r.style.fill = SSOFT[f.status]; r.style.stroke = SCOLOR[f.status];
@@ -672,56 +719,94 @@ function renderGraph(){
       bg.addEventListener('pointerdown', ev => ev.stopPropagation());
       bg.addEventListener('pointerup', toggle);
     }
-    g.addEventListener('pointerdown', e => { e.stopPropagation(); dragNode = { f, g, sx: e.clientX, sy: e.clientY }; moved = false; try{ g.setPointerCapture(e.pointerId); }catch(err){} });
-    g.addEventListener('pointerup', () => { if (dragNode && dragNode.f === f && !moved) showPop(f); });
+    /* 拖节点：按下时记住「指针 ↔ 节点」偏移，之后严格跟手；没移动就是点击 → 打开节点面板 */
+    g.addEventListener('pointerdown', e => {
+      e.stopPropagation();
+      if (e.button !== undefined && e.button !== 0) return;   // 只响应主键 / 触摸 / 笔
+      const p = toWorld(e);
+      dragNode = { f, g, dx: p.x - f.x, dy: p.y - f.y, sx: e.clientX, sy: e.clientY, moved: false };
+      gview.drag = true;
+      try{ svg.setPointerCapture(e.pointerId); }catch(err){}
+    });
+    g.addEventListener('mouseenter', () => { if (!dragNode) showPop(f); });
+    g.addEventListener('mouseleave', () => { if (!dragNode) pop.classList.remove('on'); });
     drawChildren(f, g);
   });
   svg.addEventListener('wheel', e => {
     e.preventDefault();
-    const rect = svg.getBoundingClientRect();
-    const sc = scOf(rect);
-    const qx = (e.clientX - rect.left) / sc + vb.x, qy = (e.clientY - rect.top) / sc + vb.y;
-    const nk = Math.min(3, Math.max(.25, k * (e.deltaY < 0 ? 1.12 : 0.89)));
-    tx = qx - nk * (qx - tx) / k; ty = qy - nk * (qy - ty) / k; k = nk; applyT();
+    const q = toView(e);
+    const nk = Math.min(3, Math.max(.25, gview.k * (e.deltaY < 0 ? 1.12 : 0.89)));
+    gview.tx = q.x - nk * (q.x - gview.tx) / gview.k;
+    gview.ty = q.y - nk * (q.y - gview.ty) / gview.k;
+    gview.k = nk; gview.adjusted = true; applyT();
   }, { passive: false });
   let panning = null;
   svg.addEventListener('pointerdown', e => {
-    const rect = svg.getBoundingClientRect();
-    const sc = scOf(rect);
-    panning = { qx: (e.clientX - rect.left) / sc + vb.x, qy: (e.clientY - rect.top) / sc + vb.y, tx, ty };
-    svg.setPointerCapture(e.pointerId);
+    const q = toView(e);
+    panning = { qx: q.x, qy: q.y, tx: gview.tx, ty: gview.ty };
+    try{ svg.setPointerCapture(e.pointerId); }catch(err){}
   });
   svg.addEventListener('pointermove', e => {
-    const rect = svg.getBoundingClientRect();
-    const sc = scOf(rect);
-    const qx = (e.clientX - rect.left) / sc + vb.x, qy = (e.clientY - rect.top) / sc + vb.y;
     if (dragNode){
-      if (!moved && Math.hypot(e.clientX - dragNode.sx, e.clientY - dragNode.sy) < 4) return;
-      moved = true;
-      const nx = (qx - tx) / k, ny = (qy - ty) / k;
-      dragNode.f.x = nx; dragNode.f.y = ny;
-      dragNode.g.setAttribute('transform', 'translate(' + nx + ',' + ny + ')');
-      redraw(dragNode.f); drawChildren(dragNode.f, dragNode.g); return;
+      const m = dragNode;
+      if (!m.moved && Math.hypot(e.clientX - m.sx, e.clientY - m.sy) < 4) return;
+      m.moved = true;
+      const p = toWorld(e);
+      const nx = p.x - m.dx, ny = p.y - m.dy;
+      m.f.x = nx; m.f.y = ny;
+      m.g.setAttribute('transform', 'translate(' + nx + ',' + ny + ')');
+      gview.pos.set(m.f.name, { x: nx, y: ny });   // 手动位置记下来，刷新后不丢
+      redraw(m.f); drawChildren(m.f, m.g);
+      return;
     }
     if (!panning) return;
-    tx = panning.tx + (qx - panning.qx); ty = panning.ty + (qy - panning.qy); applyT();
+    const q = toView(e);
+    gview.tx = panning.tx + (q.x - panning.qx);
+    gview.ty = panning.ty + (q.y - panning.qy);
+    gview.adjusted = true; applyT();
   });
-  svg.addEventListener('pointerup', () => { panning = null; dragNode = null; });
-  /* 缩放控件：＋ / － / 适应屏幕（以视野中心为锚点） */
+  function endGesture(e, cancelled){
+    const m = dragNode;
+    dragNode = null; panning = null;
+    if (m){
+      gview.drag = false;
+      if (m.moved) gview.adjusted = true;
+      else if (!cancelled){ pop.classList.remove('on'); openNodePanel(m.f.name); }
+      if (gview.deferred){ gview.deferred = false; doRefreshQuiet(); }   // 拖动期间押后的自动刷新
+    }
+    if (e && e.pointerId !== undefined){ try{ svg.releasePointerCapture(e.pointerId); }catch(err){} }
+  }
+  svg.addEventListener('pointerup', e => endGesture(e, false));
+  svg.addEventListener('pointercancel', e => endGesture(e, true));
+  svg.addEventListener('lostpointercapture', () => { if (dragNode || panning) endGesture(null, true); });
+  /* 缩放控件：＋ / － / 适应屏幕（以视野中心为锚点）/ 重置布局（把手动位置清掉） */
   const tools = qs('#gTools');
   if (tools){
     const zoomAt = f => {
       const rect = svg.getBoundingClientRect();
-      const sc = scOf(rect);
-      const qx = rect.width / (2 * sc) + vb.x, qy = rect.height / (2 * sc) + vb.y;
-      const nk = Math.min(3, Math.max(.25, k * f));
-      tx = qx - nk * (qx - tx) / k; ty = qy - nk * (qy - ty) / k; k = nk; applyT();
+      const cx = rect.width / 2, cy = rect.height / 2;
+      const nk = Math.min(3, Math.max(.25, gview.k * f));
+      gview.tx = cx - nk * (cx - gview.tx) / gview.k;
+      gview.ty = cy - nk * (cy - gview.ty) / gview.k;
+      gview.k = nk; gview.adjusted = true; applyT();
     };
-    tools.querySelector('[data-gz="in"]').onclick = () => zoomAt(1.25);
-    tools.querySelector('[data-gz="out"]').onclick = () => zoomAt(1 / 1.25);
-    tools.querySelector('[data-gz="fit"]').onclick = fit;
+    const bind = (sel, fn) => { const b = tools.querySelector(sel); if (b) b.onclick = fn; };
+    bind('[data-gz="in"]', () => zoomAt(1.25));
+    bind('[data-gz="out"]', () => zoomAt(1 / 1.25));
+    bind('[data-gz="fit"]', fit);
+    bind('[data-gz="reset"]', () => { gview.pos.clear(); gview.adjusted = false; renderGraph(); });
   }
-  fit();
+  /* 容器尺寸变化（切进整页、拉伸侧栏、缩放窗口）→ 同步 viewBox 并重新适配 */
+  if (typeof ResizeObserver !== 'undefined'){
+    if (graphRO) graphRO.disconnect();
+    graphRO = new ResizeObserver(() => {
+      if (!svg.isConnected){ if (graphRO) graphRO.disconnect(); return; }
+      syncBox();
+      if (gview.adjusted) applyT(); else fit();
+    });
+    graphRO.observe(svg);
+  }
+  if (gview.adjusted){ syncBox(); applyT(); } else fit();
 }
 
 /* ---------- 现在 Tab（时间线 + 拍板撰写器 + 待办） ---------- */
@@ -976,10 +1061,9 @@ function openAudit(){
   openSheet('🩺 数据健康 · 完整审计', s);
 }
 
-function openFeatDetail(name){
-  const f = DATA.features.find(x => x.name === name); if (!f) return;
+/* 功能详情正文（功能卡、引用链接、节点面板共用） */
+function featBodyHtml(f){
   const sendable = !!env.command;
-  const title = esc(f.name) + ' <span class="badge b-x' + SMAP[f.status] + '">' + esc(f.status) + '</span>';
   let h = '<p class="lede">' + esc(f.desc) + '</p>';
   if (f.verify) h += '<div class="kv"><b>验证</b>' + esc(f.verify) + '</div>';
   else if (f.status === '可用') h += '<div class="kv"><b>验证</b>🤖 已标为可用，等你试用后盖章</div>';
@@ -1021,18 +1105,61 @@ function openFeatDetail(name){
   else if (f.status === '已验证') h += '<p class="dhint">「撤销验证」会退回到「可用」等你重新验收（功能没坏，只是撤回盖章）；按钮' + (sendable ? '直接发送给我执行。' : '均生成指令发给我执行。') + '</p>';
   else h += '<p class="dhint">状态变更属于工作请求：按钮' + (sendable ? '直接发送给我执行。' : '生成指令，粘贴到聊天框我来执行。') + '</p>';
   h += '<p class="dhint">' + (env.capabilityNote || '') + '</p>';
-  openSheet(title, h);
+  return h;
+}
+/* 节点面板专用：一句话直发 + 一键追问。点节点就能和 agent 交互，不用再复制粘贴。 */
+function askBoxHtml(f){
+  const askable = !!(env.ask || env.command);
+  const q = t => '<button class="actbtn" data-askq="' + esc(t) + '">💬 ' + esc(t.length > 14 ? t.slice(0, 13) + '…' : t) + '</button>';
+  return '<div class="askbox"><div class="kv"><b>直接和 agent 说一句</b><span class="muted">（消息会自动带上这个功能的名字和状态）</span></div>'
+    + '<textarea class="note" data-asktext placeholder="例：这个功能现在到什么程度了？还有哪些坑？／帮我把它做得更稳／边界在哪？"></textarea>'
+    + '<div class="actrow"><button class="actbtn primary" data-ask>📤 直接发给 agent</button>'
+    + q('讲讲「' + f.name + '」现在到哪一步了，还剩哪些没做')
+    + q('「' + f.name + '」我该怎么验收？给我最简单的试用步骤')
+    + q('围绕「' + f.name + '」给我下一步的开发建议')
+    + '</div>'
+    + (askable
+      ? '<p class="dhint">Ctrl/⌘+Enter 也能发送。会话不在线时会先记下，下次更新时生效。</p>'
+      : '<p class="dhint">当前环境不能直发（离线网页版）：点按钮会把这句话复制好，粘贴到聊天框发送。</p>')
+    + '</div>';
+}
+/* 把一段话发给当前会话的 agent：在线 = steer 直达；不在线 = 记进 .inbox.jsonl */
+function sendToAgent(name, text, btn){
+  const f = DATA.features.find(x => x.name === name);
+  const msg = '【功能地图】「' + name + '」' + (f ? '（状态：' + f.status + '）' : '') + '——' + text;
+  const send = env.ask || env.command;
+  if (!send){ copyText(msg); toast('已复制（当前环境不能直发）——粘贴到聊天框发送'); return; }
+  if (btn) btn.disabled = true;
+  Promise.resolve(send(msg, '功能地图：' + name))
+    .then(r => toast(r === 'queued' ? '会话不在线：已记下，下次更新时生效' : '✅ 已发给 agent'))
+    .catch(e => { console.warn(e); copyText(msg); toast('发送失败，已复制——粘贴到聊天框发送'); })
+    .finally(() => { if (btn) btn.disabled = false; });
+}
+function bindFeatSheet(name, reopen, withAsk){
   const sh = qs('#sheet');
-  sh.querySelectorAll('[data-dep]').forEach(b => b.onclick = () => openFeatDetail(b.dataset.dep));
+  sh.querySelectorAll('[data-dep]').forEach(b => b.onclick = () => openNodePanel(b.dataset.dep));
   sh.querySelectorAll('[data-cmd]').forEach(b => b.onclick = () => {
     const cmd = b.dataset.cmd;
-    if (!sendable){ copyText(cmd); return; }
+    if (!env.command){ copyText(cmd); return; }
     b.disabled = true;
-    Promise.resolve(env.command(cmd))
+    Promise.resolve(env.command(cmd, '功能地图：' + name))
       .then(r => toast(r === 'queued' ? '会话不在线：已记下，下次更新时生效' : '✅ 已发送，我来落实'))
       .catch(e => { console.warn(e); copyText(cmd); })
       .finally(() => { b.disabled = false; });
   });
+  if (withAsk){
+    const ta = sh.querySelector('[data-asktext]');
+    const ab = sh.querySelector('[data-ask]');
+    if (ab) ab.onclick = () => {
+      const t = ((ta && ta.value) || '').trim();
+      if (!t) return toast('先写一句话，或直接点下面的快捷追问');
+      sendToAgent(name, t, ab);
+    };
+    if (ta) ta.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)){ e.preventDefault(); if (ab) ab.click(); }
+    });
+    sh.querySelectorAll('[data-askq]').forEach(b => b.onclick = () => sendToAgent(name, b.dataset.askq, b));
+  }
   const vb = sh.querySelector('[data-verify]');
   if (vb) vb.onclick = () => {
     const row = sh.querySelector('.actrow');
@@ -1043,9 +1170,20 @@ function openFeatDetail(name){
       + '</span>'
       + '<button class="actbtn primary" data-cfy>' + (canWrite ? '确认：我已验证' : '复制指令：我已验证') + '</button>'
       + '<button class="actbtn" data-cfn>取消</button>';
-    row.querySelector('[data-cfy]').onclick = ev => { ev.currentTarget.disabled = true; ev.currentTarget.textContent = canWrite ? '写入中…' : '复制中…'; doVerify(name); };
-    row.querySelector('[data-cfn]').onclick = () => openFeatDetail(name);
+    row.querySelector('[data-cfy]').onclick = ev => { ev.currentTarget.disabled = true; ev.currentTarget.textContent = canWrite ? '写入中…' : '复制中…'; doVerify(name, reopen); };
+    row.querySelector('[data-cfn]').onclick = () => reopen();
   };
+}
+function openFeatDetail(name){
+  const f = DATA.features.find(x => x.name === name); if (!f) return;
+  openSheet(esc(f.name) + ' <span class="badge b-x' + SMAP[f.status] + '">' + esc(f.status) + '</span>', featBodyHtml(f));
+  bindFeatSheet(name, () => openFeatDetail(name), false);
+}
+/* 点关系图节点 → 节点面板：速览 + 一句话直发 agent + 常用动作 */
+function openNodePanel(name){
+  const f = DATA.features.find(x => x.name === name); if (!f) return;
+  openSheet(esc(f.name) + ' <span class="badge b-x' + SMAP[f.status] + '">' + esc(f.status) + '</span>', askBoxHtml(f) + featBodyHtml(f));
+  bindFeatSheet(name, () => openNodePanel(name), true);
 }
 
 
@@ -1053,6 +1191,7 @@ function openFeatDetail(name){
 function applyData(d, quiet){ if (!d) return false;
   const j = JSON.stringify(d);
   if (quiet && j === lastJson) return false;   // 内容没变就不重排 DOM（面板文件流高频触发）
+  if (quiet && gview.drag){ gview.deferred = true; return false; }   // 拖节点期间不重排，松手后再应用
   DATA = d; lastJson = j; renderAll(); return true; }
 function doRefresh(){
   return Promise.resolve()
@@ -1061,9 +1200,10 @@ function doRefresh(){
     .catch(e => { console.warn(e); toast('读取失败：' + (e && e.message ? e.message : e)); });
 }
 function doRefreshQuiet(){ return Promise.resolve().then(() => env.reload()).then(d => applyData(d, true)).catch(() => {}); }
-async function doVerify(name){
+async function doVerify(name, reopen){
   // 无论成功、发送、复制还是失败，都要把弹层里的按钮恢复到可用状态（否则会一直卡在"中…"）
-  const restore = () => { try { openFeatDetail(name); } catch (e) { /* 弹层已关闭也无所谓 */ } };
+  const back = typeof reopen === 'function' ? reopen : () => openFeatDetail(name);
+  const restore = () => { try { back(); } catch (e) { /* 弹层已关闭也无所谓 */ } };
   try{
     const res = env.verifyWrite ? await env.verifyWrite(name) : 'fallback';
     if (res === 'ok'){ closeSheet(); await doRefreshQuiet(); toast('✅ 已写入「已验证」'); return; }
@@ -1117,6 +1257,12 @@ function toast(msg){
 
 /* ---------- 总渲染 ---------- */
 function renderAll(){
+  /* 整页模式：只渲染关系图（其余板块不生成 DOM，避免白占版面与无谓重排） */
+  if (IMMERSIVE){
+    const sec = qs('#features'); if (sec) sec.classList.add('on');
+    renderFeatures();
+    return;
+  }
   renderStrip(); renderProject(); renderFeatures(); renderNow(); renderFooter();
   gotoTab(currentTab);
 }
@@ -1151,7 +1297,7 @@ rootEl.addEventListener('click', e => {
   const pop = qs('.nodepop.on');
   if (pop && !pop.contains(e.target) && !e.target.closest('.node')) pop.classList.remove('on');
 });
-// 键盘可达：功能卡 / 引用链接 / 图节点，回车或空格等价于点击
+// 键盘可达：功能卡 / 引用链接 / 图节点与子项徽标，回车或空格等价于点击
 rootEl.addEventListener('keydown', e => {
   if (e.key !== 'Enter' && e.key !== ' ') return;
   const t = e.target;
@@ -1159,7 +1305,14 @@ rootEl.addEventListener('keydown', e => {
   if (t.matches('.feat') || t.matches('[data-jf]')){
     e.preventDefault(); t.click(); return;
   }
-  if (t.matches('.node')){ e.preventDefault(); t.dispatchEvent(new PointerEvent('pointerup', { bubbles: true })); }
+  if (!t.closest) return;
+  const badge = t.closest('.subbadge');
+  if (badge){ e.preventDefault(); badge.dispatchEvent(new PointerEvent('pointerup', { bubbles: true })); return; }
+  const node = t.closest('g.node');
+  if (node){
+    e.preventDefault();
+    if (node.dataset && node.dataset.fname) openNodePanel(node.dataset.fname);   // 与鼠标单击一致
+  }
 });
 // Esc 关闭弹层；全局只保留一个处理器（面板每次重挂都会 init，不能叠加）
 if (docKeyHandler) document.removeEventListener('keydown', docKeyHandler);

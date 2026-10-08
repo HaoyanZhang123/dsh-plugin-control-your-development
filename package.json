@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-control-your-development",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "开发仪表盘 —— 把 control-your-development 的产品仪表盘嵌进 DSH 右侧边栏与会话页",
   "type": "module",
   "main": "lib/index.js",
