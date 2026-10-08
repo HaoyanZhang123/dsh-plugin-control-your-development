@@ -3,7 +3,7 @@
 > Turn the development process into a product dashboard you can actually read and control.
 > Three human-readable Markdown files are the single source of truth; one command renders a single-file offline web page. Optionally, pin the dashboard inside the DSH window's right sidebar.
 
-Versions: skill v1.2.0 · panel plugin v0.3.1 | License: [MIT](LICENSE) | 语言：[中文](README.md)
+Versions: skill v1.2.0 · panel plugin v0.4.2 | License: [MIT](LICENSE) | 语言：[中文](README.md)
 
 ---
 
@@ -29,6 +29,8 @@ Prerequisite: DSH desktop is installed.
 
    This installs from the npm registry (a local mirror is used automatically in China — no GitHub access needed). On activation the plugin installs the skill it ships into the **global skills directory** (`<dshHome>/skills/`) — available in **every workspace**, no manual copying.
 
+   > **Verified on real machines: macOS and Windows.** If npm is unreachable, use the offline `.tgz` attached to the Release (Add plugin → absolute path of the file).
+
 2. Open your project in DSH and say to the AI: **"control my development"** (or "set up a development dashboard for me").
 
 3. The AI creates `dev-dashboard/` and renders `index.html`; the right sidebar panel shows the dashboard of **the workspace you have open** — switch projects and it follows (a workspace without a dashboard gets a copy-instruction button).
@@ -39,12 +41,17 @@ For full installation options (global install, panel plugin, uninstall & upgrade
 
 ## Take a look
 
-> 📷 Screenshot slot: the dashboard's Project home — one-line positioning, current direction, control strip.
-> 📷 Screenshot slot: the Feature Map — five-state status cards (Idea / In Progress / Usable / Verified / Deprecated) + dependency graph.
-> 📷 Screenshot slot: the Now tab — timeline and decision cards awaiting your call.
-> 📷 Screenshot slot: the embedded panel in the DSH right sidebar.
->
-> (Screenshots to be added before release; see [docs/images/README.md](docs/images/README.md). Adding them is a hard gate in [RELEASE-CHECKLIST.md](RELEASE-CHECKLIST.md).)
+**Dashboard · Project home** — one-line positioning, current direction, the control strip.
+<img width="2968" height="1736" alt="Dashboard · Project home — one-line posi" src="https://github.com/user-attachments/assets/ad57e7da-bc41-4ed7-b03d-fd44a9b5075e" />
+
+**Feature Map** — five-state cards (Idea / In Progress / Usable / Verified / Deprecated) + dependency graph.
+<img width="2648" height="1078" alt="Feature Map — five-state cards (Idea / I" src="https://github.com/user-attachments/assets/c5647de2-f4c6-47b9-9599-8e83f1aa6b57" />
+
+**Now** — the timeline and the decision cards waiting for your call.
+<img width="2620" height="1256" alt="Now — the timeline and the decision card" src="https://github.com/user-attachments/assets/dbe24c34-2da5-470f-90b6-1a94ee92339e" />
+
+**Embedded panel** in the DSH right sidebar (next to Files / Terminal / Browser, title carries the project name).
+<img width="1042" height="1088" alt="Embedded panel in the DSH right sidebar " src="https://github.com/user-attachments/assets/83429749-b03f-4132-a4c5-612ba7d36453" />
 
 ## Highlights
 
