@@ -13,7 +13,7 @@
 DSH → Plugins → Add plugin → 粘贴：
 
 ```
-https://github.com/HaoyanZhang123/dsh-control-your-development
+https://github.com/HaoyanZhang123/dsh-plugin-control-your-development
 ```
 
 也可以填**仓库根目录**的绝对路径（离线/开发用）。注意：仓库根就是插件包（`package.json` 在根），不要往子目录里指。

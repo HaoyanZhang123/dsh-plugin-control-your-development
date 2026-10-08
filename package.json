@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-control-your-development",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "开发仪表盘 —— 把 control-your-development 的产品仪表盘嵌进 DSH 右侧边栏（附带配套 skill）",
   "type": "module",
   "main": "lib/index.js",
@@ -37,11 +37,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/HaoyanZhang123/dsh-control-your-development.git"
+    "url": "git+https://github.com/HaoyanZhang123/dsh-plugin-control-your-development.git"
   },
-  "homepage": "https://github.com/HaoyanZhang123/dsh-control-your-development#readme",
+  "homepage": "https://github.com/HaoyanZhang123/dsh-plugin-control-your-development#readme",
   "bugs": {
-    "url": "https://github.com/HaoyanZhang123/dsh-control-your-development/issues"
+    "url": "https://github.com/HaoyanZhang123/dsh-plugin-control-your-development/issues"
   },
   "keywords": [
     "dsh",

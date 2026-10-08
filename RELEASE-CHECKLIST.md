@@ -6,7 +6,7 @@
 
 ## 0. 发布前阻塞待办（未清不许发）
 
-> **已发布（2026-10-07）**：https://github.com/HaoyanZhang123/dsh-control-your-development/releases/tag/v1.3.0
+> **已发布（2026-10-07）**：https://github.com/HaoyanZhang123/dsh-plugin-control-your-development/releases/tag/v1.3.0
 > 发布前已脱敏：去除本机路径示例、补全账号占位、提交身份使用 `HaoyanZhang123@users.noreply.github.com`。
 
 - [ ] README 的 4 张截图仍缺（`docs/images/` 只有规范、没有 png）：项目首页 / 功能地图 / 现在 / 面板实拍
@@ -33,9 +33,9 @@ python tools/contract_check.py .dsh/skills/control-your-development
 
 - [ ] `.dsh/skills/control-your-development/manifest.yaml` 的 `version`
 - [ ] `.dsh/skills/control-your-development/README.md` 头部的版本行
-- [ ] `plugins/dev-dashboard-panel/package.json` 的 `version`
-- [ ] `release/dsh-control-your-development/README.md` 头部的版本行
-- [ ] `release/dsh-control-your-development/README.en.md` 头部的版本行
+- [ ] `plugins/dsh-plugin-control-your-development/package.json` 的 `version`
+- [ ] `release/dsh-plugin-control-your-development/README.md` 头部的版本行
+- [ ] `release/dsh-plugin-control-your-development/README.en.md` 头部的版本行
 
 skill 与面板版本可以不同（本轮 skill 1.2.0 / panel 0.3.0），但每处自述必须等于实际。面板版本在 `package.json` 里、不属于 skill，改版时别漏。
 
@@ -51,17 +51,17 @@ skill 与面板版本可以不同（本轮 skill 1.2.0 / panel 0.3.0），但每
 - [ ] 模板四件（`dashboard.core.js` / `dashboard.core.css` / `dashboard.shell.html` / `dashboard.web.js`）本轮若有改动，必须重跑：
 
   ```
-  python plugins/dev-dashboard-panel/tools/build_panel.py
+  python plugins/dsh-plugin-control-your-development/tools/build_panel.py
   ```
 
 - [ ] `lib/client.js` 时间线新于 `src/client.src.js` 与全部模板四件
-- [ ] 用发布仓的副本复核：`python release/dsh-control-your-development/（仓库根）/tools/build_panel.py` 产物与工作区 `lib/client.js` 逐字节一致
+- [ ] 用发布仓的副本复核：`python release/dsh-plugin-control-your-development/（仓库根）/tools/build_panel.py` 产物与工作区 `lib/client.js` 逐字节一致
 - [ ] 面板在本机 profile 实际加载过一轮：右侧标签出现、数据正确、changes() 自动刷新、动作按钮复制闭环
 
 ## 5. 发布仓内容同步
 
-- [ ] `.dsh/skills/control-your-development/` → `release/dsh-control-your-development/skill/control-your-development/`（整目录覆盖式同步）
-- [ ] `plugins/dev-dashboard-panel/` → `release/dsh-control-your-development/（仓库根）/`（含 `src/`、`tools/`、`lib/`）
+- [ ] `.dsh/skills/control-your-development/` → `release/dsh-plugin-control-your-development/skill/control-your-development/`（整目录覆盖式同步）
+- [ ] `plugins/dsh-plugin-control-your-development/` → `release/dsh-plugin-control-your-development/（仓库根）/`（含 `src/`、`tools/`、`lib/`）
 - [ ] 例外：发布仓的 `tools/build_panel.py` 是仓库布局适配版（查找 `skill/` 优先、兼容 `.dsh/skills/`），同步时保留该适配，不要用原版覆盖
 - [ ] 面板目录带 MIT LICENSE：`（仓库根）/LICENSE` 已放副本；但 `package.json` 的 `files` 仍是 `lib` / `cordis.patch.yml` / `README.md`——**待办**：加 `LICENSE`（`package.json` 属面板范围，本轮未改；对照已装可用的 `dsh-plugin-whale-pet` 有 LICENSE）
 - [ ] 机器产物不进仓：`dev-dashboard/` 的 `index.html` / `.facts.json` / `.state.json`、`node_modules/`、`*.cyd-backup` 一律不出现（`.gitignore` 已挡，仍肉眼确认 `git status`）
@@ -84,7 +84,7 @@ skill 与面板版本可以不同（本轮 skill 1.2.0 / panel 0.3.0），但每
 
 ## 7. 仓库元数据（首次发布）
 
-- [ ] 仓库名 `dsh-control-your-development`，Public
+- [ ] 仓库名 `dsh-plugin-control-your-development`，Public
 - [ ] 描述：把开发过程翻译成你看得懂、能掌控的产品仪表盘（DSH skill + 面板插件）
 - [ ] topics：`dsh` `dsh-skill` `dsh-plugin` `dashboard` `ai-productivity`
 - [ ] 默认分支 `main`；首次推送 `git status` 干净、`.gitignore` 生效

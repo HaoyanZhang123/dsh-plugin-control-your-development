@@ -3,7 +3,7 @@
 """build_panel.py — 把 skill 的共享渲染核注入面板源，生成 lib/client.js。
 
 单一事实源（发布仓布局）：skill/control-your-development/templates/dashboard.core.js
-用法：python tools/build_panel.py    （在 plugins/dev-dashboard-panel 内或任意 cwd 均可）
+用法：python tools/build_panel.py    （在 plugins/dsh-plugin-control-your-development 内或任意 cwd 均可）
 """
 import sys
 from pathlib import Path

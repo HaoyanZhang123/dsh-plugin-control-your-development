@@ -23,19 +23,19 @@ skill 就是一个目录：`skill/control-your-development/`。拷到对的位�
 Windows（PowerShell）：
 
 ```powershell
-git clone https://github.com/HaoyanZhang123/dsh-control-your-development.git
+git clone https://github.com/HaoyanZhang123/dsh-plugin-control-your-development.git
 # 在你的项目根目录执行：
 New-Item -ItemType Directory -Force .dsh\skills
-Copy-Item -Recurse dsh-control-your-development\skill\control-your-development .dsh\skills\
+Copy-Item -Recurse dsh-plugin-control-your-development\skill\control-your-development .dsh\skills\
 ```
 
 macOS（Terminal）：
 
 ```bash
-git clone https://github.com/HaoyanZhang123/dsh-control-your-development.git
+git clone https://github.com/HaoyanZhang123/dsh-plugin-control-your-development.git
 # 在你的项目根目录执行：
 mkdir -p .dsh/skills
-cp -R dsh-control-your-development/skill/control-your-development .dsh/skills/
+cp -R dsh-plugin-control-your-development/skill/control-your-development .dsh/skills/
 ```
 
 装好后，用 DSH 打开该项目，对 AI 说 **"control my development"** 即可开始。
@@ -57,14 +57,14 @@ Windows（PowerShell；下面按**默认 dshHome** 写。你的 dshHome 若是�
 ```powershell
 # 按你的实际 dshHome 调整：默认是 $env:USERPROFILE\.dsh
 New-Item -ItemType Directory -Force "$env:USERPROFILE\.dsh\skills"
-Copy-Item -Recurse dsh-control-your-development\skill\control-your-development "$env:USERPROFILE\.dsh\skills\"
+Copy-Item -Recurse dsh-plugin-control-your-development\skill\control-your-development "$env:USERPROFILE\.dsh\skills\"
 ```
 
 macOS：
 
 ```bash
 mkdir -p ~/.dsh/skills
-cp -R dsh-control-your-development/skill/control-your-development ~/.dsh/skills/
+cp -R dsh-plugin-control-your-development/skill/control-your-development ~/.dsh/skills/
 ```
 
 **同名覆盖规则**：如果项目级和全局都装了，项目级优先。这让你可以在某个项目里试用新版，其他项目继续用稳定版。
@@ -96,7 +96,7 @@ dsh-plugin-control-your-development
 在 Add plugin 里粘贴：
 
 ```
-https://github.com/HaoyanZhang123/dsh-control-your-development
+https://github.com/HaoyanZhang123/dsh-plugin-control-your-development
 ```
 
 **这一条同时也把 skill 装好了**：插件激活时会把自带的 skill 放进全局技能目录 `<dshHome>/skills/control-your-development/`，于是**任何工作区都能用**，不需要再手动拷目录。
@@ -105,11 +105,11 @@ https://github.com/HaoyanZhang123/dsh-control-your-development
 
 ### 方式 3：本地路径（离线 / 开发用）
 
-1. 克隆本仓库：`git clone https://github.com/HaoyanZhang123/dsh-control-your-development.git`
+1. 克隆本仓库：`git clone https://github.com/HaoyanZhang123/dsh-plugin-control-your-development.git`
 2. DSH → Plugins → Add plugin
 3. 填**仓库根目录**的绝对路径（仓库根就是插件包，不要再往子目录里指）：
-   - Windows：`<你克隆到的目录>\dsh-control-your-development`
-   - macOS：`~/repos/dsh-control-your-development`
+   - Windows：`<你克隆到的目录>\dsh-plugin-control-your-development`
+   - macOS：`~/repos/dsh-plugin-control-your-development`
 
 > 为什么是仓库根：DSH 安装插件时会在"装出来的包根目录"读 `package.json` 的 `dsh` 字段，读不到就只当普通依赖装上、不挂载。本仓库已把插件包放在根目录，所以上面两种填法都成立。
 
@@ -129,7 +129,7 @@ https://github.com/HaoyanZhang123/dsh-control-your-development
   ```powershell
   Remove-Item -Recurse -Force .dsh\skills\control-your-development
   New-Item -ItemType Directory -Force .dsh\skills
-  Copy-Item -Recurse dsh-control-your-development\skill\control-your-development .dsh\skills\
+  Copy-Item -Recurse dsh-plugin-control-your-development\skill\control-your-development .dsh\skills\
   ```
 
   macOS / Linux：
@@ -137,11 +137,11 @@ https://github.com/HaoyanZhang123/dsh-control-your-development
   ```bash
   rm -rf .dsh/skills/control-your-development
   mkdir -p .dsh/skills
-  cp -R dsh-control-your-development/skill/control-your-development .dsh/skills/
+  cp -R dsh-plugin-control-your-development/skill/control-your-development .dsh/skills/
   ```
 
   一条命令的等价写法（`/MIR` 会删除目标里多出来的文件，执行前确认目标就是你那个 skill 目录）：
-  `robocopy dsh-control-your-development\skill\control-your-development .dsh\skills\control-your-development /MIR`
+  `robocopy dsh-plugin-control-your-development\skill\control-your-development .dsh\skills\control-your-development /MIR`
 
   **升级会丢什么**：项目里的 `dev-dashboard/`（三份 Markdown、`index.html` 和你在里面补的数据）不在 skill 目录内，一律不受影响；skill 目录里你自己改过的文件（例如手动调过的模板）会被新版本覆盖丢失——升级前先备份该目录。升级后重新生成一次网页即生效。
 
@@ -161,7 +161,7 @@ https://github.com/HaoyanZhang123/dsh-control-your-development
 1. **macOS 没有 git**：从仓库地址安装需要 pnpm 调用 git；macOS 默认不带 git。用**归档压缩包地址**安装即可，这条路不需要 git（已实测）：
 
    ```
-   https://github.com/HaoyanZhang123/dsh-control-your-development/archive/refs/tags/v1.3.1.tar.gz
+   https://github.com/HaoyanZhang123/dsh-plugin-control-your-development/archive/refs/tags/v1.3.1.tar.gz
    ```
 
    或者先装 git（`xcode-select --install`）再重试。
@@ -198,7 +198,7 @@ Add plugin 里填 `dsh-plugin-control-your-development`。该方式走 npm regis
 
 ## English quick reference
 
-**Plugin + skill (recommended, one step)** — DSH → Plugins → Add plugin → paste `https://github.com/HaoyanZhang123/dsh-control-your-development`; the plugin installs the bundled skill into `<dshHome>/skills/` for every workspace. Details in the sections above (Chinese).
+**Plugin + skill (recommended, one step)** — DSH → Plugins → Add plugin → paste `https://github.com/HaoyanZhang123/dsh-plugin-control-your-development`; the plugin installs the bundled skill into `<dshHome>/skills/` for every workspace. Details in the sections above (Chinese).
 
 **Skill only (no panel)** — copy the folder, nothing to install:
 
@@ -209,7 +209,7 @@ Add plugin 里填 `dsh-plugin-control-your-development`。该方式走 npm regis
 
 ```bash
 # macOS / Linux, per-project:
-mkdir -p .dsh/skills && cp -R dsh-control-your-development/skill/control-your-development .dsh/skills/
+mkdir -p .dsh/skills && cp -R dsh-plugin-control-your-development/skill/control-your-development .dsh/skills/
 ```
 
 When both exist, the project-level copy wins — handy for trying a new version in one project only.

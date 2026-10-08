@@ -1,4 +1,4 @@
-# dsh-control-your-development
+# dsh-plugin-control-your-development
 
 > 把开发过程翻译成你看得懂、能掌控的产品仪表盘。
 > 三份人话 Markdown 是事实源，一键生成单文件离线网页；也可以把仪表盘钉在 DSH 窗口右侧，随时抬头可见。
@@ -24,7 +24,7 @@
 1. **装插件（一步搞定，配套 skill 会一起装好）**：DSH → 左侧 Plugins → Add plugin → 粘贴仓库地址：
 
    ```
-   https://github.com/HaoyanZhang123/dsh-control-your-development
+   https://github.com/HaoyanZhang123/dsh-plugin-control-your-development
    ```
 
    插件激活时会把自己带的 skill 装进**全局技能目录**（`<dshHome>/skills/`）——**所有工作区都能用**，不用你手动拷目录。
@@ -97,7 +97,7 @@ AI 把需要你决定的事整理成选项卡：点选、补充、复制指令�
 ## 仓库里有什么
 
 ```
-dsh-control-your-development/
+dsh-plugin-control-your-development/
 ├─ package.json / cordis.patch.yml   ← 面板插件清单（仓库根就是插件包，所以能一键装）
 ├─ lib/ src/ tools/                  ← 面板：浏览器端 bundle / 源码 / 构建脚本
 ├─ PLUGIN.md                         ← 面板说明与开发须知
@@ -138,5 +138,5 @@ DSH 桌面版。生成网页只用 DSH 自带的 Python，纯标准库、零安�
 
 ## 许可与贡献
 
-[MIT](LICENSE) © 2026 dsh-control-your-development contributors。
+[MIT](LICENSE) © 2026 dsh-plugin-control-your-development contributors。
 问题与建议请走 GitHub Issues；维护者发布流程见 [RELEASE-CHECKLIST.md](RELEASE-CHECKLIST.md)。

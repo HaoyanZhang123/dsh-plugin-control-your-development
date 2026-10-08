@@ -1,4 +1,4 @@
-# dsh-control-your-development
+# dsh-plugin-control-your-development
 
 > Turn the development process into a product dashboard you can actually read and control.
 > Three human-readable Markdown files are the single source of truth; one command renders a single-file offline web page. Optionally, pin the dashboard inside the DSH window's right sidebar.
@@ -95,7 +95,7 @@ You never edit the web page by hand — it is a machine artifact, always regener
 ## What's in the repo
 
 ```
-dsh-control-your-development/
+dsh-plugin-control-your-development/
 ├─ package.json / cordis.patch.yml   ← panel manifest (repo root IS the plugin package)
 ├─ lib/ src/ tools/                  ← panel: browser bundle / source / build script
 ├─ PLUGIN.md                         ← panel notes and development gotchas
@@ -144,5 +144,5 @@ The scripts use cross-platform APIs only and are expected to work, but so far th
 
 ## License & contributing
 
-[MIT](LICENSE) © 2026 dsh-control-your-development contributors.
+[MIT](LICENSE) © 2026 dsh-plugin-control-your-development contributors.
 Questions and suggestions via GitHub Issues; maintainer release flow in [RELEASE-CHECKLIST.md](RELEASE-CHECKLIST.md).
