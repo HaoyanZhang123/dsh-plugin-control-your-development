@@ -16,7 +16,18 @@ import tempfile
 import time
 from pathlib import Path
 
-MD_FILES = ("PRODUCT.md", "FEATURES.md", "GLOSSARY.md", "NOW.md")
+FIXED_MD = ("PRODUCT.md", "FEATURES.md", "NOW.md")
+
+
+def md_names(dash: Path):
+    """看护的文件：三大文件 + dev-dashboard 下出现的任何 .md —— 术语表可以叫任意名字。"""
+    names = set(FIXED_MD)
+    try:
+        for p in dash.glob("*.md"):
+            names.add(p.name)
+    except OSError:
+        pass
+    return sorted(names)
 
 
 def _utf8():
@@ -29,7 +40,7 @@ def _utf8():
 
 def snapshot(dash: Path):
     snap = {}
-    for name in MD_FILES:
+    for name in md_names(dash):
         fp = dash / name
         try:
             snap[name] = fp.stat().st_mtime
@@ -39,7 +50,7 @@ def snapshot(dash: Path):
 
 
 def changed(old, new):
-    return any(old.get(k) != new.get(k) for k in MD_FILES)
+    return any(old.get(k) != new.get(k) for k in set(old) | set(new))
 
 
 def run_render(dash: Path):

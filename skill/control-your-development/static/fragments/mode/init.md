@@ -2,7 +2,7 @@
 
 > 触发：目标项目没有 dev-dashboard/，或用户明确要求"初始化/建立仪表盘"。
 
-1. **复制模板**：把本 skill `templates/` 下的 PRODUCT.md、FEATURES.md、NOW.md 复制到目标项目的 `dev-dashboard/`；项目已有几个绕不开的叫法时，连 GLOSSARY.md 一起复制并填上（没有就连模板也别留——它是可选的）。
+1. **复制模板**：把本 skill `templates/` 下的 PRODUCT.md、FEATURES.md、NOW.md、GLOSSARY.md 复制到目标项目的 `dev-dashboard/`。术语表**默认一并建立**：从项目现状（代码标识符、文档、PRODUCT/FEATURES/NOW 里出现过的不同叫法）抽一份初稿填进去；项目确实一片空白、没有任何固定叫法时，建骨架（表头 + 一行注释说明"待补充"），不要编内容。文件名可以按项目习惯改（如 `术语表.md`）——仪表盘按表头识别、不认文件名，改了不用改配置；首次渲染会把识别结论写进 `dev-dashboard/.cyd.json`，人手不用管。
 2. **先读格式契约**：写任何内容前读 `references/dashboard-format.md`。
 3. **快速访谈（≤3 问，问完即做）**：
    - 这个产品是做什么的？给谁用？（填项目简介）

@@ -1,7 +1,7 @@
 # control-your-development
 
 > 一句话定位：把开发过程翻译成用户看得懂、能掌控的产品仪表盘（人话 Markdown → DSH 面板，可选导出单文件 HTML）。
-> 所属项目：control-your-development　版本：1.3.2　状态：分发级
+> 所属项目：control-your-development　版本：1.4.0　状态：分发级
 
 ## 何时用
 
@@ -19,7 +19,7 @@
 | `static/core/workflow.md` | 主流程（判定场景→执行→渲染→收尾） | 每次 |
 | `static/fragments/mode/` | 四个场景 fragment：init / update / decide / verify | 轴匹配时只读一篇 |
 | `references/dashboard-format.md` | dev-dashboard 数据格式契约 | 初始化或改 Markdown 前 |
-| `templates/` | Markdown 模板（PRODUCT/FEATURES/NOW，可选 GLOSSARY）+ HTML 渲染模板 | init 场景复制 |
+| `templates/` | Markdown 模板（PRODUCT/FEATURES/NOW，术语表默认一并建立）+ HTML 渲染模板 | init 场景复制 |
 | `scripts/` | render_dashboard / collect_facts / watch_dashboard / snapshot_version | 按 fragment 调用 |
 
 ## 契约句清单
@@ -37,7 +37,7 @@
 ## v1.3 变更（升级必读）
 
 - FEATURES.md 功能块下可嵌套 `### 子项:`（五态、不写依赖；子项「已验证」同样必须有 `- 验证:` 行，否则 blocker）。功能 = 用户能验收的价值单元，开发步骤进时间线，不摊成小功能。
-- 新增**可选** `GLOSSARY.md` 术语表：正文出现别名（而非标准用词）进「用词漂移」警告（非阻断）。
+- 术语表（默认随 init 一并建立、可整份删掉）：独立 tab（导航第 4 个，在「现在」与「使用指南」之间）；按**表头契约**识别，文件名可自定义（`术语表.md` / `glossary.md` 都认）；正文出现别名（而非标准用词）进「用词漂移」警告（非阻断），并列出漂移明细与「让 AI 统一」按钮。
 - `index.html` 降级为**可选导出**：`--html` 强制生成；不带参数时仅在该文件已存在时随渲染更新，不存在则不生成。日常界面是 DSH 面板。
 - 新增机器文件：`.inbox.jsonl`（面板拍板/指令兜底信箱，update 开头收取并清空）、`.versions/`（版本快照，`snapshot_version.py` 维护；拍板落定后自动存一份）。
 

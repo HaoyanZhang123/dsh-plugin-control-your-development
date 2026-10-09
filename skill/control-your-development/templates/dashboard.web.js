@@ -69,8 +69,25 @@ async function reloadData(){
   let factsRaw = null, ignoreRaw = null;
   try{ factsRaw = await readText(root, 'dev-dashboard/.facts.json'); }catch(e){}
   try{ ignoreRaw = await readText(root, 'dev-dashboard/.dashboard-ignore'); }catch(e){}
+  /* 术语表：文件名不写死 —— 先看渲染器写下的 .cyd.json，再按候选名探测（此前漏读，导致点「更新」后术语表消失） */
+  let cydMeta = {};
+  try{ cydMeta = JSON.parse(await readText(root, 'dev-dashboard/.cyd.json')) || {}; }catch(e){}
+  let glossName = (cydMeta && typeof cydMeta.glossary_file === 'string' && cydMeta.glossary_file) || null;
+  if (!glossName){
+    for (const c of ['GLOSSARY.md', 'glossary.md', '术语表.md', '词汇表.md', 'TERMS.md']){
+      try{ await readText(root, 'dev-dashboard/' + c); glossName = c; break; }catch(e){}
+    }
+  }
+  let glossRaw = null;
+  if (glossName){ try{ glossRaw = await readText(root, 'dev-dashboard/' + glossName); }catch(e){ glossRaw = null; } }
+  const glossStatus = {
+    file: glossName,
+    source: (cydMeta && cydMeta.glossary_source) || (glossName ? 'sniff' : 'none'),
+    candidates: (cydMeta && cydMeta.glossary_candidates) || []
+  };
   return CYD.assembleData(
-    { prod, feat, now, factsRaw, ignoreRaw, workspace_uri: window.__CYD_DATA__.workspace_uri },
+    { prod, feat, now, glossRaw, glossName, glossStatus, factsRaw, ignoreRaw,
+      workspace_uri: window.__CYD_DATA__.workspace_uri },
     p => fileExists(root, p));
 }
 

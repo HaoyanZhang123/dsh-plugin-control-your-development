@@ -3,7 +3,7 @@
 > Turn the development process into a product dashboard you can actually read and control.
 > Human-readable Markdown files are the single source of truth; the dashboard is pinned inside DSH (right sidebar + a full-page "Feature Map" tab on top of the conversation), and decisions you make on the panel go straight to the AI. Export a single-file offline web page only when you need to share.
 
-Versions: skill v1.3.2 · panel plugin v0.5.3 | License: [MIT](LICENSE) | 语言：[中文](README.md)
+Versions: skill v1.4.0 · panel plugin v0.5.4 | License: [MIT](LICENSE) | 语言：[中文](README.md)
 
 ---
 
@@ -58,13 +58,16 @@ For full installation options (global install, panel plugin, uninstall & upgrade
 <img width="1621" height="865" alt="Fullscreen button in the graph toolbar" src="docs/images/fullscreen-button.png" />
 <img width="1920" height="1080" alt="Fullscreen graph view" src="docs/images/fullscreen-effect.png" />
 
+**"📖 Glossary" tab** — one table pins the standard term for each concept; aliases in the body raise a "terminology drift" warning in data health, with a per-row "unify" action.
+<img width="2968" height="2000" alt="Glossary tab — standard terms and terminology drift" src="docs/images/glossary-tab.png" />
+
 ## Highlights
 
 **Human-readable files, one job each**
 - `PRODUCT.md`: the front door — what this is, who it's for, where it's heading;
 - `FEATURES.md`: status — where every feature stands, with evidence and dependencies; large features can be split into **sub-items** (collapsed into a badge on the map, expanded on click);
 - `NOW.md`: the pulse — what happened lately, what's waiting for your decision;
-- `GLOSSARY.md` (optional): the glossary — the single naming standard across the project; aliases in the body raise a "terminology drift" warning in data health.
+- `GLOSSARY.md`: the glossary — the single naming standard across the project (created by default with init; the filename is yours to choose — the table header is what matters); it has its own "📖 Glossary" tab, and aliases in the body raise a "terminology drift" warning with a per-row "unify" action.
 
 **Progress defined by you (state machine)**
 Every feature moves along Idea → In Progress → Usable → Verified. The AI may mark a feature "Usable" at most; "Verified" happens only when you say so — and the progress bar counts verified features only. States can also move back: revoking a verification returns to Usable (nothing broke — the stamp is just withdrawn), rework returns to In Progress, deprecation moves to Deprecated, and a deprecated feature can be restored to Idea. Every rollback gets a line in the timeline.
@@ -160,7 +163,7 @@ No. The skill alone maintains the dashboard (the offline web page can still be e
 The web version reads and writes `dev-dashboard/` in your project, which requires you to **grant folder access**: the browser shows one permission prompt — choose the **project root containing `dev-dashboard/`**. The browser remembers it afterwards. The right sidebar panel needs no such grant — it reads through DSH's own interface.
 
 **How do I update to a new version?**
-Plugin: DSH → Plugins → Uninstall, then Add plugin with `dsh-plugin-control-your-development` (you can also pin a version, e.g. `dsh-plugin-control-your-development@0.5.3`); afterwards **refresh the page (Ctrl+R) or restart DSH**. Skill: updates automatically with the plugin; if you installed it manually, copy the folder again.
+Plugin: DSH → Plugins → Uninstall, then Add plugin with `dsh-plugin-control-your-development` (you can also pin a version, e.g. `dsh-plugin-control-your-development@0.5.4`); afterwards **refresh the page (Ctrl+R) or restart DSH**. Skill: updates automatically with the plugin; if you installed it manually, copy the folder again.
 
 **macOS / Linux?**
 Yes for macOS: **verified on real machines, both macOS and Windows** (web page + right sidebar panel). Linux is not verified on a real machine, but the scripts use cross-platform APIs only and paths are written portably.

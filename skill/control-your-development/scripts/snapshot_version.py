@@ -9,7 +9,8 @@
     python snapshot_version.py --self-test
 
 布局：dev-dashboard/.versions/index.json + 每版一个目录 NNN-<yyyymmdd-HHMM>/，
-内含当时的 PRODUCT.md / FEATURES.md / NOW.md / GLOSSARY.md 拷贝（不含 index.html）。
+内含当时的三大 Markdown（PRODUCT / FEATURES / NOW）与术语表——术语表按**实际文件名**收录
+（项目可以叫 术语表.md / glossary.md …，所以这里不写死名字）。
 退出码：0 正常；1 参数/目录错误。零第三方依赖。
 """
 import difflib
@@ -19,7 +20,19 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
-FILES = ("PRODUCT.md", "FEATURES.md", "NOW.md", "GLOSSARY.md")
+FIXED_MD = ("PRODUCT.md", "FEATURES.md", "NOW.md")
+
+
+def md_names(*dirs):
+    """快照/对比涉及的文件：三大文件 + 任一给定目录里出现的 .md（术语表可以叫任意名字）。"""
+    names = set(FIXED_MD)
+    for d in dirs:
+        try:
+            for p in Path(d).glob("*.md"):
+                names.add(p.name)
+        except OSError:
+            pass
+    return sorted(names)
 
 
 def _utf8():
@@ -56,7 +69,7 @@ def save(dash: Path, note: str):
         dest = vdir / (dirname + "-" + str(suffix))
     dest.mkdir(parents=True)
     copied = []
-    for name in FILES:
+    for name in md_names(dash):
         src = dash / name
         if src.is_file():
             dest.joinpath(name).write_bytes(src.read_bytes())
@@ -101,7 +114,7 @@ def diff(dash: Path, n: int, m=None):
             return 1
         b_dir, b_label = dash / ".versions" / by_n[m]["dir"], f"版本 {m}"
     any_diff = False
-    for name in FILES:
+    for name in md_names(a_dir, b_dir, dash):
         a, b = _read(a_dir, name), _read(b_dir, name)
         if a == b:
             continue

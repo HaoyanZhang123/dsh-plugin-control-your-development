@@ -3,7 +3,7 @@
 > 把开发过程翻译成你看得懂、能掌控的产品仪表盘。
 > 人话 Markdown 是事实源；仪表盘钉在 DSH 里（右侧边栏 + 会话页顶部整页功能地图），面板上的拍板直接送达 AI；需要分享时才导出单文件离线网页。
 
-版本：skill v1.3.2 · 面板插件 v0.5.3　|　许可：[MIT](LICENSE)　|　语言：[English](README.en.md)
+版本：skill v1.4.0 · 面板插件 v0.5.4　|　许可：[MIT](LICENSE)　|　语言：[English](README.en.md)
 
 ---
 
@@ -54,6 +54,8 @@
 <img width="3070" height="1910" alt="image" src="https://github.com/user-attachments/assets/5424e6a5-6d9a-4cb1-86e0-1ec9b81528f1" />
 
 <img width="1920" height="1080" alt="image" src="docs/images/fullscreen-effect.png" />
+**「📖 术语表」页**：标准用词 / 指什么 / 别名·曾用名 一张表钉住用词；别名写进正文会在数据健康里报「用词漂移」，明细可逐条「让 AI 统一」。
+<img width="2968" height="2000" alt="image" src="docs/images/glossary-tab.png" />
 
 ## 功能亮点
 
@@ -61,7 +63,7 @@
 - `PRODUCT.md`：门面——这是什么、给谁用、现在往哪走；
 - `FEATURES.md`：状态——每个功能做到哪一步，附证据与依赖；大功能可拆**子项**（地图上折叠成徽标，点击展开）；
 - `NOW.md`：动态——最近发生了什么、哪些事等你拍板；
-- `GLOSSARY.md`（可选）：术语表——全项目用词的唯一对照标准，正文里写别名会在数据健康里报"用词漂移"。
+- `GLOSSARY.md`：术语表——全项目用词的唯一对照标准（**默认随 init 建立**，文件名可自定义，认表头不认名字）；有自己的「📖 术语表」tab，正文里写别名会在数据健康里报「用词漂移」并列出明细。
 
 **进度由你定义（状态机）**
 每个功能的主路径是 设想 → 进行中 → 可用 → 已验证。AI 最多把功能标到「可用」；「已验证」三个字只有你亲口说过才算数，进度条也只统计已验证的功能。状态也能往回走：撤销验证退回「可用」（功能没坏，只是撤回盖章）、返工重做退回「进行中」、废弃归入「已废弃」、废弃的还能恢复为「设想」——每次回退都会在时间线留一笔。
@@ -149,7 +151,7 @@ DSH 桌面版。生成网页只用 DSH 自带的 Python，纯标准库、零安�
 网页版要读写你项目里的 `dev-dashboard/`，需要你**授权文件夹访问**：浏览器会弹一次权限框，请选**包含 `dev-dashboard/` 的项目根目录**。授权后浏览器会记住它。右侧栏面板不需要授权——它走 DSH 自己的读接口。
 
 **怎么更新到新版本？**
-插件：DSH → Plugins → 卸载，再 Add plugin 填 `dsh-plugin-control-your-development`（也可指定版本 `dsh-plugin-control-your-development@0.5.3`）；更新后**刷新页面（Ctrl+R）或重启 DSH**。skill：跟随插件自动更新；手动装的那份重新拷一次即可。
+插件：DSH → Plugins → 卸载，再 Add plugin 填 `dsh-plugin-control-your-development`（也可指定版本 `dsh-plugin-control-your-development@0.5.4`）；更新后**刷新页面（Ctrl+R）或重启 DSH**。skill：跟随插件自动更新；手动装的那份重新拷一次即可。
 
 **macOS / Linux 能用吗？**
 能。**macOS 与 Windows 均已实机验证可用**（网页端 + 右侧栏面板）；Linux 未实机验证，但脚本只用跨平台 API、路径按可移植写法提供。

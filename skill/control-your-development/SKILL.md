@@ -5,7 +5,7 @@ description: "Turn engineering progress into a human-readable, product-level dev
 
 # control-your-development
 
-把开发过程翻译成用户看得懂、能掌控的产品仪表盘：人话 Markdown（PRODUCT / FEATURES / NOW，可选 GLOSSARY）是事实源，DSH 面板是日常界面，`index.html` 是可选的离线导出（分享/归档用）。
+把开发过程翻译成用户看得懂、能掌控的产品仪表盘：人话 Markdown（PRODUCT / FEATURES / NOW，以及默认一并建立的术语表）是事实源，DSH 面板是日常界面，`index.html` 是可选的离线导出（分享/归档用）。
 
 ## Routing protocol
 
@@ -28,7 +28,7 @@ description: "Turn engineering progress into a human-readable, product-level dev
 
 ## 输出契约
 
-- 交付物：目标项目 `dev-dashboard/` 下人话 Markdown（PRODUCT / FEATURES / NOW，按需 GLOSSARY）+ 面板里最新的仪表盘；`index.html` 仅在用户要分享/归档时用 `--html` 导出。
+- 交付物：目标项目 `dev-dashboard/` 下人话 Markdown（PRODUCT / FEATURES / NOW，术语表默认一并建立）+ 面板里最新的仪表盘；`index.html` 仅在用户要分享/归档时用 `--html` 导出。
 - 交付前：`render_dashboard.py` 退出码为 0；掌控条"数据健康"为 ✅。
 - 拍板落定后：运行 `scripts/snapshot_version.py dev-dashboard/ save` 存一版快照（决策卡消失前的样子留档）。
 - 收尾：一句话告诉用户更新了什么、有没有等他拍板的事。

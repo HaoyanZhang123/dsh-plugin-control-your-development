@@ -65,3 +65,13 @@
 .cyd-app .graphbox.fs .ghead{flex:none}
 .cyd-app .graphbox.fs .legend{flex:none}
 .cyd-app .graphbox.fs svg{flex:0 0 auto;min-height:0}
+/* 术语表 Tab（📖）：表格复用 table.gloss；空态 / 歧义 / 表头不符 的引导卡 + 指令按钮 + 格式示例 */
+.cyd-app .card.warncard{border-color:color-mix(in srgb,var(--warn) 45%,var(--line))}
+.cyd-app .codeblock{background:var(--chip);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:12.5px/1.7 Consolas,"Courier New",monospace;white-space:pre;overflow:auto;margin:10px 0 0}
+.cyd-app #glossary .actrow{margin:12px 0 16px;display:flex;gap:8px;flex-wrap:wrap}
+.cyd-app #glossary .actrow button.primary{background:var(--accent);color:var(--on-solid);border:1px solid var(--accent);border-radius:10px;padding:8px 16px;font-size:14px;font-weight:600;cursor:pointer;box-shadow:var(--shadow)}
+.cyd-app #glossary .actrow button.primary:hover{filter:brightness(1.06)}
+.cyd-app #glossary .actrow button.primary:disabled{opacity:.55;cursor:default}
+.cyd-app button.mini{background:var(--chip);border:1px solid var(--line);color:var(--ink2);border-radius:8px;padding:2px 9px;font-size:12.5px;cursor:pointer}
+.cyd-app button.mini:hover{border-color:var(--accent);color:var(--accent)}
+.cyd-app #glossary code{background:var(--chip);border:1px solid var(--line);border-radius:6px;padding:0 5px;font-size:12.5px}

@@ -273,8 +273,31 @@ def parse_features(text: str, warnings):
     return feats
 
 
-def parse_glossary(text: str, warnings):
-    """解析 GLOSSARY.md 的第一张表格 → [{term, meaning, aliases}]。文件无表格 → WARN 并按空表处理。"""
+GLOSSARY_HEADER_TERMS = ("标准用词", "术语", "用词", "term", "glossary term")
+CYD_META = ".cyd.json"                     # 渲染器拥有的机器文件：解析结论（面板靠它才知道真实文件名）
+FIXED_MD = ("PRODUCT.md", "FEATURES.md", "NOW.md")
+
+
+def _first_table_header(text: str):
+    """返回文件第一张表的表头单元格（已剥注释）。没有表格 → None。"""
+    for line in strip_comments(text).splitlines():
+        if line.strip().startswith("|"):
+            return [c.strip() for c in line.strip().strip("|").split("|")]
+    return None
+
+
+def glossary_header_ok(text: str) -> bool:
+    """内容嗅探：第一张表 ≥3 列，且首列是「标准用词」及其常见别名/英文写法。
+    文件名不参与判断 —— 项目把它叫 术语表.md / 词汇表.md / glossary.md 都认。"""
+    h = _first_table_header(text)
+    if not h or len(h) < 3:
+        return False
+    return h[0].strip().lower() in GLOSSARY_HEADER_TERMS
+
+
+def parse_glossary(text: str, warnings, name: str = "GLOSSARY.md"):
+    """解析术语表文档的第一张表格 → [{term, meaning, aliases}]。文件无表格 → WARN 并按空表处理。
+    表头接受「标准用词 | 指什么 | 别名/曾用名」及其常见别名/英文写法（见 GLOSSARY_HEADER_TERMS）。"""
     text = strip_comments(text)
     entries = []
     lines = text.splitlines()
@@ -282,8 +305,9 @@ def parse_glossary(text: str, warnings):
         if not line.strip().startswith("|"):
             continue
         header = [c.strip() for c in line.strip().strip("|").split("|")]
-        if len(header) < 3 or header[0] != "标准用词":
-            warnings.append("GLOSSARY.md 第一张表的表头不是「标准用词 | 指什么 | 别名/曾用名」，按无术语表处理")
+        if len(header) < 3 or header[0].strip().lower() not in GLOSSARY_HEADER_TERMS:
+            warnings.append(f"{name} 第一张表的表头不是「标准用词 | 指什么 | 别名/曾用名」"
+                            f"（或其英文写法 Term | Meaning | Aliases），按无术语表处理")
             return entries
         j = i + 1
         if j < len(lines) and re.match(r"^\s*\|[|\-:\s]+\|\s*$", lines[j]):
@@ -291,14 +315,78 @@ def parse_glossary(text: str, warnings):
         while j < len(lines) and lines[j].strip().startswith("|"):
             cells = [c.strip() for c in lines[j].strip().strip("|").split("|")]
             if len(cells) < 2 or not cells[0]:
-                warnings.append("GLOSSARY.md 有一行列数不足或标准用词为空，已忽略该行")
+                warnings.append(f"{name} 有一行列数不足或标准用词为空，已忽略该行")
             else:
                 aliases = [a for a in re.split(r"[、，,/]", cells[2] if len(cells) > 2 else "") if a]
                 entries.append({"term": cells[0], "meaning": cells[1], "aliases": aliases})
             j += 1
         return entries
-    warnings.append("GLOSSARY.md 里没有表格，按无术语表处理")
+    warnings.append(f"{name} 里没有表格，按无术语表处理")
     return entries
+
+
+def resolve_glossary(dash: Path, warnings):
+    """识别术语表文档（文件名不写死）：
+    ① .cyd.json 里用户手写的 glossary → 最高优先；
+    ② 内容嗅探：dev-dashboard/*.md（排除三大文件）里唯一一个表头符合契约的文件；
+    ③ 命中多个 → 不猜，返回 candidates 让界面/AI 去问；
+    ④ 一个都没有 → 未启用（不算错）。
+    返回 (Path | None, status)；status = {"file", "source", "candidates"}。"""
+    status = {"file": None, "source": "none", "candidates": []}
+    meta = {}
+    mp = dash / CYD_META
+    if mp.is_file():
+        try:
+            loaded = json.loads(mp.read_text(encoding="utf-8-sig"))
+            if isinstance(loaded, dict):
+                meta = loaded
+        except Exception:
+            warnings.append(f"{CYD_META} 不是合法 JSON，已忽略（术语表按自动识别处理）")
+    want = meta.get("glossary")
+    if isinstance(want, str) and want.strip():
+        want = want.strip()
+        if (dash / want).is_file():
+            status.update({"file": want, "source": "explicit"})
+            return dash / want, status
+        warnings.append(f"{CYD_META} 指定的术语表「{want}」不存在，已退回自动识别")
+    hits = []
+    for p in sorted(dash.glob("*.md")):
+        if p.name in FIXED_MD:
+            continue
+        try:
+            if glossary_header_ok(p.read_text(encoding="utf-8-sig")):
+                hits.append(p)
+        except OSError:
+            continue
+    if len(hits) == 1:
+        status.update({"file": hits[0].name, "source": "sniff"})
+        return hits[0], status
+    if len(hits) > 1:
+        names = [p.name for p in hits]
+        status.update({"source": "ambiguous", "candidates": names})
+        return None, status
+    return None, status
+
+
+def write_cyd_meta(dash: Path, status):
+    """把解析结论写进 .cyd.json（面板没有列目录能力，只能靠它知道真实文件名）。
+    用户手写的 glossary 字段会被保留，渲染器不覆盖。"""
+    mp = dash / CYD_META
+    meta = {}
+    if mp.is_file():
+        try:
+            loaded = json.loads(mp.read_text(encoding="utf-8-sig"))
+            if isinstance(loaded, dict):
+                meta = loaded
+        except Exception:
+            meta = {}
+    meta["version"] = 1
+    meta["glossary_file"] = status["file"]
+    meta["glossary_source"] = status["source"]
+    meta["glossary_candidates"] = status["candidates"]
+    meta["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+    with open(mp, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(json.dumps(meta, ensure_ascii=False, indent=1) + "\n")
 
 
 def glossary_drift(entries, texts):
@@ -526,11 +614,12 @@ def render(dashboard: Path, workspace: Path, write_html=None):
     timeline, decisions, todos = parse_now(now_text, warnings)
     feats = layout_graph(feats, warnings)
 
-    # 术语表（可选）与用词漂移检查（v1.3）
+    # 术语表（默认建、文件名不写死）：先显式指定，再按表头契约内容嗅探；结论写进 .cyd.json 供面板读取
     glossary = []
     drift = []
-    if (dash / "GLOSSARY.md").is_file():
-        glossary = parse_glossary((dash / "GLOSSARY.md").read_text(encoding="utf-8-sig"), warnings)
+    gpath, gstatus = resolve_glossary(dash, warnings)
+    if gpath is not None:
+        glossary = parse_glossary(gpath.read_text(encoding="utf-8-sig"), warnings, gpath.name)
         drift = glossary_drift(glossary, [
             ("PRODUCT.md", strip_comments(prod_text)),
             ("FEATURES.md", strip_comments(feat_text)),
@@ -538,6 +627,11 @@ def render(dashboard: Path, workspace: Path, write_html=None):
         for d in drift:
             warnings.append(f"用词漂移：别名「{d['alias']}」在 {d['file']} 出现 {d['count']} 次，"
                             f"标准用词是「{d['term']}」")
+    elif gstatus["source"] == "ambiguous":
+        warnings.append("术语表：检测到 " + str(len(gstatus["candidates"])) + " 个候选（"
+                        + " / ".join(gstatus["candidates"]) + "），未指定时按无术语表处理；请在 "
+                        + CYD_META + " 里写 {\"glossary\": \"<文件名>\"}")
+    write_cyd_meta(dash, gstatus)
 
     evidence_pairs = []
     for f in feats:
@@ -601,6 +695,7 @@ def render(dashboard: Path, workspace: Path, write_html=None):
                      for f in feats],
         "counts": counts,
         "glossary": glossary,
+        "glossary_file": gstatus["file"],
         "timeline": [{**t, "evidence": ev_objs(t["evidence"])} for t in timeline],
         "decisions": decisions,
         "todos": todos,
@@ -608,7 +703,7 @@ def render(dashboard: Path, workspace: Path, write_html=None):
                    "evidence_missing": missing, "evidence_invalid": invalid,
                    "facts_pending": max(pending, 0), "facts_error": facts_error, "source": facts_source,
                    "verify_missing": no_verify,
-                   "glossary_drift": drift,
+                   "glossary_drift": drift, "glossary_status": gstatus,
                    "facts": facts_detail, "ignore": ignore_patterns, "warnings": warnings},
     }
 
@@ -694,8 +789,15 @@ def self_test():
         html = (dash / "index.html").read_text(encoding="utf-8")
         for marker in ("演示项目", "核心功能", "扩展功能", "自检决策", "src/app.js", "🌓",
                        "\"multi\": true", "workspace_uri",
-                       "子项", "汇总", '"glossary"', "仪表盘"):
+                       "子项", "汇总", '"glossary"', "仪表盘",
+                       '📖 术语表', "还没有术语表"):
             assert marker in html, f"产物缺少标记: {marker}"
+        # 壳是 json.dumps 注入的（引号被转义），归一化后再断言结构；📖 术语表 必须在「现在」与「使用指南」之间
+        flat = html.replace('\\"', '"')
+        for marker in ('data-tab="glossary"', 'id="glossary"', 'data-tab="now"', 'data-tab="guide"'):
+            assert marker in flat, f"产物缺少结构标记: {marker}"
+        assert flat.index('data-tab="now"') < flat.index('data-tab="glossary"') < flat.index('data-tab="guide"'), \
+            "术语表 tab 的位置不对（应在 现在 / 使用指南 之间）"
         # 用词漂移：别名「看板」写进 NOW.md 正文 → 进 warnings（不阻断）
         (dash / "NOW.md").write_text(
             "# 现在\n\n## 时间线\n- 2026-01-01 09:10 | 看板更新完毕\n", encoding="utf-8")
@@ -706,6 +808,33 @@ def self_test():
             "# 现在\n\n## 时间线\n- 2026-01-01 09:00 | 自检开始 | 证据: src/app.js\n\n"
             "## 决策\n### D1 自检决策？\n- 状态: 待拍板\n- 多选: 是\n- A: 通过\n- B: 不通过\n\n"
             "## 待办\n- [ ] 完成自检\n", encoding="utf-8")
+        # 术语表识别契约：改名后仍按内容嗅探认出来，并把真实文件名落进 .cyd.json 与产物
+        (dash / "GLOSSARY.md").rename(dash / "术语表.md")
+        assert render(dash, root, write_html=True) == 0
+        meta = json.loads((dash / CYD_META).read_text(encoding="utf-8"))
+        assert meta["glossary_file"] == "术语表.md" and meta["glossary_source"] == "sniff", meta
+        assert "术语表.md" in (dash / "index.html").read_text(encoding="utf-8"), "产物未带真实文件名"
+        # 歧义：两个文件都符合表头契约 → 不猜、报警、不阻断
+        (dash / "词汇表.md").write_text(
+            "# 另一个\n\n| 标准用词 | 指什么 | 别名/曾用名 |\n| --- | --- | --- |\n| 甲 | 乙 | 丙 |\n",
+            encoding="utf-8")
+        assert render(dash, root, write_html=True) == 0
+        meta2 = json.loads((dash / CYD_META).read_text(encoding="utf-8"))
+        assert meta2["glossary_source"] == "ambiguous" and len(meta2["glossary_candidates"]) == 2, meta2
+        # 显式指定优先，且渲染器不覆盖用户手写的 glossary 字段
+        (dash / CYD_META).write_text(json.dumps({"glossary": "术语表.md"}, ensure_ascii=False),
+                                     encoding="utf-8")
+        assert render(dash, root, write_html=True) == 0
+        meta3 = json.loads((dash / CYD_META).read_text(encoding="utf-8"))
+        assert meta3["glossary_source"] == "explicit" and meta3["glossary_file"] == "术语表.md", meta3
+        assert meta3["glossary"] == "术语表.md", "用户手写的 glossary 字段被覆盖了"
+        # 一个都没有 → 未启用（不算错误）；空态由前端负责
+        (dash / "术语表.md").unlink()
+        (dash / "词汇表.md").unlink()
+        (dash / CYD_META).unlink()
+        assert render(dash, root, write_html=True) == 0
+        meta4 = json.loads((dash / CYD_META).read_text(encoding="utf-8"))
+        assert meta4["glossary_file"] is None and meta4["glossary_source"] == "none", meta4
         # blocker 路径：证据失效 + 事实未归置 → 退出码 2
         (dash / "FEATURES.md").write_text(
             "# 功能地图\n\n## 功能: 坏证据\n- 状态: 可用\n- 简介: 指向不存在文件。\n"

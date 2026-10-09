@@ -127,13 +127,33 @@ window.__ModuleLoader__.load({
       if (missing.length){ const err = new Error('missing:' + missing.join(',')); err.missing = missing; throw err; }
       const factsRaw = await readOpt(remote, sessionId, 'dev-dashboard/.facts.json', signal);
       const ignoreRaw = await readOpt(remote, sessionId, 'dev-dashboard/.dashboard-ignore', signal);
-      const glossRaw = await readOpt(remote, sessionId, 'dev-dashboard/GLOSSARY.md', signal);
+      /* 术语表：文件名不写死 —— 面板没有列目录能力（workspaceFiles 只有 read/stat），
+         所以先读渲染器写下的 .cyd.json（真实文件名 + 解析状态），再按候选名 stat 兜底。 */
+      let cydMeta = {};
+      try { cydMeta = JSON.parse((await readOpt(remote, sessionId, 'dev-dashboard/.cyd.json', signal)) || '{}') || {}; }
+      catch (e){ cydMeta = {}; }
+      let glossName = (cydMeta && typeof cydMeta.glossary_file === 'string' && cydMeta.glossary_file) || null;
+      if (!glossName){
+        for (const c of GLOSS_FALLBACKS){
+          if (await exists(remote, sessionId, 'dev-dashboard/' + c, signal)){ glossName = c; break; }
+        }
+      }
+      const glossRaw = glossName ? await readOpt(remote, sessionId, 'dev-dashboard/' + glossName, signal) : null;
+      lastGlossName = glossName;
+      const glossStatus = {
+        file: glossName,
+        source: (cydMeta && cydMeta.glossary_source) || (glossName ? 'sniff' : 'none'),
+        candidates: (cydMeta && cydMeta.glossary_candidates) || []
+      };
       return window.CYD.assembleData(
-        { prod, feat, now, glossRaw, factsRaw, ignoreRaw },
+        { prod, feat, now, glossRaw, glossName, glossStatus, factsRaw, ignoreRaw },
         p => exists(remote, sessionId, p, signal));
     }
-    /* 版本快照读取（workspaceFiles 只有读方法，够了）：list / read(n) / current() */
-    const VERSION_FILES = ['PRODUCT.md', 'FEATURES.md', 'NOW.md', 'GLOSSARY.md'];
+    /* 版本快照读取（workspaceFiles 只有读方法，够了）：list / read(n) / current()
+       术语表按 loadAll 解析到的真实文件名走（项目可以叫 术语表.md / glossary.md …） */
+    const VERSION_BASE = ['PRODUCT.md', 'FEATURES.md', 'NOW.md'];
+    const GLOSS_FALLBACKS = ['GLOSSARY.md', 'glossary.md', '术语表.md', '词汇表.md', 'TERMS.md'];
+    let lastGlossName = null;
     function makeVersions(remote, sessionId, signal){
       async function readIndex(){
         const raw = await readOpt(remote, sessionId, 'dev-dashboard/.versions/index.json', signal);
@@ -143,7 +163,7 @@ window.__ModuleLoader__.load({
       }
       async function readFiles(prefix){
         const files = {};
-        for (const f of VERSION_FILES){ files[f] = (await readOpt(remote, sessionId, prefix + f, signal)) || ''; }
+        for (const f of VERSION_BASE.concat(lastGlossName ? [lastGlossName] : [])){ files[f] = (await readOpt(remote, sessionId, prefix + f, signal)) || ''; }
         return files;
       }
       return {

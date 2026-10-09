@@ -165,9 +165,12 @@ function parseFeatures(text, warnings){
   });
   return feats;
 }
-/* 术语表（GLOSSARY.md，可选）：第一张表 → [{term, meaning, aliases}]。与 Python 同契约。 */
-function parseGlossary(text, warnings){
+/* 术语表：第一张表 → [{term, meaning, aliases}]。与 Python 同契约
+   （表头接受「标准用词」的常见别名/英文写法；文件名不参与判断，所以调用方要把真实文件名传进来）。 */
+const GLOSS_HEADERS = ['标准用词', '术语', '用词', 'term', 'glossary term'];
+function parseGlossary(text, warnings, name){
   warnings = warnings || [];
+  name = name || 'GLOSSARY.md';
   text = stripComments(text);
   const entries = [];
   const lines = text.split('\n');
@@ -175,8 +178,9 @@ function parseGlossary(text, warnings){
   for (let i = 0; i < lines.length; i++){
     if (!lines[i].trim().startsWith('|')) continue;
     const header = cellsOf(lines[i]);
-    if (header.length < 3 || header[0] !== '标准用词'){
-      warnings.push('GLOSSARY.md 第一张表的表头不是「标准用词 | 指什么 | 别名/曾用名」，按无术语表处理');
+    if (header.length < 3 || GLOSS_HEADERS.indexOf((header[0] || '').toLowerCase()) < 0){
+      warnings.push(name + ' 第一张表的表头不是「标准用词 | 指什么 | 别名/曾用名」'
+        + '（或其英文写法 Term | Meaning | Aliases），按无术语表处理');
       return entries;
     }
     let j = i + 1;
@@ -184,7 +188,7 @@ function parseGlossary(text, warnings){
     while (j < lines.length && lines[j].trim().startsWith('|')){
       const cells = cellsOf(lines[j]);
       if (cells.length < 2 || !cells[0]){
-        warnings.push('GLOSSARY.md 有一行列数不足或标准用词为空，已忽略该行');
+        warnings.push(name + ' 有一行列数不足或标准用词为空，已忽略该行');
       } else {
         const aliases = (cells[2] || '').split(/[、，,/]/).map(a => a.trim()).filter(Boolean);
         entries.push({ term: cells[0], meaning: cells[1] || '', aliases });
@@ -193,7 +197,7 @@ function parseGlossary(text, warnings){
     }
     return entries;
   }
-  warnings.push('GLOSSARY.md 里没有表格，按无术语表处理');
+  warnings.push(name + ' 里没有表格，按无术语表处理');
   return entries;
 }
 /* 用词漂移：别名出现在 PRODUCT/FEATURES/NOW 正文（已剥注释）。texts: [[文件名, 正文]]。 */
@@ -312,7 +316,7 @@ async function assembleData(parts, existsFn){
   /* 术语表（可选）与用词漂移（v1.3，与 Python 渲染器同口径） */
   let glossary = [], drift = [];
   if (parts.glossRaw != null){
-    glossary = parseGlossary(norm(parts.glossRaw), warnings);
+    glossary = parseGlossary(norm(parts.glossRaw), warnings, parts.glossName || 'GLOSSARY.md');
     drift = glossaryDrift(glossary, [
       ['PRODUCT.md', stripComments(norm(parts.prod))],
       ['FEATURES.md', stripComments(norm(parts.feat))],
@@ -371,12 +375,15 @@ async function assembleData(parts, existsFn){
   matrix.sort((a, b) => a.path < b.path ? -1 : 1);
   // 缺失 .facts.json 只表示还没采集（提示即可）；损坏表示门禁不可用（不健康）
   const ok = missing.length === 0 && invalid.length === 0 && pending === 0 && factsError !== 'corrupt' && noVerify.length === 0;
+  /* 术语表来源：文件名不写死 —— 宿主（面板 / 离线页）先按 .cyd.json 或表头嗅探解析，再把真实文件名传进来 */
+  const glossFile = parts.glossName || null;
+  const glossStatus = parts.glossStatus || { file: glossFile, source: glossFile ? 'sniff' : 'none', candidates: [] };
   return { project, features, timeline: nw.timeline, decisions: nw.decisions, todos: nw.todos, counts,
-    glossary,
+    glossary, glossary_file: glossFile,
     workspace_uri: parts.workspace_uri, updated_at: parts.updated_at || fmtDT(new Date()),
     health: { ok, matrix, evidence_missing: missing, evidence_invalid: invalid,
               facts_pending: pending, facts_error: factsError, source: factsSource, verify_missing: noVerify,
-              glossary_drift: drift,
+              glossary_drift: drift, glossary_status: glossStatus,
               facts: fd, ignore, warnings } };
 }
 
@@ -502,13 +509,81 @@ function renderProject(){
     });
     h += '</ol></div>';
   }
-  /* 术语表（v1.3 可选）：用词的唯一对照标准 */
-  if (DATA.glossary && DATA.glossary.length){
-    h += '<div class="card"><h3>术语表</h3><table class="gloss"><tr><th>标准用词</th><th>指什么</th><th>别名/曾用名</th></tr>'
-      + DATA.glossary.map(g => '<tr><td><b>' + esc(g.term) + '</b></td><td>' + esc(g.meaning) + '</td><td class="muted">' + esc((g.aliases || []).join('、')) + '</td></tr>').join('')
+  /* 术语表已搬到独立 tab（📖 术语表）：项目页不再重复展示，避免同一份数据两个渲染点。 */
+  qs('#project').innerHTML = h;
+}
+
+/* ---------- 术语表 Tab（📖，位于「现在」与「使用指南」之间） ----------
+   术语表默认在建仪表盘时一并创建；文件名不写死 —— 靠表头契约识别（真实文件名见 .cyd.json 的 glossary_file）。
+   四种状态都要有出口：有表 / 有漂移 / 文件在但表头不符 / 未启用（空态给一键建立）。 */
+const GLOSS_HEADER_DEMO = '| 标准用词 | 指什么 | 别名/曾用名 |\n| --- | --- | --- |\n| 开发仪表盘 | 本产品 | 看板、dashboard |';
+function glossaryBuildText(){
+  return '请在这个项目的 dev-dashboard/ 下建一份术语表（默认文件名 GLOSSARY.md，也可以按项目习惯改名，仪表盘按表头识别）：'
+    + '从 PRODUCT.md / FEATURES.md / NOW.md 以及现有代码与文档里，抽出「标准用词 / 指什么 / 别名·曾用名」；'
+    + '以后正文一律用标准用词，别名写进正文请在数据健康里报用词漂移。建完重新渲染仪表盘。';
+}
+function glossaryTableHtml(list, drift, file){
+  let h = '<div class="card"><h3>术语表</h3><p class="muted">共 ' + list.length + ' 条标准用词'
+    + (drift.length ? ' · ⚠ ' + drift.length + ' 处用词漂移' : ' · 用词一致 ✅')
+    + '　来源：<code>' + esc(file) + '</code>　（漂移只查 PRODUCT / FEATURES / NOW 正文，注释不算）</p>'
+    + '<table class="gloss"><tr><th>标准用词</th><th>指什么</th><th>别名/曾用名</th></tr>'
+    + list.map(g => '<tr><td><b>' + esc(g.term) + '</b></td><td>' + esc(g.meaning) + '</td><td class="muted">'
+        + esc((g.aliases || []).join('、')) + '</td></tr>').join('')
+    + '</table></div>';
+  if (drift.length){
+    h += '<div class="card warncard"><h3>用词漂移（' + drift.length + ' 处）</h3>'
+      + '<p class="muted">下面这些别名出现在正文里——建议统一成标准用词。</p>'
+      + '<table class="gloss"><tr><th>别名</th><th>应写成</th><th>位置</th><th>次数</th><th></th></tr>'
+      + drift.map((d, i) => '<tr><td>' + esc(d.alias) + '</td><td><b>' + esc(d.term) + '</b></td><td class="muted">'
+          + esc(d.file) + '</td><td>' + d.count + '</td><td><button class="mini" data-gfix="' + i + '">让 AI 统一</button></td></tr>').join('')
       + '</table></div>';
   }
-  qs('#project').innerHTML = h;
+  return h;
+}
+function renderGlossary(){
+  const sec = qs('#glossary'); if (!sec) return;
+  const st = (DATA.health && DATA.health.glossary_status) || {};
+  const cands = st.candidates || [];
+  const file = DATA.glossary_file || st.file || null;
+  const list = DATA.glossary || [];
+  const drift = (DATA.health && DATA.health.glossary_drift) || [];
+  let h = '', askText = '', askLabel = '';
+  if (st.source === 'ambiguous' && cands.length){
+    askText = '术语表有多个候选（' + cands.join(' / ') + '）：请确认用哪一个，把结论写进 dev-dashboard/.cyd.json 的 glossary 字段'
+      + '（例如 {"glossary": "' + cands[0] + '"}），然后重新渲染仪表盘。';
+    askLabel = '让 AI 帮我选一个';
+    h += '<div class="card warncard"><h3>⚠ 术语表有多个候选</h3>'
+      + '<p class="lede">这些文件的第一张表都符合术语表表头：<b>' + cands.map(esc).join('、') + '</b>。'
+      + '为避免认错，仪表盘暂时按「未启用」处理。</p>'
+      + '<p class="muted">指定方式：在 <code>dev-dashboard/.cyd.json</code> 里写 <code>{"glossary": "'
+      + esc(cands[0]) + '"}</code>，或把多余的那份改名 / 移走。</p></div>';
+  } else if (file && list.length){
+    h += glossaryTableHtml(list, drift, file);
+  } else if (file && !list.length){
+    const why = (DATA.health.warnings || []).filter(w => w.indexOf(file) === 0).slice(0, 2).join('；');
+    askText = 'dev-dashboard/' + file + ' 的第一张表不符合术语表契约：请改成三列（标准用词 | 指什么 | 别名/曾用名）并重新渲染仪表盘。';
+    askLabel = '让 AI 按契约改表头';
+    h += '<div class="card warncard"><h3>⚠ 找到了 <code>' + esc(file) + '</code>，但表头不符合契约</h3>'
+      + '<p class="muted">' + esc(why || '第一张表需要三列：标准用词 | 指什么 | 别名/曾用名') + '</p>'
+      + '<pre class="codeblock">' + esc(GLOSS_HEADER_DEMO) + '</pre></div>';
+  } else {
+    askText = glossaryBuildText();
+    askLabel = (env.ask || env.command) ? '让 AI 建立术语表' : '复制「建立术语表」指令';
+    h += '<div class="card"><h3>还没有术语表</h3>'
+      + '<p class="lede">长项目里同一样东西很容易被叫成好几个名字（「看板」「仪表盘」「dashboard」），AI 会跟着越写越飘。'
+      + '术语表把<b>标准用词</b>钉死；别名写进正文时，数据健康里会报「用词漂移」。</p>'
+      + '<p class="muted">它是可选的，不建也不影响其它功能。文件名可以按项目习惯取（<code>术语表.md</code>、'
+      + '<code>glossary.md</code> 都认）——只要第一张表的前三列是下面这个表头：</p>'
+      + '<pre class="codeblock">' + esc(GLOSS_HEADER_DEMO) + '</pre></div>';
+  }
+  if (askText) h += '<div class="actrow"><button class="primary" id="glossAsk">' + esc(askLabel) + '</button></div>';
+  sec.innerHTML = h;
+  const btn = qs('#glossAsk'); if (btn) btn.onclick = () => dispatchSend(askText, '术语表', btn);
+  qsa('[data-gfix]').forEach(b => b.onclick = () => {
+    const d = drift[Number(b.dataset.gfix)]; if (!d) return;
+    dispatchSend('请把 ' + d.file + ' 里的别名「' + d.alias + '」统一成标准用词「' + d.term
+      + '」（术语表里已有的对照），改完重新渲染仪表盘。', '统一用词', b);
+  });
 }
 
 /* ---------- 功能地图 Tab ---------- */
@@ -880,8 +955,17 @@ function renderGraph(){
       if (on){
         fsSaved = { tx: gview.tx, ty: gview.ty, k: gview.k, adjusted: gview.adjusted };
         const req = rootEl.requestFullscreen || rootEl.webkitRequestFullscreen;
-        if (typeof req === 'function') Promise.resolve(req.call(rootEl)).catch(enterFs);
-        else enterFs();
+        if (typeof req === 'function'){
+          /* 同步抛错也要兜底：某些环境（旧 webkit 别名、直接拒绝）不是 reject 而是 throw，
+             不 catch 按钮就"点了没反应"——这正是 .fs 兜底要覆盖的形态。 */
+          let p;
+          try { p = req.call(rootEl); }
+          catch (e){
+            console.warn('[cyd] requestFullscreen 失败，退回铺满视口的弹层：' + ((e && e.message) || e));
+            enterFs(); return;
+          }
+          Promise.resolve(p).catch(enterFs);
+        } else enterFs();
       } else if (document.fullscreenElement){
         Promise.resolve(document.exitFullscreen()).catch(leaveFs);
       } else leaveFs();
@@ -1387,7 +1471,7 @@ function renderAll(){
     renderFeatures();
     return;
   }
-  renderStrip(); renderProject(); renderFeatures(); renderNow(); renderFooter();
+  renderStrip(); renderProject(); renderFeatures(); renderNow(); renderGlossary(); renderFooter();
   gotoTab(currentTab);
 }
 

@@ -1,4 +1,4 @@
-# 截图规范（6 张已就位）
+# 截图规范（7 张已就位）
 
 发布时 README 需要实拍截图，放在本目录，文件名固定：
 
@@ -10,8 +10,9 @@
 | panel.png ✅ | DSH 右侧边栏内嵌面板实拍（与 文件/终端 同列） | 同上 |
 | fullscreen-button.png ✅ | 关系图工具栏「⛶ 全屏」按钮位置（带标注，#3 贡献） | 1621×865 |
 | fullscreen-effect.png ✅ | 点全屏之后：真·窗口全屏看图（带标注，#3 贡献） | 1920×1080 |
+| glossary-tab.png ✅ | 「📖 术语表」tab：词表 + 用词漂移明细（v0.5.4） | 2968×2000 |
 
-> **现状（2026-10-09）**：6 张实拍图已随仓库提供（`home.png` / `features.png` / `now.png` / `panel.png` / `fullscreen-button.png` / `fullscreen-effect.png`），README 中英均以仓库内相对路径引用——不依赖 GitHub attachments 的长期可用性。注意 `docs/` 不在 `package.json.files` 里，所以 README 里的图在 **npm 包内是断链**（GitHub 仓库页正常）。
+> **现状（2026-10-10）**：7 张实拍图随仓库提供（`home.png` / `features.png` / `now.png` / `panel.png` / `fullscreen-button.png` / `fullscreen-effect.png` / `glossary-tab.png`）。除 `fullscreen-button.png` 外均为仓库内相对路径（不依赖 GitHub attachments 的长期可用性）；该按钮图目前在 README 里用的是 GitHub 附件 URL。注意 `docs/` 不在 `package.json.files` 里，所以这些图在 **npm 包内是断链**（GitHub 仓库页正常）。
 
 拍法：任一真实项目的 dev-dashboard/index.html 用 Edge 打开（或 DSH 面板截图），
 勿露隐私路径与个人信息；截前把演示数据整理干净。
