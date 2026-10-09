@@ -413,6 +413,9 @@ const expanded = new Set();   // 关系图里展开子项的功能名（本挂�
 const gview = { tx: 0, ty: 0, k: 1, adjusted: false, pos: new Map(), drag: false, deferred: false };
 let graphRO = null;   // 关系图尺寸观察器（重渲染时换新，避免叠加）
 let graphWinHandler = null;   // 窗口缩放兜底（重渲染时换新）
+let graphEscHandler = null;   // 全屏时的 Esc 退出（重渲染时换新）
+let graphFsHandler = null;    // fullscreenchange 同步（重渲染时换新）
+let graphFs = false;   // 关系图是否处于全屏弹窗（重渲染会重建 DOM，状态记在这儿）
 /* 单板块模式（会话页顶部「功能地图」tab）：隐藏内部导航，只显示指定 section */
 if (env.onlyTab){
   const navEl = qs('nav.tabs'); if (navEl) navEl.style.display = 'none';
@@ -507,7 +510,7 @@ function renderProject(){
 function graphBoxHtml(){
   if (!ACT().length) return '';
   return '<div class="graphbox"><div class="ghead"><b>功能关系图</b><span>滚轮缩放 · 拖背景平移 · 拖节点调整位置 · 点节点直接和 agent 交互 · 点 ▸n 徽标展开子项</span>'
-    + '<span class="gtools" id="gTools"><button data-gz="out" title="缩小">－</button><button data-gz="in" title="放大">＋</button><button data-gz="fit" title="适应屏幕">⤢ 适应</button><button data-gz="reset" title="把手动摆过的节点复位回分层布局">↺ 重置</button></span></div>'
+    + '<span class="gtools" id="gTools"><button data-gz="out" title="缩小">－</button><button data-gz="in" title="放大">＋</button><button data-gz="fit" title="适应屏幕">⤢ 适应</button><button data-gz="fs" title="全屏看图（铺满窗口，Esc 退出）">⛶ 全屏</button><button data-gz="reset" title="把手动摆过的节点复位回分层布局">↺ 重置</button></span></div>'
     + '<div class="legend"><span><i style="background:var(--gray)"></i>设想</span><span><i style="background:var(--accent)"></i>进行中</span><span><i style="background:var(--warn)"></i>可用</span><span><i style="background:var(--ok)"></i>已验证</span></div>'
     + '<svg id="graph"></svg><div class="nodepop" id="nodePop"></div></div>';
 }
@@ -572,6 +575,7 @@ function renderGraph(){
   const svg = qs('#graph'); if (!svg) return;
   const pop = qs('#nodePop');
   const box = qs('.graphbox');
+  if (box && graphFs) box.classList.add('fs');   // 重渲染会重建 DOM：全屏状态记在 graphFs 上，这里补回来
   const NS = 'http://www.w3.org/2000/svg';
   svg.innerHTML = '';
   const gWorld = document.createElementNS(NS, 'g'); svg.appendChild(gWorld);
@@ -599,7 +603,8 @@ function renderGraph(){
   /* 整页模式：SVG 的高度由 JS 按「图容器高度 − 标题条 − 图例」算死。
      不用 flex:1——父链高度在极短窗口/重挂载时可能瞬时不确定，会让 SVG 塌成 0。 */
   function layoutHeight(){
-    if (!IMMERSIVE || !box) return;
+    const fs = !!(box && box.classList.contains('fs'));
+    if ((!IMMERSIVE && !fs) || !box) return;
     const gh = box.querySelector('.ghead'), lg = box.querySelector('.legend');
     const used = (gh ? gh.offsetHeight : 0) + (lg ? lg.offsetHeight : 0);
     let avail = box.clientHeight - used;                 // 容器高度确定时直接用
@@ -832,6 +837,61 @@ function renderGraph(){
     bind('[data-gz="out"]', () => zoomAt(1 / 1.25));
     bind('[data-gz="fit"]', fit);
     bind('[data-gz="reset"]', () => { gview.pos.clear(); gview.adjusted = false; renderGraph(); });
+    /* 全屏：优先走**真·窗口全屏**（requestFullscreen），拿不到或被拒就退回「铺满视口的弹层」（.fs）。
+       为什么必须真全屏：桌面端那条原生标题栏（菜单栏 + 窗口按钮）页面 CSS 盖不住 —— DSH 自己也只在
+       `html[data-fullscreen]` 时把那条 band 收掉（全屏状态由桌面端 preload 镜像上去）。
+       fullscreen 落在 `.cyd-app` 上（不是图容器）：这样弹层 #ovl 仍在同一棵子树里，全屏中点节点
+       弹出的面板照常可见；再给它补 cyd-immersive，复用「整页模式只留关系图」那套布局。
+       进入先把视野置成「适应」，退出时：你亲手调过视野就还原回去，没调过就重新适应。
+       relayout 在下面才定义 —— 这里只是注册闭包，点按钮时它早就初始化好了。 */
+    const fsOn = () => !!(box && box.classList.contains('fs'));
+    const syncFsBtn = () => {
+      const b = tools.querySelector('[data-gz="fs"]'); if (!b) return;
+      b.innerHTML = fsOn() ? '⤡ 退出全屏' : '⛶ 全屏';
+      b.title = fsOn() ? '退出全屏（Esc）' : '全屏看图（Esc 退出）';
+    };
+    let fsSaved = null, fsAddedImmersive = false;
+    const syncRoot = on => {
+      if (on){ if (!rootEl.classList.contains('cyd-immersive')){ rootEl.classList.add('cyd-immersive'); fsAddedImmersive = true; } }
+      else if (fsAddedImmersive){ rootEl.classList.remove('cyd-immersive'); fsAddedImmersive = false; }
+    };
+    const enterFs = () => {
+      graphFs = true; box.classList.add('fs'); syncRoot(true); syncFsBtn();
+      gview.adjusted = false; relayout();
+    };
+    const leaveFs = () => {
+      graphFs = false; box.classList.remove('fs'); syncRoot(false); syncFsBtn();
+      if (fsSaved && fsSaved.adjusted){
+        gview.tx = fsSaved.tx; gview.ty = fsSaved.ty; gview.k = fsSaved.k; gview.adjusted = true;
+      } else gview.adjusted = false;
+      fsSaved = null; relayout();
+    };
+    const toggleFs = force => {
+      if (!box) return;
+      const on = (force === undefined) ? !fsOn() : !!force;
+      if (on === fsOn()) return;
+      if (on){
+        fsSaved = { tx: gview.tx, ty: gview.ty, k: gview.k, adjusted: gview.adjusted };
+        const req = rootEl.requestFullscreen || rootEl.webkitRequestFullscreen;
+        if (typeof req === 'function') Promise.resolve(req.call(rootEl)).catch(enterFs);
+        else enterFs();
+      } else if (document.fullscreenElement){
+        Promise.resolve(document.exitFullscreen()).catch(leaveFs);
+      } else leaveFs();
+    };
+    bind('[data-gz="fs"]', () => toggleFs());
+    syncFsBtn();
+    if (graphFsHandler) document.removeEventListener('fullscreenchange', graphFsHandler);
+    graphFsHandler = () => {
+      if (document.fullscreenElement === rootEl) enterFs();
+      else if (fsOn()) leaveFs();
+    };
+    document.addEventListener('fullscreenchange', graphFsHandler);
+    if (graphEscHandler) document.removeEventListener('keydown', graphEscHandler);
+    graphEscHandler = e => {
+      if (e.key === 'Escape' && fsOn() && !document.fullscreenElement){ e.stopPropagation(); toggleFs(false); }
+    };
+    document.addEventListener('keydown', graphEscHandler);
   }
   /* 容器尺寸变化（切进整页、拉伸侧栏、缩放窗口）→ 重算 SVG 高度、同步 viewBox 并重新适配 */
   const relayout = () => {

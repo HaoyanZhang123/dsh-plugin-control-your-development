@@ -56,3 +56,12 @@
 .cyd-app .sheetnav .actbtn{padding:5px 12px;font-size:13px}
 .cyd-app #verBtn{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:999px;padding:6px 13px;cursor:pointer;font-size:14px;box-shadow:var(--shadow);margin-right:8px}.cyd-app .verrow{display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px solid var(--line);padding:9px 0}.cyd-app .verrow:last-child{border-bottom:0}.cyd-app .diffbox{font:12.5px/1.6 Consolas,"Courier New",monospace;border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:46vh}.cyd-app .dline{white-space:pre-wrap;word-break:break-all;padding:1px 10px}.cyd-app .dline.add{background:var(--ok-soft);color:var(--ok)}.cyd-app .dline.del{background:var(--warn-soft);color:var(--warn);text-decoration:line-through}
 .cyd-app #setBtn{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:999px;padding:6px 13px;cursor:pointer;font-size:14px;box-shadow:var(--shadow);margin-right:8px}.cyd-app .setrow{border-bottom:1px solid var(--line);padding:12px 0;font-size:14px}.cyd-app .setrow:last-of-type{border-bottom:0}.cyd-app .setrow label{display:block;line-height:1.8}.cyd-app .setrow input[type="text"],.cyd-app .setrow input[type="number"]{border:1px solid var(--line);border-radius:8px;padding:5px 9px;background:var(--panel);color:var(--ink);font:inherit;margin-top:4px}
+
+/* 关系图全屏（弹窗式铺满窗口）：给 .graphbox 加 .fs。
+   z-index 55 —— 低于 .ovl(60)，所以在全屏里点节点弹出的面板照常盖在上面；
+   SVG 高度仍由 renderGraph.layoutHeight() 算死写进行内样式（与整页模式同款），
+   所以这里只负责把容器钉满窗口 + 保持头/图例/图三段的纵向排列。 */
+.cyd-app .graphbox.fs{position:fixed;inset:0;z-index:55;margin:0;border:0;border-radius:0;box-shadow:none;display:flex;flex-direction:column;background:var(--panel)}
+.cyd-app .graphbox.fs .ghead{flex:none}
+.cyd-app .graphbox.fs .legend{flex:none}
+.cyd-app .graphbox.fs svg{flex:0 0 auto;min-height:0}
