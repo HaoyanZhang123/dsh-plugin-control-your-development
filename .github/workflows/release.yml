@@ -28,6 +28,11 @@ jobs:
           python3 skill/control-your-development/scripts/collect_facts.py --self-test
           python3 skill/control-your-development/scripts/watch_dashboard.py --self-test
 
+      - name: 面板产物与源码一致（共享核 + src → lib/client.js，逐字节）
+        run: |
+          python3 tools/build_panel.py
+          git diff --exit-code -- lib/client.js
+
       - name: 版本一致性（tag = package.json）
         run: |
           node -e "const v=require('./package.json').version, t=process.env.GITHUB_REF_NAME.replace(/^v/,''); if(v!==t){throw new Error('tag '+t+' != package.json '+v)} console.log('version ok', v)"
