@@ -51,7 +51,8 @@
 **DSH 右侧边栏内嵌面板**（与 文件 / 终端 / 浏览器 同列，标签带当前项目名）。
 <img width="1042" height="1088" alt="image" src="docs/images/panel.png" />
 **关系图「⛶ 全屏」**：功能一多，小栏里显示不下——点工具栏的全屏进**真·窗口全屏**看图，再点一次或按 Esc 退出；拿不到全屏能力时退回铺满视口的弹层。
-<img width="1621" height="865" alt="image" src="docs/images/fullscreen-button.png" />
+<img width="3070" height="1910" alt="image" src="https://github.com/user-attachments/assets/5424e6a5-6d9a-4cb1-86e0-1ec9b81528f1" />
+
 <img width="1920" height="1080" alt="image" src="docs/images/fullscreen-effect.png" />
 
 ## 功能亮点
