@@ -3,7 +3,7 @@
 > 把开发过程翻译成你看得懂、能掌控的产品仪表盘。
 > 人话 Markdown 是事实源；仪表盘钉在 DSH 里（右侧边栏 + 会话页顶部整页功能地图），面板上的拍板直接送达 AI；需要分享时才导出单文件离线网页。
 
-版本：skill v1.3.1 · 面板插件 v0.5.2　|　许可：[MIT](LICENSE)　|　语言：[English](README.en.md)
+版本：skill v1.3.2 · 面板插件 v0.5.3　|　许可：[MIT](LICENSE)　|　语言：[English](README.en.md)
 
 ---
 
@@ -148,7 +148,7 @@ DSH 桌面版。生成网页只用 DSH 自带的 Python，纯标准库、零安�
 网页版要读写你项目里的 `dev-dashboard/`，需要你**授权文件夹访问**：浏览器会弹一次权限框，请选**包含 `dev-dashboard/` 的项目根目录**。授权后浏览器会记住它。右侧栏面板不需要授权——它走 DSH 自己的读接口。
 
 **怎么更新到新版本？**
-插件：DSH → Plugins → 卸载，再 Add plugin 填 `dsh-plugin-control-your-development`（也可指定版本 `dsh-plugin-control-your-development@0.5.2`）；更新后**刷新页面（Ctrl+R）或重启 DSH**。skill：跟随插件自动更新；手动装的那份重新拷一次即可。
+插件：DSH → Plugins → 卸载，再 Add plugin 填 `dsh-plugin-control-your-development`（也可指定版本 `dsh-plugin-control-your-development@0.5.3`）；更新后**刷新页面（Ctrl+R）或重启 DSH**。skill：跟随插件自动更新；手动装的那份重新拷一次即可。
 
 **macOS / Linux 能用吗？**
 能。**macOS 与 Windows 均已实机验证可用**（网页端 + 右侧栏面板）；Linux 未实机验证，但脚本只用跨平台 API、路径按可移植写法提供。
