@@ -54,6 +54,10 @@ For full installation options (global install, panel plugin, uninstall & upgrade
 **Embedded panel** in the DSH right sidebar (next to Files / Terminal / Browser, title carries the project name).
 <img width="1042" height="1088" alt="Embedded panel in the DSH right sidebar " src="docs/images/panel.png" />
 
+**Graph "⛶ Fullscreen"** — when the graph outgrows the sidebar, hit Fullscreen in the toolbar for a real window-fullscreen view; click again or press Esc to exit, and if the Fullscreen API is unavailable it falls back to a viewport-filling overlay.
+<img width="1621" height="865" alt="Fullscreen button in the graph toolbar" src="docs/images/fullscreen-button.png" />
+<img width="1920" height="1080" alt="Fullscreen graph view" src="docs/images/fullscreen-effect.png" />
+
 ## Highlights
 
 **Human-readable files, one job each**
@@ -69,7 +73,7 @@ Every feature moves along Idea → In Progress → Usable → Verified. The AI m
 In the decision center, pick an option, add a note, and click "📤 Send decision" — it goes straight into the current conversation; the "Start this / Rework / Deprecate" buttons on feature details work the same way. If the AI isn't online, the message is first recorded into `dev-dashboard/.inbox.jsonl` and picked up automatically on the next update — nothing gets lost. Every decision you make is recorded in the timeline, and a **version snapshot** is saved automatically (the 🕓 button lets you look back and compare with the current state anytime).
 
 **Full-page "Feature Map" tab**
-At the top of the conversation page, alongside "Chat / Trajectory": view the feature relationship graph at full-page width, with wheel zoom, drag-to-pan and one-click fit-to-screen; node width adapts to the name, long names wrap and truncate with the full text on hover; file paths are truncated in the middle with the full path on hover.
+At the top of the conversation page, alongside "Chat / Trajectory": view the feature relationship graph at full-page width, with wheel zoom, drag-to-pan and one-click fit-to-screen, plus a toolbar "⛶ Fullscreen" that fills the window (click again or press Esc to exit); node width adapts to the name, long names wrap and truncate with the full text on hover; file paths are truncated in the middle with the full path on hover.
 
 **Single-file offline web page (optional export)**
 Want to show a partner or client? Say "export the web version": a single `index.html` — zero dependencies, zero network, light/dark adaptive, print-friendly.

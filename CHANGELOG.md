@@ -20,6 +20,10 @@
 - `tools/build_panel.py` 渲染核查找顺序：本仓 `skill/` 优先，再退回 `<工作区>/.dsh/skills/`（此前在仓库布局下直接 FATAL）（#3）
 - `src/client.src.js` 补回产物里已有、源里却缺失的直发通道源码（此前每次重建都会静默抹掉约 2.4 KB）（#3）
 
+### Changed
+
+- README（中英）与 `docs/images/README.md` 补上 #3 的全屏实拍图（此前两张图在仓内无任何引用）；`release.yml` 增加「共享核 + src → `lib/client.js` 逐字节一致」守卫，挡住同类静默分叉再次发生
+
 ## [0.5.2] - 2026-10-08
 
 ### Fixed
