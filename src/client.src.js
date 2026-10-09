@@ -60,12 +60,40 @@ window.__ModuleLoader__.load({
         return { call: (ep, payload) => call.call(svc.rpc, '/api', RPC_NS + '/' + ep, payload) };
       }catch(e){ return null; }
     }
-    function makeNotify(carrier){
-      if (!carrier) return null;
-      return async (sessionId, kind, text, summary) => {
+    /* 直发通道（按优先级）：
+       ① 官方会话直发 ctx.sessions.binding(id).session.prompt([...],'queue')
+          —— 消息直接出现在你与 agent 的主对话里，等价于你在输入框回车；
+       ② 宿主 RPC（control-your-development/notify）—— agent 在线就 steer 直达，
+          不在线写 dev-dashboard/.inbox.jsonl 兜底；
+       ③ 两条都拿不到 → 面板退回复制，并把失败原因说清楚（不再静默复制）。 */
+    function makeSessionSend(ctx){
+      return async (sessionId, text) => {
+        const sessions = ctx.get && ctx.get('sessions');
+        const binding = sessions && typeof sessions.binding === 'function' ? sessions.binding(sessionId) : null;
+        const session = binding && binding.session;
+        if (!session || typeof session.prompt !== 'function') throw new Error('会话直发接口不可用');
+        const r = await session.prompt([{ type: 'text', text }], 'queue');
+        if (!r || r.ok !== true) throw new Error((r && r.error && (r.error.code || r.error.message)) || 'prompt-failed');
+        return 'sent';
+      };
+    }
+    function makeNotify(carrier, ctx){
+      const viaSession = makeSessionSend(ctx);
+      const viaRpc = carrier ? async (sessionId, kind, text, summary) => {
         const r = await carrier.call('notify', { sessionId, kind, text, summary });
-        if (!r || !r.ok) throw new Error((r && r.error && r.error.code) || 'notify-failed');
+        if (!r || !r.ok) throw new Error((r && r.error && (r.error.code || r.error.message)) || 'notify-failed');
         return r.value && r.value.delivered === 'queued' ? 'queued' : 'ok';
+      } : null;
+      /* 返回 'sent' | 'ok' | 'queued'；全都失败则抛错，带两条通道各自的原因 */
+      return async (sessionId, kind, text, summary) => {
+        const errs = [];
+        try{ return await viaSession(sessionId, text); }
+        catch (e){ errs.push('会话直发：' + ((e && e.message) || e)); }
+        if (viaRpc){
+          try{ return await viaRpc(sessionId, kind, text, summary); }
+          catch (e){ errs.push('宿主 RPC：' + ((e && e.message) || e)); }
+        } else errs.push('宿主 RPC：不可用');
+        throw new Error(errs.join('；'));
       };
     }
     async function readText(remote, sessionId, path, signal){
@@ -172,7 +200,9 @@ window.__ModuleLoader__.load({
       root.innerHTML = '';
       const mountEl = document.createElement('div');
       mountEl.style.height = '100%';
-      mountEl.style.overflow = 'auto';
+      // 整页模式（会话页「功能地图」）自己撑满父容器，不让滚动条插进来影响关系图高度
+      mountEl.style.overflow = props.fullGraph ? 'hidden' : 'auto';
+      if (props.fullGraph){ mountEl.style.display = 'flex'; mountEl.style.flexDirection = 'column'; mountEl.style.minHeight = '0'; }
       root.appendChild(mountEl);
       async function boot(){
         setProjectTitle('');   // 切会话时先清空，避免短暂显示上一个项目
@@ -193,7 +223,7 @@ window.__ModuleLoader__.load({
             fullGraph: !!props.fullGraph,
             timelineShow: (cfg.values && cfg.values.timelineShow) || undefined,
             capabilityNote: canSend
-              ? '证据点击即在新标签页打开；拍板与动作按钮会直接发送给我执行（会话不在线时先记下，下次更新生效）。'
+              ? '证据点击即在新标签页打开；点关系图节点可以直接写一句话发给我——消息直接进主对话（拿不到直发通道时会复制并说明原因）。'
               : props.openResource ? '证据点击即在新标签页打开；动作按钮复制指令，粘贴发送我执行。' : '面板内动作按钮会复制指令——粘贴到聊天框发送，我来执行。',
             evidenceUrl: () => null,
             evidenceAction: props.openResource ? path => {
@@ -206,7 +236,9 @@ window.__ModuleLoader__.load({
             reload: () => props.loadAll(sessionId, ctrl.signal),
             verifyWrite: null,   // 写回走 notify（steer/信箱），面板不直接改文件
             decide: canSend ? d => props.notify(sessionId, 'decide', d.text, '用户在仪表盘拍板 ' + d.id + (d.keys && d.keys.length ? '：选 ' + d.keys.join('、') : '') + (d.note ? '（附补充）' : '')) : null,
-            command: canSend ? text => props.notify(sessionId, 'command', text, text.slice(0, 60)) : null,
+            command: canSend ? (text, summary) => props.notify(sessionId, 'command', text, summary || String(text).slice(0, 60)) : null,
+            /* 节点面板的「直接和 agent 说一句」：kind=ask，信箱兜底时可以区分是提问还是改状态的指令 */
+            ask: canSend ? (text, summary) => props.notify(sessionId, 'ask', text, summary || String(text).slice(0, 60)) : null,
             versions: props.makeVersions ? props.makeVersions(sessionId, ctrl.signal) : null,
             settings: (cfg.available && props.configSet) ? {
               view: cfg,
@@ -321,7 +353,7 @@ window.__ModuleLoader__.load({
         if (!ref.current) return undefined;
         return mountDashboard(ref.current, Object.assign({}, props, { onlyTab: 'features', fullGraph: true }));
       }, [sid]);
-      return h('div', { className: 'cydp-host', style: { height: '100%', minHeight: 0 }, ref });
+      return h('div', { className: 'cydp-host', style: { height: '100%', minHeight: 0, flex: '1 1 auto' }, ref });
     }
 
     /* ---------- 文案 ---------- */
@@ -339,7 +371,7 @@ window.__ModuleLoader__.load({
       const t = ctx.locale.bind(NS);
       // 双向闭环的 RPC 载波：没有 connection 服务时退化为「复制指令」
       const carrier = rpcCarrier(ctx);
-      const notify = makeNotify(carrier);
+      const notify = makeNotify(carrier, ctx);
       ctx.effect(() => ctx.sidebarRightTabs.register({
         id: TAB_ID, kind: 'dashboard', priority: 'builtin', keepMounted: true, title: () => t('title'),
         guide: [{ id: 'open', order: 30, title: () => t('guide.title'), description: () => t('guide.desc'), icon: DashGuideArtwork }]
