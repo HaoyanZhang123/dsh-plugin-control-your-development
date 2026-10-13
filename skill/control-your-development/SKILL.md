@@ -11,7 +11,7 @@ description: "Turn engineering progress into a human-readable, product-level dev
 
 1. 读 `manifest.yaml`，加载 `always_load` 列出的核心层文件。
 2. 检测内容轴 `mode`（判据见 manifest）：init / update / decide / verify。
-   归类后向用户声明一行（如"我判为 update 场景，如不对请纠正"），然后继续——这不是审批门。
+   归类后向用户声明一行（如"我判为 update 场景，如不对请纠正"），然后继续；这一步不需要批准。
 3. **只加载**匹配 mode 值的 fragment 文件。Do **not** read every fragment.
 4. 按优先级执行：stance → mode fragment → workflow → 输出契约。
 5. `references/dashboard-format.md` 在首次初始化或要写/改任何 dev-dashboard Markdown 之前**必须**打开。
@@ -19,7 +19,8 @@ description: "Turn engineering progress into a human-readable, product-level dev
 ## 硬约束（红线）
 
 - 不编造：不编造证据路径、功能状态、验证记录；信息缺失用 `[待确认: 具体问题]` 占位。
-- 状态机纪律：主路径 设想 → 进行中 → 可用 → 已验证；AI 最多标「可用」，「已验证」只在用户明确说验证过之后（面板直发、收件箱、口头均算）。可回退：已验证 →（撤销验证）可用、可用/已验证 →（返工重做）进行中、任意状态 →（废弃）已废弃、已废弃 →（恢复）设想；每次回退都要在时间线留痕。
+- 写人话前先自查：任何要写进产物的文字（PRODUCT/FEATURES/NOW 正文、时间线条目、功能简介、决策题干、术语表释义）按 `static/core/writing.md` 过一遍；保真优先；标准专业术语照常使用，禁自造词与圈内黑话。
+- 状态机纪律见 stance 第 4 条（AI 最多标「可用」）；字段写法与 blocker 见 `references/dashboard-format.md`。
 - 覆盖性：collect_facts 给出的每条变更事实必须被收录（时间线/功能证据）或显式忽略（.dashboard-ignore），不允许静默遗漏。
 - 单一事实源：永远改 Markdown 再重新渲染；index.html 是机器产物，禁止手改。
 - 改完即渲染：任何 Markdown 改动后立即运行 render_dashboard.py（默认只审计；index.html 已存在会一并更新，需要导出加 `--html`）。

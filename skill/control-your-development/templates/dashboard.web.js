@@ -69,24 +69,67 @@ async function reloadData(){
   let factsRaw = null, ignoreRaw = null;
   try{ factsRaw = await readText(root, 'dev-dashboard/.facts.json'); }catch(e){}
   try{ ignoreRaw = await readText(root, 'dev-dashboard/.dashboard-ignore'); }catch(e){}
-  /* 术语表：文件名不写死 —— 先看渲染器写下的 .cyd.json，再按候选名探测（此前漏读，导致点「更新」后术语表消失） */
-  let cydMeta = {};
-  try{ cydMeta = JSON.parse(await readText(root, 'dev-dashboard/.cyd.json')) || {}; }catch(e){}
-  let glossName = (cydMeta && typeof cydMeta.glossary_file === 'string' && cydMeta.glossary_file) || null;
-  if (!glossName){
-    for (const c of ['GLOSSARY.md', 'glossary.md', '术语表.md', '词汇表.md', 'TERMS.md']){
-      try{ await readText(root, 'dev-dashboard/' + c); glossName = c; break; }catch(e){}
-    }
+  /* 术语表：判定**调用共享核**（`CYD.resolveGlossary`），这里只做 IO 注入。
+     离线网页同样没有列目录能力 → 候选集按惯用名探测（那是 IO，不是判定）。
+     读 `.cyd.json` 失败**不再静默**：原文照传，由共享核判成 `meta_error` → 与 Python 同一条 WARN。 */
+  /* 读不到 .cyd.json（不存在 / 无权限）→ metaRaw = null = "没有这个文件"，**不产 flag**
+     （flag 只表示"文件在、但内容不是合法 JSON 对象"，见契约 §167）；读失败本身不该让刷新抛错。 */
+  let metaRaw = null;
+  try{ metaRaw = await readText(root, 'dev-dashboard/.cyd.json'); }catch(e){ metaRaw = null; }
+  const probe = ['GLOSSARY.md', 'glossary.md', '术语表.md', '词汇表.md', 'TERMS.md'];
+  const texts = {};
+  for (const c of probe){
+    try{ const t = await readText(root, 'dev-dashboard/' + c); if (t != null) texts[c] = t; }catch(e){}
   }
+  let metaHint = null;
+  try{ metaHint = metaRaw ? JSON.parse(metaRaw) : null; }catch(e){ metaHint = null; }
+  const extra = metaHint && typeof metaHint === 'object'
+    ? [metaHint.glossary, metaHint.glossary_file].filter(x => typeof x === 'string' && x.trim()) : [];
+  for (const c of extra){
+    if (texts[c] === undefined){ try{ const t = await readText(root, 'dev-dashboard/' + c); if (t != null) texts[c] = t; }catch(e){} }
+  }
+  const glossStatus = CYD.resolveGlossary({
+    metaRaw,
+    /* 惯用名按**大小写去重**：Windows 不区分文件名大小写，`GLOSSARY.md` 与 `glossary.md` 会读到同一文件 → 两个同内容候选 → 判 ambiguous → 术语表整块静默失效（仅 Windows）。 */
+    listMd: Object.keys(texts).filter((k, i, arr) => arr.findIndex(x => x.toLowerCase() === k.toLowerCase()) === i),
+    readText: n => (texts[n] === undefined ? null : texts[n])
+  });
+  const glossName = glossStatus.file;
   let glossRaw = null;
-  if (glossName){ try{ glossRaw = await readText(root, 'dev-dashboard/' + glossName); }catch(e){ glossRaw = null; } }
-  const glossStatus = {
-    file: glossName,
-    source: (cydMeta && cydMeta.glossary_source) || (glossName ? 'sniff' : 'none'),
-    candidates: (cydMeta && cydMeta.glossary_candidates) || []
+  if (glossName){
+    if (texts[glossName] != null) glossRaw = texts[glossName];
+    else { try{ glossRaw = await readText(root, 'dev-dashboard/' + glossName); }catch(e){ glossRaw = null; } }
+  }
+  /* 声明类文件（TECH.md / CHANGES.md）：**离线网页也必须读**。
+     契约要求"面板与离线网页看到同一结果" —— 只由 Python 内联、web.js 这条实时链不读的话，
+     走实时刷新路径时技术视图会退化成空态（实测过）。判定仍调**共享核**，这里只做 IO 注入。 */
+  const declaredOf = async kind => {
+    const names = kind === 'tech' ? ['TECH.md', 'tech.md', '技术地图.md'] : ['CHANGES.md', 'changes.md', '变更规则.md'];
+    const dt = {};
+    for (const c of names){
+      if (texts[c] !== undefined){ dt[c] = texts[c]; continue; }
+      try{ const t = await readText(root, 'dev-dashboard/' + c); if (t != null) dt[c] = t; }catch(e){}
+    }
+    let hint = null;
+    try{ hint = metaRaw ? JSON.parse(metaRaw) : null; }catch(e){ hint = null; }
+    const extra = (hint && typeof hint === 'object')
+      ? [hint[kind], hint[kind + '_file']].filter(x => typeof x === 'string' && x.trim()) : [];
+    for (const c of extra){
+      if (dt[c] === undefined){ try{ const t = await readText(root, 'dev-dashboard/' + c); if (t != null) dt[c] = t; }catch(e){} }
+    }
+    /* 惯用名按**大小写去重**（Windows 不区分大小写：TECH.md 与 tech.md 是同一文件 → 会被判 ambiguous） */
+    const listMd = Object.keys(dt).filter((k, i, arr) => arr.findIndex(x => x.toLowerCase() === k.toLowerCase()) === i);
+    const st = CYD.resolveDeclared({ kind, metaRaw, listMd, readText: n => (dt[n] === undefined ? null : dt[n]) });
+    return { st, raw: st.file ? dt[st.file] : null };
   };
+  const techD = await declaredOf('tech');
+  const changesD = await declaredOf('changes');
   return CYD.assembleData(
+    /* 刻意不传 inboxRaw：离线网页读不到 .inbox.jsonl（也没有文件写入权限），
+       inbox_pending 保持 undefined —— 掌控条不渲染「⏳ 待生效」徽章（契约 v1.5）。 */
     { prod, feat, now, glossRaw, glossName, glossStatus, factsRaw, ignoreRaw,
+      techRaw: techD.raw, techName: techD.st.file, techStatus: techD.st,
+      changesRaw: changesD.raw, changesName: changesD.st.file, changesStatus: changesD.st,
       workspace_uri: window.__CYD_DATA__.workspace_uri },
     p => fileExists(root, p));
 }

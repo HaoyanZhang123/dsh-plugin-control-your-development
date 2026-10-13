@@ -22,6 +22,8 @@ window.__ModuleLoader__.load({
 
     const NS = 'devDashboard';
     const TAB_ID = 'dev-dashboard';
+    /* 右侧栏 tab 的 kind：`sidebarRightTabs.register` 与 `sidebarRight.openTab` 两处共用一份 —— 单一事实源 */
+    const TAB_KIND = 'dashboard';
     const MAP_TAB_ID = 'dev-dashboard-map';
 
     /* 标签标题里的项目名：面板体读到数据后写进来，标签订阅它 */
@@ -129,30 +131,96 @@ window.__ModuleLoader__.load({
       const ignoreRaw = await readOpt(remote, sessionId, 'dev-dashboard/.dashboard-ignore', signal);
       /* 术语表：文件名不写死 —— 面板没有列目录能力（workspaceFiles 只有 read/stat），
          所以先读渲染器写下的 .cyd.json（真实文件名 + 解析状态），再按候选名 stat 兜底。 */
-      let cydMeta = {};
-      try { cydMeta = JSON.parse((await readOpt(remote, sessionId, 'dev-dashboard/.cyd.json', signal)) || '{}') || {}; }
-      catch (e){ cydMeta = {}; }
-      let glossName = (cydMeta && typeof cydMeta.glossary_file === 'string' && cydMeta.glossary_file) || null;
-      if (!glossName){
-        for (const c of GLOSS_FALLBACKS){
-          if (await exists(remote, sessionId, 'dev-dashboard/' + c, signal)){ glossName = c; break; }
+      /* 术语表：判定**调用共享核**（`CYD.resolveGlossary`，契约化入口），这里只做 IO 注入。
+         面板没有列目录能力（workspaceFiles 只有 read/stat），所以候选集只能按惯用名探测 ——
+         那是"IO 能拿到哪些文件"，判定（显式指定 / 嗅探 / 歧义 / 两个失败 flag）全在共享核里。
+         读 `.cyd.json` 失败**不再静默**：原文照传，由共享核判成 `meta_error` flag → 两端同一条 WARN。 */
+      const metaRaw = await readOpt(remote, sessionId, 'dev-dashboard/.cyd.json', signal);
+      const probe = ['GLOSSARY.md', 'glossary.md', '术语表.md', '词汇表.md', 'TERMS.md'];
+      const texts = {};
+      for (const c of probe){
+        const t = await readOpt(remote, sessionId, 'dev-dashboard/' + c, signal);
+        if (t != null) texts[c] = t;
+      }
+      /* .cyd.json 里点名的文件也要能读到（显式指定优先于探测列表） */
+      let metaHint = null;
+      try { metaHint = metaRaw ? JSON.parse(metaRaw) : null; }catch (e){ metaHint = null; }
+      const extra = metaHint && typeof metaHint === 'object'
+        ? [metaHint.glossary, metaHint.glossary_file].filter(x => typeof x === 'string' && x.trim()) : [];
+      for (const c of extra){
+        if (texts[c] === undefined){
+          const t = await readOpt(remote, sessionId, 'dev-dashboard/' + c, signal);
+          if (t != null) texts[c] = t;
         }
       }
-      const glossRaw = glossName ? await readOpt(remote, sessionId, 'dev-dashboard/' + glossName, signal) : null;
+      const glossStatus = window.CYD.resolveGlossary({
+        metaRaw,
+        listMd: Object.keys(texts).filter((k, i, arr) => arr.findIndex(x => x.toLowerCase() === k.toLowerCase()) === i),
+        readText: n => (texts[n] === undefined ? null : texts[n])
+      });
+      const glossName = glossStatus.file;
+      const glossRaw = glossName ? (texts[glossName] != null ? texts[glossName]
+        : await readOpt(remote, sessionId, 'dev-dashboard/' + glossName, signal)) : null;
       lastGlossName = glossName;
-      const glossStatus = {
-        file: glossName,
-        source: (cydMeta && cydMeta.glossary_source) || (glossName ? 'sniff' : 'none'),
-        candidates: (cydMeta && cydMeta.glossary_candidates) || []
+      /* 声明类文件（v1.6）：判定调共享核 `CYD.resolveDeclared`，这里只做 IO（与术语表同款）。
+         面板没有列目录能力 → 候选按惯用名探测；.cyd.json 里点名的文件也读上。
+         `.versions/index.json` → 最近一份 TECH.md（**只读、不写**；缺失/坏 JSON/文件不存在 → null
+         = **不产**漂移 WARN，fail-closed 与契约一致）。 */
+      const declaredOf = async kind => {
+        const cands = kind === 'tech'
+          ? ['TECH.md', 'tech.md', '技术地图.md'] : ['CHANGES.md', 'changes.md', '变更规则.md'];
+        const texts = {};
+        for (const c of cands){
+          const t = await readOpt(remote, sessionId, 'dev-dashboard/' + c, signal);
+          if (t != null) texts[c] = t;
+        }
+        let hint = null;
+        try { hint = metaRaw ? JSON.parse(metaRaw) : null; }catch (e){ hint = null; }
+        const extra = hint && typeof hint === 'object'
+          ? [hint[kind], hint[kind + '_file']].filter(x => typeof x === 'string' && x.trim()) : [];
+        for (const c of extra){
+          if (texts[c] === undefined){
+            const t = await readOpt(remote, sessionId, 'dev-dashboard/' + c, signal);
+            if (t != null) texts[c] = t;
+          }
+        }
+        const st = window.CYD.resolveDeclared({ kind, metaRaw, listMd: Object.keys(texts).filter((k, i, arr) => arr.findIndex(x => x.toLowerCase() === k.toLowerCase()) === i),
+          readText: n => (texts[n] === undefined ? null : texts[n]) });
+        return { st, raw: st.file ? (texts[st.file] != null ? texts[st.file] : null) : null };
       };
+      const techD = await declaredOf('tech');
+      const changesD = await declaredOf('changes');
+      const prevTechRaw = await (async () => {
+        const idx = await readOpt(remote, sessionId, 'dev-dashboard/.versions/index.json', signal);
+        if (idx == null) return null;
+        let data = null;
+        try { data = JSON.parse(idx); }catch (e){ return null; }
+        const vers = data && Array.isArray(data.versions) ? data.versions : null;
+        if (!vers) return null;
+        for (let i = vers.length - 1; i >= 0; i--){
+          const d = vers[i] && vers[i].dir;
+          if (typeof d !== 'string') continue;
+          const t = await readOpt(remote, sessionId, 'dev-dashboard/.versions/' + d + '/TECH.md', signal);
+          if (t != null) return t;
+        }
+        return null;
+      })();
+      /* 待生效条数（v1.5）：以 .inbox.jsonl 文件为准，不做本地增量；投递成功后靠本函数/watch 重读再算。
+         三态必须分清：stat 说没有 → 空串（= 0）；stat 说有但读失败 → null（界面显示 —，不猜数字）。 */
+      let inboxRaw = '';
+      if (await exists(remote, sessionId, 'dev-dashboard/.inbox.jsonl', signal)){
+        inboxRaw = await readOpt(remote, sessionId, 'dev-dashboard/.inbox.jsonl', signal);
+      }
       return window.CYD.assembleData(
-        { prod, feat, now, glossRaw, glossName, glossStatus, factsRaw, ignoreRaw },
+        { prod, feat, now, glossRaw, glossName, glossStatus, factsRaw, ignoreRaw, inboxRaw,
+          techRaw: techD.raw, techName: techD.st.file, techStatus: techD.st, techPrevRaw: prevTechRaw,
+          changesRaw: changesD.raw, changesName: changesD.st.file, changesStatus: changesD.st },
         p => exists(remote, sessionId, p, signal));
     }
     /* 版本快照读取（workspaceFiles 只有读方法，够了）：list / read(n) / current()
        术语表按 loadAll 解析到的真实文件名走（项目可以叫 术语表.md / glossary.md …） */
     const VERSION_BASE = ['PRODUCT.md', 'FEATURES.md', 'NOW.md'];
-    const GLOSS_FALLBACKS = ['GLOSSARY.md', 'glossary.md', '术语表.md', '词汇表.md', 'TERMS.md'];
+    /* 候选探测名单只表示"面板能读哪些惯用名"（没有列目录能力）；**判定**在共享核 resolveGlossary 里 */
     let lastGlossName = null;
     function makeVersions(remote, sessionId, signal){
       async function readIndex(){
@@ -201,16 +269,21 @@ window.__ModuleLoader__.load({
     }
 
     /* ---------- 面板挂载：共享渲染核 ---------- */
-    const EMPTY_STYLE = 'padding:26px 18px;color:var(--dsw-alias-label-tertiary,#8a93a3);font-size:13px;line-height:2';
-    const CMD_BTN_STYLE = 'margin-top:10px;padding:6px 14px;border:1px solid var(--dsw-alias-line-secondary,#d5dae4);background:transparent;border-radius:999px;cursor:pointer;font-size:12.5px;color:inherit';
+    /* 空态/错误态与仪表盘本体共用 .cyd-app 变量：先补渲染核样式、再加类名。
+       这里不许再写一套内联字号/宿主 token —— 与仪表盘内的文案和控件同一套样式。 */
+    function emptyEl(mountEl, html){
+      if (window.CYD && window.CYD.ensureCss) window.CYD.ensureCss();
+      mountEl.classList.add('cyd-app');
+      mountEl.innerHTML = '<div class="empty">' + html + '</div>';
+    }
     /* 面板里唯一能做的动作是复制指令：把这句话发给我，我来建/更新仪表盘 */
     function copyCommand(mountEl, cmd){
       const btn = mountEl.querySelector('[data-copy-cmd]');
       if (!btn) return;
       btn.onclick = () => {
         const done = () => { btn.textContent = '✓ 已复制，去聊天框粘贴发送'; };
-        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(cmd).then(done).catch(() => { btn.textContent = '复制失败，请手动输入：' + cmd; });
-        else btn.textContent = '请手动输入：' + cmd;
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(cmd).then(done).catch(() => { btn.textContent = '复制失败，请手动复制：' + cmd; });
+        else btn.textContent = '请手动复制：' + cmd;
       };
     }
     function mountDashboard(root, props){
@@ -227,7 +300,7 @@ window.__ModuleLoader__.load({
       async function boot(){
         setProjectTitle('');   // 切会话时先清空，避免短暂显示上一个项目
         if (!sessionId){
-          mountEl.innerHTML = '<div style="' + EMPTY_STYLE + '">先在左侧打开一个会话，<br>这里就会出现它工作区的开发仪表盘。</div>';
+          emptyEl(mountEl, '在左侧打开一个会话，点击右侧边栏，选择开发仪表盘，工作区内共享，初次点击需建立');
           return;
         }
         try{
@@ -243,8 +316,8 @@ window.__ModuleLoader__.load({
             fullGraph: !!props.fullGraph,
             timelineShow: (cfg.values && cfg.values.timelineShow) || undefined,
             capabilityNote: canSend
-              ? '证据点击即在新标签页打开；点关系图节点可以直接写一句话发给我——消息直接进主对话（拿不到直发通道时会复制并说明原因）。'
-              : props.openResource ? '证据点击即在新标签页打开；动作按钮复制指令，粘贴发送我执行。' : '面板内动作按钮会复制指令——粘贴到聊天框发送，我来执行。',
+              ? '证据在新标签页打开。点关系图节点可以写一句话发给我，消息进主对话。（没有直发通道时会改成复制。）'
+              : props.openResource ? '证据在新标签页打开。动作按钮会复制一句指令，粘贴到聊天框发给我。' : '动作按钮会复制一句指令，粘贴到聊天框发给我。',
             evidenceUrl: () => null,
             evidenceAction: props.openResource ? path => {
               // 地址按官方 encodeSegment/encodePath 逐字构造（保留盘符冒号）
@@ -255,6 +328,8 @@ window.__ModuleLoader__.load({
             } : null,
             reload: () => props.loadAll(sessionId, ctrl.signal),
             verifyWrite: null,   // 写回走 notify（steer/信箱），面板不直接改文件
+            /* 整页「查看详情」用：宿主未注入时为 null ⇒ 共享核只退出整页（不静默假装开了侧栏） */
+            openSidebar: props.openSidebar || null,
             decide: canSend ? d => props.notify(sessionId, 'decide', d.text, '用户在仪表盘拍板 ' + d.id + (d.keys && d.keys.length ? '：选 ' + d.keys.join('、') : '') + (d.note ? '（附补充）' : '')) : null,
             command: canSend ? (text, summary) => props.notify(sessionId, 'command', text, summary || String(text).slice(0, 60)) : null,
             /* 节点面板的「直接和 agent 说一句」：kind=ask，信箱兜底时可以区分是提问还是改状态的指令 */
@@ -273,31 +348,31 @@ window.__ModuleLoader__.load({
           if (noDash){
             // 这个工作区还没建仪表盘：能直发就直接发，不行再给复制指令
             if (props.notify){
-              mountEl.innerHTML = '<div style="' + EMPTY_STYLE + '">这个工作区还没有开发仪表盘。<br>建立后这里会自动出现，且每个工作区各显各的。<br><br>'
-                + '<button data-send-cmd style="' + CMD_BTN_STYLE + '">📤 发送：control my development</button>'
-                + '<br><br><span style="opacity:.75">点一下直接发给我，我来建立。</span></div>';
+              emptyEl(mountEl, '这个工作区还没有仪表盘。每个工作区各有一份，工作区内对话共享。'
+                + '<br><br><button class="btn primary" data-send-cmd>发送：control my development</button>'
+                + '<br><br><span class="muted">点一下发给我，我来建。</span>');
               const sb = mountEl.querySelector('[data-send-cmd]');
               sb.onclick = () => {
                 sb.disabled = true;
                 props.notify(sessionId, 'command', 'control my development', '用户请求建立开发仪表盘')
-                  .then(r => { sb.textContent = r === 'queued' ? '✓ 已记下，下次更新时建立' : '✓ 已发送，我来建立'; })
+                  .then(r => { sb.textContent = r === 'queued' ? '✓ 已记下，下次更新时生效' : '✓ 已发送，我来建立'; })
                   .catch(() => { sb.disabled = false; sb.textContent = '发送失败，请在聊天框输入：control my development'; });
               };
             } else {
-              mountEl.innerHTML = '<div style="' + EMPTY_STYLE + '">这个工作区还没有开发仪表盘。<br>建立后这里会自动出现，且每个工作区各显各的。<br><br>'
-                + '<button data-copy-cmd style="' + CMD_BTN_STYLE + '">复制指令：control my development</button>'
-                + '<br><br><span style="opacity:.75">复制后粘贴到左侧聊天框发送，我来建立。</span></div>';
+              emptyEl(mountEl, '这个工作区还没有仪表盘。每个工作区各有一份，工作区内对话共享。'
+                + '<br><br><button class="btn primary" data-copy-cmd>复制指令：control my development</button>'
+                + '<br><br><span class="muted">复制好了，粘贴到聊天框发给我。</span>');
               copyCommand(mountEl, 'control my development');
             }
           } else if (e && e.missing && e.missing.length){
-            mountEl.innerHTML = '<div style="' + EMPTY_STYLE + '">这个工作区的仪表盘缺少文件：<b>' + e.missing.join('、') + '</b><br><br>'
-              + '<button data-copy-cmd style="' + CMD_BTN_STYLE + '">复制指令：更新仪表盘</button></div>';
+            emptyEl(mountEl, '仪表盘缺文件：<b>' + e.missing.join('、') + '</b><br><br>'
+              + '<button class="btn primary" data-copy-cmd>复制指令：更新仪表盘</button>');
             copyCommand(mountEl, '更新仪表盘');
           } else {
             const plain = /bad-request/.test(code) ? '文件太大，宿主拒绝了本次读取'
               : /timeout|abort/i.test(code) ? '读取超时'
               : '读取失败（' + code + '）';
-            mountEl.innerHTML = '<div style="' + EMPTY_STYLE + '">' + plain + '<br><br><a href="#" data-retry>重试</a>，或在聊天框对我说 <b>更新仪表盘</b>。</div>';
+            emptyEl(mountEl, plain + '<br><br><a href="#" data-retry>点这里重试</a>，或在聊天框对我说 <b>更新仪表盘</b>。');
             const b = mountEl.querySelector('[data-retry]');
             if (b) b.onclick = ev => { ev.preventDefault(); boot(); };
           }
@@ -348,7 +423,7 @@ window.__ModuleLoader__.load({
       const tab = props.useTabInfo ? props.useTabInfo().tab : null;
       const proj = useProjectTitle();
       const base = tab ? tab.title : '开发仪表盘';
-      // 带上项目名，一眼看出这份看板是哪个工作区的
+      // 带上项目名，一眼看出这份仪表盘是哪个工作区的
       return h(react.Fragment, null, h(DashIcon), h('span', { className: 'cydp-tabtitle' }, proj ? base + ' · ' + proj : base));
     }
     function DashboardBody(props){
@@ -377,7 +452,7 @@ window.__ModuleLoader__.load({
     }
 
     /* ---------- 文案 ---------- */
-    const zh = { title: '开发仪表盘', 'guide.title': '开发仪表盘', 'guide.desc': '功能地图、验证进度、等你拍板的事，都在这里', 'map.tab': '功能地图' };
+    const zh = { title: '开发仪表盘', 'guide.title': '开发仪表盘', 'guide.desc': '功能地图、验证进度、等你拍板的事，都在这里。', 'map.tab': '功能地图' };
     const en = { title: 'Dev Dashboard', 'guide.title': 'Dev Dashboard', 'guide.desc': 'Features, progress and pending decisions', 'map.tab': 'Feature Map' };
 
     /* ---------- 注册 ---------- */
@@ -385,6 +460,27 @@ window.__ModuleLoader__.load({
       injectTitleCss();
       // 证据「打开文件」走宿主公开服务（与官方文件面板同一条路），不依赖组件 props 管道
       const nav = ctx.sidebarRight;
+      /* 整页「功能地图」的「查看详情」按钮：退出整页 + 在右侧边栏打开**本**仪表盘 tab。
+         ⚠ **`nav.openTab(TAB_KIND)` 这条路已确认有问题（2026-10-13 用户实拍）**：会话页那个视图
+         自己变成了仪表盘，从侧栏回来仍是。**根因**：我按 **kind** 传参，依据是这里原先那句注释，
+         而那句来自**生态里的一个例子**（dsh-context 的 id 与 kind 恰好同串 ⇒ 对参数语义零信息量）：
+         **"生态里有例子" ≠ "有契约"**。详见
+         `plugins/control-your-development/notes/2026-10-13-opentab-参数语义歧义.md`。
+         修法（方向 A，已批准）：改成「**揭示右侧栏 + 激活我们那个 tab**」两步，**不再调 openTab**。
+         ⚠ **本行以下的行为按修法改造前不要依赖**（本注释只负责不让下一个人再照着旧结论写一遍）。 */
+      function openDashboardTab(){
+        /* **D 版**（2026-10-13 队长批准）：**只点宿主侧栏开关**；不调任何 nav 服务、不点任何 tab。
+           ——「退出整页」那半由调用方完成（`dashboard.core.js` 的点击处理器先 `exitImmersive()` 再调本函数）。
+           为什么砍到这一步：`nav.openTab` 已确认会把【当前视图类型】切成 dashboard（用户实拍）；
+           替代品 `nav.show()` 的语义**我没有任何依据**（"揭示侧栏"是我猜的），`focusTab()`
+           （按标题文本点 `button[role="tab"]`）**可能点到别的 tab** —— 两条都可能是肇事者 ⇒ 一次排除，
+           先把用户看到的"跳转切换"消掉。代价：侧栏可能停在别的 tab（**失效方向安全**：不切视图、不炸）。 */
+        try {
+          const b = document.querySelector('[aria-label="打开右侧边栏"]');
+          if (b){ b.click(); return true; }
+        } catch (e){ console.warn('[cyd] 打开右侧边栏失败', e); }
+        return false;
+      }
       let tabOpen = null;   // 由 DashboardBody 注入（官方同款 tab.actions.openResource）
       const setTabOpen = (fn) => { if (typeof fn === 'function') tabOpen = fn; };
       ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dev-dashboard: locale');
@@ -393,7 +489,7 @@ window.__ModuleLoader__.load({
       const carrier = rpcCarrier(ctx);
       const notify = makeNotify(carrier, ctx);
       ctx.effect(() => ctx.sidebarRightTabs.register({
-        id: TAB_ID, kind: 'dashboard', priority: 'builtin', keepMounted: true, title: () => t('title'),
+        id: TAB_ID, kind: TAB_KIND, priority: 'builtin', keepMounted: true, title: () => t('title'),
         guide: [{ id: 'open', order: 30, title: () => t('guide.title'), description: () => t('guide.desc'), icon: DashGuideArtwork }]
       }), 'dev-dashboard: tab type');
       const face = {
@@ -413,6 +509,7 @@ window.__ModuleLoader__.load({
           return r.value;
         },
         setTabOpen,
+        openSidebar: openDashboardTab,
         openResource: (address) => {
           const errs = [];
           try { if (nav && typeof nav.openResource === 'function'){ nav.openResource(address, {}); return; } }
@@ -435,6 +532,7 @@ window.__ModuleLoader__.load({
           sessionId: String(sessionId),
           loadAll: face.loadAll, watchDash: face.watchDash, notify: face.notify,
           makeVersions: face.makeVersions, configGet: face.configGet, configSet: face.configSet, openResource: face.openResource,
+          openSidebar: face.openSidebar,
         }),
       }, MapView));
     }

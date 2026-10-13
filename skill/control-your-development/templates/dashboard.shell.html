@@ -1,15 +1,21 @@
 <div class="wrap">
   <header class="top">
-    <h1 id="projName">开发仪表盘 <span class="by">由 control-your-development 生成</span></h1>
-    <button id="setBtn" title="设置" style="display:none">⚙</button>
-    <button id="verBtn" title="版本快照" style="display:none">🕓</button>
-    <button id="themeBtn" title="切换深浅色">🌓</button>
+    <div class="brand">
+      <h1 id="projName">开发仪表盘</h1>
+      <span class="by">（由 control-your-development 生成）</span>
+    </div>
+    <div class="topacts">
+      <button id="setBtn" class="iconbtn" title="设置" style="display:none">⚙</button>
+      <button id="verBtn" class="iconbtn" title="版本快照" style="display:none">🕓</button>
+      <button id="themeBtn" class="iconbtn" title="切换主题">🌓</button>
+    </div>
   </header>
   <div class="strip" id="strip"></div>
   <nav class="tabs">
     <button data-tab="project" class="on">🏠 项目</button>
     <button data-tab="features">🗺 功能地图</button>
     <button data-tab="now">⚡ 现在</button>
+    <button data-tab="decisions">⚖ 决策与待办</button>
     <button data-tab="glossary">📖 术语表</button>
     <button data-tab="guide">❓ 使用指南</button>
   </nav>
@@ -17,26 +23,33 @@
   <section id="project" class="on"></section>
   <section id="features"></section>
   <section id="now"></section>
+  <section id="decisions"></section>
   <section id="glossary"></section>
 
   <section id="guide">
     <div class="card">
       <h3>功能简介</h3>
-      <p class="lede">control-your-development 把开发过程中繁杂的技术细节，持续整理成清晰的产品视图。你随时可以知道：<b>产品能做什么、怎么用、进展到哪一步</b>；每到需要人做决定的地方，选择权都会交到你手上。</p>
+      <p class="lede">control-your-development 仪表盘把开发进展翻译成人话。你能看到产品能做什么、怎么用、走到哪一步。需要你拿主意的地方，会摆在这里等你拍板。</p>
     </div>
     <div class="card">
       <h3>上手方式</h3>
       <ol class="steps">
         <li data-n="1"><b>建立仪表盘</b><br><span class="muted">在聊天框输入 <code>/control-your-development</code>，或直接说一句 "control my development"</span></li>
-        <li data-n="2"><b>照常开发</b><br><span class="muted">每完成一个阶段，仪表盘会自动更新（前提是建立时启动的看护任务还在运行）；改完文件点顶部「🔄 更新」立即刷新</span></li>
-        <li data-n="3"><b>随时掌握全局</b><br><span class="muted">在 DSH 右侧栏打开「开发仪表盘」，或点会话页顶部的「功能地图」看整页大图（可缩放平移）；顶部「数据健康 / 等你拍板 / 功能验证」等徽章都能点开看详情。想要离线分享时对我说「导出网页版」</span></li>
-        <li data-n="4"><b>处理「等你拍板」</b><br><span class="muted">点顶部「等你拍板」徽章打开拍板中心 → 点选选项（可写补充）→「发送拍板」直接告诉我；会话不在线时会先记下，下次更新生效</span></li>
-        <li data-n="5"><b>亲手验证</b><br><span class="muted">试用某功能后，点开它的功能卡按「✅ 我已验证」（或在聊天框说"我验证过了"）→ 🤖 变 ✅，进度条前进</span></li>
+        <li data-n="2"><b>照常开发</b><br><span class="muted">每完成一个阶段，仪表盘就会更新。想立刻刷新，点顶部「更新」。</span></li>
+        <li data-n="3"><b>随时掌握全局</b><br><span class="muted">打开会话右侧栏，点击打开「开发仪表盘」，会话页顶部是整页「功能地图」。顶部徽章都能点开看详情。要离线分享就说「导出网页版」。</span></li>
+        <li data-n="4"><b>处理「等你拍板」</b><br><span class="muted">点顶部「等你拍板」打开拍板面板 → 勾选项、可写补充 → 「发送拍板」。会话不在线时会先记下，下次更新生效。</span></li>
+        <li data-n="5"><b>亲手验证</b><br><span class="muted">试用过某功能后，在它的功能卡上点「✅ 我已验证」，进度条前进。</span></li>
       </ol>
     </div>
+    <div class="card">
+      <h3>⚖ 决策与待办怎么用</h3>
+      <p class="lede">需要你拍板的事、等你做的待办都在这一页。勾选后点「发送拍板」，我来落定；做完一件待办，勾一下就行。</p>
+    </div>
+    <div class="card">
+      <h3>待办不做也能跑</h3>
+      <p class="lede">待办只是提醒你还没确认的事，不做也不会挡住开发。</p>
+    </div>
   </section>
-
-  <footer id="foot"></footer>
 </div>
 <div class="toast" id="toast"></div>
 <div class="ovl" id="ovl"><div class="sheet" id="sheet"></div></div>

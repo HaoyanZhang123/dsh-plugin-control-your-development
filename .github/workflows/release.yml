@@ -14,6 +14,12 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    env:
+      # 自检会 import 同目录模块 ⇒ 在 skill/control-your-development/scripts/ 下生成 __pycache__/*.pyc；
+      # 而 package.json 的 files 白名单含 "skill" ⇒ .pyc 会被一起发上 npm（v0.5.4 实测带了 57.8 kB，
+      # 本轮实测 108064 B）。关掉字节码写入。
+      # 注意：必须是 "1"——实测置 "0" **不生效**（skill/ 下照样出现 __pycache__）。
+      PYTHONDONTWRITEBYTECODE: "1"
     steps:
       - uses: actions/checkout@v4
 

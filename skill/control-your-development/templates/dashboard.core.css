@@ -1,30 +1,313 @@
+/* control-your-development 仪表盘样式（面板与离线网页共用的唯一渲染核）。
+   全部规则必须挂在 .cyd-app 作用域下 —— 这份样式会被面板注入 DSH 宿主页面（render_dashboard.py 自检会拦未作用域选择器）。
+   令牌与组件规格见 references/design-tokens.md；改这里等于同时改面板与离线网页。 */
 .cyd-app{
   --bg:#f4f6fa; --panel:#ffffff; --ink:#1b2331; --ink2:#5b6575; --line:#e4e8f0;
-  --accent:#145ceb; --accent-soft:#e8effe; --ok:#127a40; --ok-soft:#e5f6ec; --on-solid:#fff;
-  --warn:#916000; --warn-soft:#fdf3e0; --gray:#616a7b; --gray-soft:#eef1f6;
-  --chip:#eef2f8; --shadow:0 1px 2px rgba(22,32,52,.05),0 4px 14px rgba(22,32,52,.06);
+  --accent:#2f6fed; --accent-soft:#e8effe; --ok:#179a50; --ok-soft:#e5f6ec; --on-solid:#fff;
+  --warn:#c07f00; --warn-soft:#fdf3e0; --gray:#8a93a3; --gray-soft:#eef1f6;
+  --chip:#eef2f8;
+  --shadow-card:0 1px 2px rgba(22,32,52,.05),0 4px 14px rgba(22,32,52,.06);
+  --shadow-pop:0 10px 30px rgba(22,32,52,.18);
   --radius:16px;
-}@media (prefers-color-scheme: dark){.cyd-app{
+}
+@media (prefers-color-scheme: dark){/* 系统深色：只在没有 data-theme 时兜底（主题的唯一来源是 data-theme） */
+.cyd-app{
   --bg:#13161c; --panel:#1c212b; --ink:#e7ebf3; --ink2:#9aa4b5; --line:#2b3240;
   --accent:#6f9dff; --accent-soft:#22304d; --ok:#4ecb7f; --ok-soft:#173325; --on-solid:#13161c;
-  --warn:#e0a63c; --warn-soft:#3a2d14; --gray:#9099a8; --gray-soft:#262d3a;
-  --chip:#252c39; --shadow:0 1px 2px rgba(0,0,0,.35),0 4px 14px rgba(0,0,0,.3);
-}}.cyd-app[data-theme="light"]{ --bg:#f4f6fa; --panel:#fff; --ink:#1b2331; --ink2:#5b6575; --line:#e4e8f0; --accent:#145ceb; --accent-soft:#e8effe; --ok:#127a40; --ok-soft:#e5f6ec; --warn:#916000; --warn-soft:#fdf3e0; --gray:#616a7b; --gray-soft:#eef1f6; --on-solid:#fff; --chip:#eef2f8; --shadow:0 1px 2px rgba(22,32,52,.05),0 4px 14px rgba(22,32,52,.06); }.cyd-app[data-theme="dark"]{ --bg:#13161c; --panel:#1c212b; --ink:#e7ebf3; --ink2:#9aa4b5; --line:#2b3240; --accent:#6f9dff; --accent-soft:#22304d; --ok:#4ecb7f; --ok-soft:#173325; --warn:#e0a63c; --warn-soft:#3a2d14; --gray:#9099a8; --gray-soft:#262d3a; --on-solid:#13161c; --chip:#252c39; --shadow:0 1px 2px rgba(0,0,0,.35),0 4px 14px rgba(0,0,0,.3); }.cyd-app *{box-sizing:border-box}.cyd-app{scroll-behavior:smooth}.cyd-app :focus-visible, .cyd-app:focus-visible{outline:2px solid var(--accent) !important;outline-offset:2px}.cyd-app{margin:0;background:var(--bg);color:var(--ink);font:15px/1.7 -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;-webkit-font-smoothing:antialiased}.cyd-app .wrap{max-width:1120px;margin:0 auto;padding:26px 22px 70px}.cyd-app header.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.cyd-app h1{font-size:21px;margin:0;letter-spacing:.2px}.cyd-app h1 .by{font-size:12.5px;color:var(--ink2);font-weight:400;margin-left:10px}.cyd-app #themeBtn{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:999px;padding:6px 13px;cursor:pointer;font-size:14px;box-shadow:var(--shadow)}.cyd-app .strip{display:flex;gap:10px;margin:18px 0 6px;flex-wrap:wrap}.cyd-app .pill{flex:1;min-width:150px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px 14px;box-shadow:var(--shadow);text-align:center;cursor:pointer;font:inherit;color:var(--ink)}.cyd-app .pill:hover{border-color:var(--accent)}.cyd-app .pill.static{cursor:default}.cyd-app .pill.static:hover{border-color:var(--line)}.cyd-app .pill .k{font-size:12px;color:var(--ink2);letter-spacing:.4px}.cyd-app .pill .v{font-size:16px;font-weight:650;margin-top:2px}.cyd-app .pill.alert{border-color:color-mix(in srgb,var(--warn) 55%,var(--line));background:var(--warn-soft)}.cyd-app .pill.good{border-color:color-mix(in srgb,var(--ok) 45%,var(--line));background:var(--ok-soft)}.cyd-app .min{border:1px solid var(--line);background:var(--panel);color:var(--ink2);border-radius:8px;padding:1px 7px;font-size:12px;cursor:pointer;line-height:1.5}.cyd-app .min:hover{border-color:var(--accent);color:var(--accent)}.cyd-app .lk{color:var(--accent);cursor:pointer;border-bottom:1px dashed color-mix(in srgb,var(--accent) 45%,transparent)}.cyd-app .lk:hover{border-bottom-style:solid}.cyd-app nav.tabs{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}.cyd-app nav.tabs button{border:1px solid var(--line);background:var(--panel);color:var(--ink2);padding:8px 18px;border-radius:999px;cursor:pointer;font-size:14px;transition:.15s;box-shadow:var(--shadow)}.cyd-app nav.tabs button:hover{color:var(--ink);transform:translateY(-1px)}.cyd-app nav.tabs button.on{background:var(--accent);border-color:var(--accent);color:var(--on-solid);font-weight:600}.cyd-app section{display:none;margin-top:20px}.cyd-app section.on{display:block;animation:fade .25s ease}
-@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1}}.cyd-app .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:20px 22px;box-shadow:var(--shadow);margin-bottom:16px}.cyd-app .card.flash{outline:2px solid var(--accent);outline-offset:2px}.cyd-app .card h3{margin:0 0 8px;font-size:16px;letter-spacing:.2px}.cyd-app .muted{color:var(--ink2);font-size:14px}.cyd-app .lede{font-size:15.5px;margin:4px 0 0;white-space:pre-line}.cyd-app .tag{display:inline-block;background:var(--accent-soft);color:var(--accent);border-radius:8px;font-size:12px;padding:2px 9px;margin:8px 8px 0 0;font-weight:600}.cyd-app .steps{margin:12px 0 0;padding:0;list-style:none}.cyd-app .steps li{position:relative;padding:0 0 24px 46px}.cyd-app .steps li::before{content:attr(data-n);position:absolute;left:0;top:1px;width:30px;height:30px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:13.5px;font-weight:700;border:1.5px solid color-mix(in srgb,var(--accent) 35%,transparent)}.cyd-app .steps li::after{content:"";position:absolute;left:14px;top:34px;bottom:4px;width:2px;background:var(--line);border-radius:2px}.cyd-app .steps li:last-child::after{display:none}.cyd-app .steps b{font-size:15px}.cyd-app .ev{margin-top:8px;display:flex;flex-wrap:wrap;gap:6px}.cyd-app .ev a, .cyd-app .ev button{font-size:12.5px;background:var(--chip);border:1px solid var(--line);border-radius:9px;padding:3px 10px;color:var(--ink2);text-decoration:none;cursor:pointer;transition:.15s}.cyd-app .ev a:hover, .cyd-app .ev button:hover{border-color:var(--accent);color:var(--accent)}.cyd-app .ev a.miss{border-color:color-mix(in srgb,var(--warn) 60%,var(--line));color:var(--warn)}.cyd-app .evrow{display:inline-flex;align-items:center;gap:3px;margin-right:4px}.cyd-app .filters{display:flex;gap:8px;flex-wrap:wrap;margin:2px 0 14px}.cyd-app .filters button{border:1px solid var(--line);background:var(--panel);color:var(--ink2);border-radius:999px;padding:5px 14px;font-size:13px;cursor:pointer;transition:.15s}.cyd-app .filters button.on{background:var(--ink);color:var(--bg);border-color:var(--ink);font-weight:600}.cyd-app .progress{height:12px;border-radius:8px;background:var(--chip);overflow:hidden;margin:4px 0 6px;position:relative}.cyd-app .progress i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--ok));border-radius:8px;transition:width .5s ease}.cyd-app .plabel{font-size:12.5px;color:var(--ink2);margin-bottom:16px}.cyd-app .graphbox{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:18px;overflow:hidden;position:relative}.cyd-app .graphbox .ghead{display:flex;justify-content:space-between;align-items:center;padding:12px 18px;border-bottom:1px solid var(--line)}.cyd-app .graphbox .ghead b{font-size:15px}.cyd-app .graphbox .ghead span{font-size:12px;color:var(--ink2)}.cyd-app .legend{display:flex;gap:16px;flex-wrap:wrap;padding:9px 18px;border-bottom:1px solid var(--line);font-size:12.5px;color:var(--ink2)}.cyd-app .legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px}.cyd-app .graphbox svg{display:block;width:100%;height:340px;cursor:grab;touch-action:none}.cyd-app .graphbox svg:active{cursor:grabbing}.cyd-app .node{cursor:pointer}.cyd-app .node rect{stroke-width:1.5;transition:.15s}.cyd-app .node:hover rect{filter:brightness(1.05)}.cyd-app .node text{font-size:12.5px;font-weight:600;pointer-events:none}.cyd-app .edge{fill:none;stroke:var(--gray);stroke-width:1.4;opacity:.45}.cyd-app .nodepop{position:absolute;z-index:5;width:235px;background:var(--panel);border:1px solid var(--accent);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.25);padding:12px 14px;cursor:pointer;display:none}.cyd-app .nodepop.on{display:block}.cyd-app .nodepop h4{margin:0 0 4px;font-size:14px;display:flex;gap:7px;align-items:center;flex-wrap:wrap}.cyd-app .nodepop p{margin:2px 0 6px;font-size:12.5px;color:var(--ink2)}.cyd-app .nodepop .go{font-size:12px;color:var(--accent);font-weight:600}.cyd-app .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(310px,100%),1fr));gap:14px}.cyd-app .feat{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:17px 19px;box-shadow:var(--shadow);transition:.18s;cursor:pointer}.cyd-app .feat:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}.cyd-app .feat.flash{outline:2px solid var(--accent);outline-offset:2px}.cyd-app .feat.deprecated{opacity:1;background:var(--chip)}.cyd-app .feat h3{display:flex;align-items:center;gap:8px;font-size:15.5px;flex-wrap:wrap;margin:0 0 4px}.cyd-app .badge{font-size:11.5px;padding:2px 10px;border-radius:999px;font-weight:700;white-space:nowrap}.cyd-app .b-x1{background:var(--gray-soft);color:var(--gray)}.cyd-app .b-x2{background:var(--accent-soft);color:var(--accent)}.cyd-app .b-x3{background:var(--warn-soft);color:var(--warn)}.cyd-app .b-x4{background:var(--ok-soft);color:var(--ok)}.cyd-app .b-x5{background:var(--gray-soft);color:var(--ink2);text-decoration:line-through}.cyd-app .verifier{margin-top:9px;font-size:12.5px;color:var(--ink2)}.cyd-app .cols{display:grid;grid-template-columns:1.15fr 1fr;gap:16px;align-items:start}@media (max-width:840px){.cyd-app .cols{grid-template-columns:1fr}}.cyd-app .tl{margin:0;padding:0;list-style:none}.cyd-app .tl li{position:relative;padding:0 0 20px 28px}.cyd-app .tl li::before{content:"";position:absolute;left:6px;top:8px;width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}.cyd-app .tl li::after{content:"";position:absolute;left:10px;top:22px;bottom:1px;width:2px;background:var(--line)}.cyd-app .tl li:last-child::after{display:none}.cyd-app .tl time{font-size:12px;color:var(--ink2)}.cyd-app .tl .old{display:none}.cyd-app .tl.showold .old{display:block}.cyd-app #moreTl{margin-top:2px;border:1px dashed var(--line);background:transparent;color:var(--ink2);border-radius:10px;padding:7px 14px;font-size:13px;cursor:pointer;width:100%}.cyd-app #moreTl:hover{color:var(--accent);border-color:var(--accent)}.cyd-app .decision{border:1px solid color-mix(in srgb,var(--warn) 40%,var(--line));border-left:4px solid var(--warn);background:var(--warn-soft);border-radius:12px;padding:15px 17px;margin-bottom:14px}.cyd-app .decision.decided{border-color:var(--line);border-left-color:var(--ok);background:var(--panel)}.cyd-app .decision h4{margin:0 0 3px;font-size:15px}.cyd-app .decision .did{font-size:11.5px;color:var(--warn);font-weight:700;letter-spacing:.5px}.cyd-app .decision.decided .did{color:var(--ok)}.cyd-app .optbtn{display:flex;gap:10px;align-items:flex-start;width:100%;text-align:left;margin-top:8px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:9px 12px;cursor:pointer;font-size:13.5px;color:var(--ink);transition:.15s}.cyd-app .optbtn:hover{border-color:var(--warn);transform:translateY(-1px)}.cyd-app .optbtn b{min-width:20px;color:var(--warn)}.cyd-app .optbtn .tick{margin-left:auto;color:var(--accent);font-weight:800;visibility:hidden}.cyd-app .optbtn.sel{border-color:var(--accent);background:var(--accent-soft)}.cyd-app .optbtn.sel .tick{visibility:visible}.cyd-app .optbtn[disabled]{cursor:default;opacity:.75}.cyd-app .optbtn[disabled]:hover{transform:none;border-color:var(--line)}.cyd-app .optbtn .chosen{color:var(--ok);font-weight:700}.cyd-app .note{width:100%;margin-top:10px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--ink);padding:8px 11px;font:inherit;font-size:13.5px;min-height:54px;resize:vertical}.cyd-app .copybtn{margin-top:10px;border:1px solid var(--accent);background:var(--accent);color:var(--on-solid);border-radius:10px;padding:8px 16px;font-size:13.5px;cursor:pointer;font-weight:600}.cyd-app .copybtn:hover{filter:brightness(1.07)}.cyd-app .dhint{font-size:12px;color:var(--ink2);margin:9px 0 0}.cyd-app .todo{display:flex;gap:9px;align-items:flex-start;font-size:14px;margin-top:8px}.cyd-app .todo input{margin-top:5px;accent-color:var(--ok)}.cyd-app .empty{border:1px dashed var(--line);border-radius:var(--radius);padding:22px;text-align:center;color:var(--ink2);font-size:13.5px;margin-bottom:16px}.cyd-app .toast{position:fixed;left:50%;bottom:34px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--bg);padding:10px 20px;border-radius:999px;font-size:13.5px;opacity:0;pointer-events:none;transition:.25s;box-shadow:0 6px 24px rgba(0,0,0,.25);z-index:70}.cyd-app .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}.cyd-app .ovl{position:fixed;inset:0;background:rgba(15,20,30,.45);display:none;align-items:flex-start;justify-content:center;z-index:60;padding:40px 16px}.cyd-app .ovl.on{display:flex}.cyd-app .sheet{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:0 18px 60px rgba(0,0,0,.35);max-width:760px;width:100%;max-height:calc(100vh - 90px);overflow:hidden;padding:0;position:relative;display:flex;flex-direction:column}.cyd-app .sheethead{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px 24px 12px;border-bottom:1px solid var(--line);flex:none}.cyd-app .sheetbody{overflow:auto;padding:8px 24px 22px;flex:1;min-height:0}.cyd-app .sheethead h3{margin:0;font-size:17px;display:flex;gap:9px;align-items:center;flex-wrap:wrap}.cyd-app .xbtn{border:1px solid var(--line);background:var(--panel);color:var(--ink2);border-radius:50%;width:30px;height:30px;cursor:pointer;font-size:14px;line-height:1;flex:none}.cyd-app .xbtn:hover{border-color:var(--accent);color:var(--accent)}.cyd-app .kv{font-size:13.5px;margin-top:10px}.cyd-app .kv b{color:var(--ink2);font-weight:600;margin-right:6px}.cyd-app .depc{display:inline-block;background:var(--chip);border:1px solid var(--line);border-radius:999px;padding:3px 12px;font-size:12.5px;margin:4px 6px 0 0;cursor:pointer;color:var(--ink)}.cyd-app .depc:hover{border-color:var(--accent);color:var(--accent)}.cyd-app .actrow{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px dashed var(--line)}.cyd-app .actbtn{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:10px;padding:8px 15px;font-size:13.5px;cursor:pointer}.cyd-app .actbtn:hover{border-color:var(--accent);color:var(--accent)}.cyd-app .actbtn.primary{border-color:var(--ok);background:var(--ok);color:var(--on-solid);font-weight:700}.cyd-app .actbtn.primary:hover{filter:brightness(1.07);color:var(--on-solid)}.cyd-app footer{margin-top:30px;border-top:1px solid var(--line);padding-top:16px;font-size:13px;color:var(--ink2)}.cyd-app details{margin-top:10px}.cyd-app summary{cursor:pointer;font-size:13px}.cyd-app table{border-collapse:collapse;width:100%;font-size:12.5px;margin-top:10px}.cyd-app th, .cyd-app td{border:1px solid var(--line);padding:6px 10px;text-align:left}.cyd-app th{background:var(--chip)}.cyd-app code{background:var(--chip);border-radius:6px;padding:1px 6px;font-size:12.5px}@media screen and (max-width:380px){.cyd-app .wrap{padding:20px 12px 56px} }@media screen and (max-width:640px){.cyd-app .graphbox{overflow-x:auto}.cyd-app .graphbox svg{min-width:720px} }
-@page{margin:12mm}@media print{/* 打印一律按浅色纸面渲染：复位主题变量，压过 prefers-color-scheme 与 [data-theme="dark"] */
-.cyd-app{--bg:#fff !important;--panel:#fff !important;--ink:#1b2331 !important;--ink2:#5b6575 !important;--line:#c9d0dc !important;--accent:#145ceb !important;--accent-soft:#e8effe !important;--ok:#127a40 !important;--ok-soft:#e5f6ec !important;--warn:#916000 !important;--warn-soft:#fdf3e0 !important;--gray:#616a7b !important;--gray-soft:#eef1f6 !important;--chip:#f2f4f8 !important;--on-solid:#fff !important;--shadow:none !important;background:#fff !important;color:#1b2331 !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}.cyd-app{background:#fff !important}/* 隐藏交互壳；.ovl.on 必须一起压掉，否则弹层会盖在正文上一起打印 */
-.cyd-app nav.tabs, .cyd-app #themeBtn, .cyd-app .filters, .cyd-app .ghead span, .cyd-app .ovl, .cyd-app .ovl.on, .cyd-app .nodepop, .cyd-app .toast, .cyd-app #moreTl, .cyd-app #updBtn, .cyd-app .min[data-cp], .cyd-app .copybtn, .cyd-app .actrow{display:none !important}.cyd-app section{display:block !important}/* 展开被“查看更早的”折叠的时间线；证据按钮不再整体隐藏，文件路径照常打印 */
-.cyd-app .tl .old{display:block !important}.cyd-app .feat.deprecated{opacity:1;background:var(--chip)}.cyd-app .graphbox{overflow:visible}.cyd-app .ev .min, .cyd-app .ev a{background:none;border:0;padding:0;color:#1b2331;text-decoration:underline}.cyd-app .card, .cyd-app .feat, .cyd-app .graphbox, .cyd-app .decision{box-shadow:none !important;break-inside:avoid;page-break-inside:avoid}
+  --warn:#e0a63c; --warn-soft:#3a2d14; --gray:#8a93a3; --gray-soft:#262d3a;
+  --chip:#252c39;
+  --shadow-card:0 1px 2px rgba(0,0,0,.35),0 4px 14px rgba(0,0,0,.3);
+  --shadow-pop:0 10px 30px rgba(0,0,0,.5);
+}}
+.cyd-app[data-theme="light"]{
+  --bg:#f4f6fa; --panel:#fff; --ink:#1b2331; --ink2:#5b6575; --line:#e4e8f0;
+  --accent:#2f6fed; --accent-soft:#e8effe; --ok:#179a50; --ok-soft:#e5f6ec; --warn:#c07f00;
+  --warn-soft:#fdf3e0; --gray:#8a93a3; --gray-soft:#eef1f6; --on-solid:#fff; --chip:#eef2f8;
+  --shadow-card:0 1px 2px rgba(22,32,52,.05),0 4px 14px rgba(22,32,52,.06);
+  --shadow-pop:0 10px 30px rgba(22,32,52,.18);
 }
-.cyd-app .gtools{float:right;display:inline-flex;gap:4px}.cyd-app .gtools button{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:8px;padding:1px 9px;cursor:pointer;font-size:12.5px}.cyd-app .gtools button:hover{border-color:var(--accent);color:var(--accent)}.cyd-app .node .subbadge{cursor:pointer}.cyd-app .node .subbadge circle{fill:var(--panel);stroke:var(--ink2);stroke-width:1}.cyd-app .node .subbadge text{fill:var(--ink2);font-size:10px;pointer-events:none}.cyd-app .node .subbadge:hover circle{stroke:var(--accent)}.cyd-app .node .subbadge:hover text{fill:var(--accent)}.cyd-app .node.child rect{opacity:.92}.cyd-app .edge.child{stroke-dasharray:4 3;opacity:.7}.cyd-app .subsum{display:inline-block;margin-top:8px;font-size:12.5px;color:var(--ink2);background:var(--chip);border:1px solid var(--line);border-radius:8px;padding:2px 9px}.cyd-app .subrow{border-left:3px solid var(--line);padding:6px 0 6px 12px;margin:8px 0}.cyd-app .subrow .badge{margin-right:6px}.cyd-app table.gloss{width:100%;border-collapse:collapse;font-size:13.5px}.cyd-app table.gloss th,.cyd-app table.gloss td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+.cyd-app[data-theme="dark"]{
+  --bg:#13161c; --panel:#1c212b; --ink:#e7ebf3; --ink2:#9aa4b5; --line:#2b3240;
+  --accent:#6f9dff; --accent-soft:#22304d; --ok:#4ecb7f; --ok-soft:#173325; --warn:#e0a63c;
+  --warn-soft:#3a2d14; --gray:#8a93a3; --gray-soft:#262d3a; --on-solid:#13161c; --chip:#252c39;
+  --shadow-card:0 1px 2px rgba(0,0,0,.35),0 4px 14px rgba(0,0,0,.3);
+  --shadow-pop:0 10px 30px rgba(0,0,0,.5);
+}
+.cyd-app *{box-sizing:border-box}
+.cyd-app{scroll-behavior:smooth}
+.cyd-app :focus-visible, .cyd-app:focus-visible{outline:2px solid var(--accent) !important;outline-offset:2px}.cyd-app :focus:not(:focus-visible), .cyd-app:focus:not(:focus-visible){outline:0}
+.cyd-app{margin:0;background:var(--bg);color:var(--ink);font:14px/1.7 -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;-webkit-font-smoothing:antialiased}
+.cyd-app .wrap{max-width:1120px;margin:0 auto;padding:24px 24px 48px}
+
+/* ---------- 头部：.brand 左 + .topacts 右（两段结构） ---------- */
+.cyd-app header.top{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.cyd-app .brand{display:flex;align-items:baseline;min-width:0}
+.cyd-app .brand h1{font-size:21px;margin:0;letter-spacing:.2px}
+.cyd-app .brand .by{font-size:12.5px;color:var(--ink2);font-weight:400;margin-left:10px}
+.cyd-app .topacts{display:flex;align-items:center;gap:6px;margin-left:auto}
+.cyd-app .iconbtn{width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:10px;background:transparent;color:var(--ink2);font-size:16px;line-height:1;padding:0;cursor:pointer;transition:.15s}
+.cyd-app .iconbtn:hover{border-color:var(--accent);color:var(--accent)}
+.cyd-app .iconbtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.cyd-app .iconbtn[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+
+/* ---------- 掌控条（徽章，全部可点） ----------
+   pill 高度**固定且一致**（用户裁定）：值超 2 行用 … 省略、完整原文进 title；单个 pill 永远撑不高整条。 */
+.cyd-app .strip{display:flex;gap:8px;margin:18px 0 6px;flex-wrap:wrap;align-items:stretch}
+.cyd-app .pill{flex:1;min-width:132px;height:88px;display:flex;flex-direction:column;justify-content:center;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:8px 12px;box-shadow:var(--shadow-card);text-align:center;cursor:pointer;font:inherit;color:var(--ink)}
+.cyd-app .pill:hover{border-color:var(--accent)}
+.cyd-app .pill.static{cursor:default}
+.cyd-app .pill.static:hover{border-color:var(--line)}
+.cyd-app .pill .k{font-size:12.5px;line-height:1.4;color:var(--ink2);letter-spacing:.4px}
+.cyd-app .pill .v{font-size:16px;line-height:1.3;font-weight:650;color:var(--ink);margin-top:2px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cyd-app .pill .v .btn.mini{font-size:12.5px;line-height:1.4}
+.cyd-app .pill.alert{border-color:color-mix(in srgb,var(--warn) 55%,var(--line));background:var(--warn-soft)}
+/* ⏳ 待生效 N 条（v1.5）：底色/边框同 .pill.alert；class 与 ok 无关，只表示"有待生效的条目" */
+.cyd-app .pill.pending{border-color:color-mix(in srgb,var(--warn) 55%,var(--line));background:var(--warn-soft)}
+.cyd-app .pill.good{border-color:color-mix(in srgb,var(--ok) 45%,var(--line));background:var(--ok-soft)}
+.cyd-app .lk{color:var(--accent);cursor:pointer;border-bottom:1px dashed color-mix(in srgb,var(--accent) 45%,transparent)}
+.cyd-app .lk:hover{border-bottom-style:solid}
+
+/* ---------- 按钮：唯一一套 .btn / .btn.primary / .btn.mini ---------- */
+.cyd-app .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:10px;padding:6px 12px;font:inherit;font-size:14px;line-height:1.4;font-weight:400;cursor:pointer;white-space:nowrap;transition:.15s}
+.cyd-app .btn:hover{border-color:var(--accent);color:var(--accent)}
+.cyd-app .btn:active{transform:translateY(1px)}
+.cyd-app .btn:disabled{opacity:.55;cursor:default;transform:none}
+.cyd-app .btn.primary{border-color:var(--accent);background:var(--accent);color:var(--on-solid);font-weight:600;box-shadow:var(--shadow-card)}
+.cyd-app .btn.primary:hover{filter:brightness(1.06);color:var(--on-solid)}
+.cyd-app .btn.primary:disabled{opacity:.55;box-shadow:none;filter:none;cursor:default}
+.cyd-app .btn.mini{padding:2px 9px;font-size:12.5px;border-radius:8px}
+
+/* ---------- Tab ---------- */
+.cyd-app nav.tabs{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+.cyd-app nav.tabs button{border:1px solid var(--line);background:var(--panel);color:var(--ink2);padding:8px 18px;border-radius:999px;cursor:pointer;font-size:14px;transition:.15s;box-shadow:var(--shadow-card)}
+.cyd-app nav.tabs button:hover{color:var(--ink);transform:translateY(-1px)}
+.cyd-app nav.tabs button.on{background:var(--accent);border-color:var(--accent);color:var(--on-solid);font-weight:600}
+.cyd-app section{display:none;margin-top:20px}
+.cyd-app section.on{display:block;animation:fade .25s ease}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1}}
+
+/* ---------- 卡片与通用文本 ---------- */
+.cyd-app .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px 24px;box-shadow:var(--shadow-card);margin-bottom:12px}
+.cyd-app .card.flash{outline:2px solid var(--accent);outline-offset:2px}
+.cyd-app .card h3{margin:0 0 8px;font-size:16px;letter-spacing:.2px}
+.cyd-app .muted{color:var(--ink2);font-size:12.5px}
+/* `.kv` 标签列默认 5em（design-tokens §12.3）；「上游依赖功能」「下游依赖功能」是 6 个字，会在
+   `上游依赖功` / `能` 处折成两行。**只给这两行**放宽标签列（`max-content`）并禁止折行 ——
+   不动全局 `.kv`，避免把其它 5em 行的对齐一起改掉。 */
+.cyd-app .kv.kvwide{grid-template-columns:max-content 1fr}
+.cyd-app .kv.kvwide>b{white-space:nowrap}
+.cyd-app .lede{font-size:14px;margin:4px 0 0;white-space:pre-line}
+.cyd-app .snote{color:var(--ink2);font-size:12.5px;line-height:1.6;border-left:3px solid var(--line);padding-left:8px;margin:6px 0 0}
+/* 当前方向/下一步：标签片 + 正文两段式（长正文不再把蓝底撑成两行） */
+.cyd-app .tagrow{display:flex;align-items:baseline;gap:6px;margin:8px 0 0}
+.cyd-app .tag{flex:none;white-space:nowrap;max-width:100%;background:var(--accent-soft);color:var(--accent);border-radius:8px;font-size:11px;padding:2px 9px;font-weight:600}
+.cyd-app .tagval{min-width:0;font-size:14px;line-height:1.7;color:var(--ink);overflow-wrap:anywhere}
+.cyd-app .empty{border:1px dashed var(--line);border-radius:var(--radius);padding:24px;text-align:center;color:var(--ink2);font-size:14px;line-height:1.7;margin-bottom:12px}
+.cyd-app .dhint{font-size:12.5px;color:var(--ink2);margin:8px 0 0}
+
+/* ---------- 使用指南 ---------- */
+/* 步骤紧凑化：单行步骤总高 = max(30,21) + 12 = 42px（圆点与首行文字垂直居中，连线跨过间隙） */
+.cyd-app .steps{margin:12px 0 0;padding:0;list-style:none}
+.cyd-app .steps li{position:relative;padding:0 0 12px 46px;min-height:30px}
+.cyd-app .steps li::before{content:attr(data-n);position:absolute;left:0;top:-4px;width:30px;height:30px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:700;border:1.5px solid color-mix(in srgb,var(--accent) 35%,transparent)}
+.cyd-app .steps li::after{content:"";position:absolute;left:14px;top:34px;bottom:-4px;width:2px;background:var(--line);border-radius:2px}
+.cyd-app .steps li:last-child::after{display:none}
+.cyd-app .steps b{font-size:14px}
+
+/* ---------- 证据 ---------- */
+.cyd-app .ev{margin-top:8px;display:flex;flex-wrap:wrap;gap:6px}
+.cyd-app .ev a, .cyd-app .ev button{font-size:12.5px;background:var(--chip);border:1px solid var(--line);border-radius:8px;padding:3px 10px;color:var(--ink2);text-decoration:none;cursor:pointer;transition:.15s}
+.cyd-app .ev a:hover, .cyd-app .ev button:hover{border-color:var(--accent);color:var(--accent)}
+.cyd-app .ev a.miss{border-color:color-mix(in srgb,var(--warn) 60%,var(--line));color:var(--warn)}
+.cyd-app .evrow{display:inline-flex;align-items:center;gap:3px;margin-right:4px}
+
+/* ---------- 功能地图 ---------- */
+.cyd-app .filters{display:flex;gap:8px;flex-wrap:wrap;margin:2px 0 14px}
+.cyd-app .filters button{border:1px solid var(--line);background:var(--panel);color:var(--ink2);border-radius:999px;padding:5px 14px;font-size:12.5px;cursor:pointer;transition:.15s}
+.cyd-app .filters button.on{background:var(--ink);color:var(--bg);border-color:var(--ink);font-weight:600}
+/* 进度条：细化为 5px 单色 --ok（语义 = 人类亲手验证过的比例，不是"加载条"） */
+.cyd-app .progress{height:5px;border-radius:999px;background:var(--chip);overflow:hidden;margin:4px 0 6px;position:relative}
+.cyd-app .progress i{display:block;height:100%;background:var(--ok);border-radius:999px;transition:width .5s ease}
+@media (prefers-reduced-motion: reduce){ .cyd-app .progress i{transition:none} }
+.cyd-app .plabel{font-size:12.5px;color:var(--ink2);margin-bottom:18px}
+.cyd-app .plabel p{margin:0}
+.cyd-app .graphbox{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow-card);margin-bottom:18px;overflow:hidden;position:relative;user-select:none}
+.cyd-app .graphbox .ghead{display:flex;justify-content:space-between;align-items:center;padding:12px 18px;border-bottom:1px solid var(--line)}
+.cyd-app .graphbox .ghead b{font-size:16px}
+.cyd-app .graphbox .ghead span{font-size:12.5px;color:var(--ink2)}
+.cyd-app .gtools{float:right;display:inline-flex;gap:4px}
+/* 技术空态：真的渲染出来的提示块（有标题 + 可执行的下一步），不是禁用控件 */
+.cyd-app .tech-empty{margin:24px auto 0;max-width:520px;padding:16px 18px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+.cyd-app .tech-empty b{display:block;font-size:14px;margin-bottom:6px}
+.cyd-app .tech-empty p{margin:4px 0 0;color:var(--ink2);font-size:12.5px;line-height:1.7}
+.cyd-app .gtools button{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:8px;padding:1px 9px;cursor:pointer;font-size:12.5px}
+.cyd-app .gtools button:hover{border-color:var(--accent);color:var(--accent)}
+.cyd-app .legend{display:flex;gap:16px;flex-wrap:wrap;padding:9px 18px;border-bottom:1px solid var(--line);font-size:12.5px;color:var(--ink2)}
+.cyd-app .legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+.cyd-app .legend i.x1{background:var(--gray)}
+/* 整页视图的「查看详情」：实心 accent 主按钮（点它 = 退出整页 + 在右侧边栏打开完整仪表盘） */
+.cyd-app .gtools .viewdetail{border:1px solid var(--accent);background:var(--accent);color:#fff;font:inherit;font-size:12.5px;font-weight:600;padding:3px 10px;border-radius:999px;cursor:pointer}
+.cyd-app .gtools .viewdetail:hover{filter:brightness(1.06)}
+/* S3 陈旧信号的「标题旁 ⚠」（契约 L563：陈旧必须比正确更显眼）。只在技术视图 + tech_stale 非空时渲染，
+   悬停 title 给出失效模块名 —— 与图例下那条 .snote 同一条信号的两个可见落点。 */
+.cyd-app .ghead .warnmark{color:var(--warn);margin-left:4px;cursor:help}
+/* ---------- 整页「功能地图」里隐藏宿主的输入框座席（用户要求；队长 2026-10-13 批准） ----------
+   机制照抄第三方插件 dsh-context v0.69.1 的做法：它的 `.lc-root` 对应我们的 `.cyd-immersive`。
+   标记**只挂在我们自己渲染的根上**，靠宿主两个属性名 `data-conversation-scroll` /
+   `data-composer-seat` 用 :has() 声明式隐藏；**不去改宿主的结构与样式**（不改宿主元素，只让它在
+   这一层不显示）。dsh-context 原文（`dsh-context/lib/client.js` offset 318578）：
+     [data-conversation-scroll]:has(.lc-root)>[data-composer-seat]:not(:has([data-approval-key],
+       [data-question-key],[data-plan-review-key])),[data-conversation-scroll]:has(.lc-root,
+       .lc-modal-backdrop)~[data-width-handle]{display:none}
+   **风险留痕**：这是宿主内部 DOM 约定，**不是官方支持的 API**；宿主若改这两个属性名即失效
+   （失效方向是安全的：输入框照旧显示，不会出现「打不了字」）。同一个风险由 dsh-context 在生产里
+   承担着 —— 属生态事实标准，不是我们的发明。
+   **三个例外必须保留**（照抄）：有待审批 / 待回答 / 待复核计划时输入框要留着，
+   否则会出现「审批要打字却没有输入框」——这是这条 CSS 最容易埋的坑。 */
+[data-conversation-scroll]:has(.cyd-immersive)>[data-composer-seat]:not(:has([data-approval-key],[data-question-key],[data-plan-review-key])){display:none}
+/* 第二条（照抄 dsh-context）：隐藏宿主的正文宽度拖拽条。**先实测确认它确实碍事才加**：
+   2026-10-13 真机（1680×1400、整页地图）实测两条 `[data-width-handle]` 为 10×1324、`cursor:col-resize`，
+   中心点 x=503 / x=1457 **落在我们 graphbox（292–1661）之内**，且 `document.elementFromPoint` 命中的是
+   拖拽条本身（不是我们的画布）⇒ 在地图中间横向拖动会**被宿主拿去改正文列宽**，而不是平移地图 ⇒ 必须隐藏。 */
+[data-conversation-scroll]:has(.cyd-immersive)~[data-width-handle]{display:none}
+.cyd-app .legend i.x2{background:var(--accent)}
+.cyd-app .legend i.x3{background:var(--warn)}
+.cyd-app .legend i.x4{background:var(--ok)}
+.cyd-app .legend .lgsub{margin-left:auto}
+/* 「功能 | 技术」切换（§F1）：放 ghead 内、缩放控件左侧；margin-left:auto 把它和标题推开。
+   这里**显式**写 flex:0 0 auto 与 width:max-content：整页视图里另有一条给标题/提示用的
+   省略号规则会把 ghead 内的 span 拉满，而本切换条也是 span（实测整页 387 vs 按钮和 99；
+   侧栏面板没有那条规则 ⇒ 101/99 贴合）⇒ 两处视图行为不同，基础规则里钉死它。 */
+.cyd-app .viewswitch{display:inline-flex;flex:0 0 auto;width:max-content;margin-left:auto;border:1px solid var(--line);border-radius:999px;overflow:hidden}
+.cyd-app .viewswitch button{border:0;background:transparent;color:var(--ink2);font:inherit;font-size:12.5px;padding:3px 12px;cursor:pointer}
+.cyd-app .viewswitch button + button{border-left:1px solid var(--line)}
+.cyd-app .viewswitch button.on{background:var(--accent-soft);color:var(--accent);font-weight:600}
+/* 技术图：层带（弱底 --chip + 文字标签，**不用彩色**，§F2）+ 边上关系文字（§F3） */
+.cyd-app .layerband{stroke:var(--line);stroke-width:.5;opacity:.3}
+.cyd-app .layerlabel{fill:var(--ink2);font-size:11px;font-weight:500}
+/* （原"边标签"那条样式已删：2026-10-13 用户裁决"线上什么都别标" ⇒ 标签层整体移除，
+   关系名改到边自身的 title 元素（悬停可见、不占视觉）。单一执行路径：样式/生成/测量一起删，
+   不留"生成但隐藏" ✗。**本注释不写点号选择器**——自检会把它当未作用域选择器报红，本轮实测踩过 ✗） */
+.cyd-app .graphbox svg{display:block;width:100%;height:340px;cursor:grab;touch-action:none}
+.cyd-app .graphbox svg:active{cursor:grabbing}.cyd-app .graphbox svg.is-dragging{cursor:grabbing}.cyd-app .graphbox svg g.node{outline:0}
+.cyd-app .node{cursor:pointer}
+.cyd-app .node rect{stroke-width:1;transition:.15s}
+.cyd-app .node:hover rect{filter:brightness(1.05)}
+.cyd-app .node text{font-size:12.5px;font-weight:600;pointer-events:none;fill:var(--ink)}
+/* 依赖边：状态渐变（V2，stroke 由 JS 逐边指向 url(#cyd-grad-i)）+ 实线 1.6 · opacity .75 */
+.cyd-app .edge{fill:none;stroke:var(--ink2);stroke-width:1;opacity:.55}
+.cyd-app .edge.dep{fill:none;stroke-width:1;opacity:.55}
+/* 子项连线：正交折线 + --ink2 单色 + 1.2 虚线 4 3 · opacity .7（与依赖边三条硬区分，§A4） */
+.cyd-app .edge.child{fill:none;stroke:var(--ink2);stroke-width:1;stroke-dasharray:4 3;opacity:.5}
+.cyd-app .node.child rect{stroke-width:1;opacity:.9}
+/* V1 幽灵边：断头桩 + 末端空心圆环（--gray + 2 4 点线 + .28） */
+.cyd-app .edge.ghost{fill:none;stroke:var(--gray);stroke-width:1;stroke-dasharray:2 4;opacity:.22}
+.cyd-app .ghostend{fill:none;stroke:var(--gray);stroke-width:1;opacity:.32}
+/* V1「缺 X」标记 / V4 变更角标 */
+.cyd-app .missingmark{pointer-events:none}
+.cyd-app .chgmark{pointer-events:none}
+/* V3 流动：仅「进行中」目标的上游边，全屏/整页才渲染（JS 三条件 + 下面三条 CSS 兜底） */
+.cyd-app .edge.flow{fill:none;stroke:var(--accent);stroke-width:1.5;stroke-dasharray:2 18;
+  stroke-linecap:round;opacity:.9;animation:cydFlow 1.1s linear infinite}
+@keyframes cydFlow{from{stroke-dashoffset:0}to{stroke-dashoffset:-20}}
+/* 兜底 1：非整页、非全屏 → 不流动；兜底 2：窄栏 → 不流动；兜底 3：打印 → 不流动 */
+.cyd-app:not(.cyd-immersive) .graphbox:not(.fs) .edge.flow{display:none !important}
+.cyd-app.narrow .edge.flow{display:none !important}
+@media print{ .cyd-app .edge.flow{display:none !important} }
+@media (prefers-reduced-motion: reduce){
+  /* 兜底 4（双保险）：减少动态偏好下即使 JS 判断被绕过也不动 */
+  .cyd-app .edge.flow{display:none !important}
+}
+.cyd-app .node .subbadge{cursor:pointer}
+.cyd-app .node .subbadge circle{fill:var(--panel);stroke:var(--ink2);stroke-width:1}
+.cyd-app .node .subbadge text{fill:var(--ink2);font-size:11px;pointer-events:none}
+.cyd-app .node .subbadge:hover circle{stroke:var(--accent)}
+.cyd-app .node .subbadge:hover text{fill:var(--accent)}
+.cyd-app .nodepop{position:absolute;z-index:5;width:235px;background:var(--panel);border:1px solid var(--accent);border-radius:16px;box-shadow:var(--shadow-pop);padding:12px 14px;cursor:pointer;display:none}
+.cyd-app .nodepop.on{display:block}
+.cyd-app .nodepop h4{margin:0 0 4px;font-size:14px;display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.cyd-app .nodepop p{margin:2px 0 6px;font-size:12.5px;color:var(--ink2)}
+.cyd-app .nodepop .go{font-size:12.5px;color:var(--accent);font-weight:600}
+
+/* ---------- 功能卡 ---------- */
+.cyd-app .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(310px,100%),1fr));gap:14px}
+.cyd-app .feat{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:17px 19px;box-shadow:var(--shadow-card);transition:.18s;cursor:pointer}
+.cyd-app .feat:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}
+.cyd-app .feat.flash{outline:2px solid var(--accent);outline-offset:2px}
+.cyd-app .feat.deprecated{opacity:1;background:var(--chip)}
+.cyd-app .feat h3{display:flex;align-items:center;gap:8px;font-size:16px;flex-wrap:wrap;margin:0 0 4px}
+.cyd-app .feat .featdesc{margin:6px 0 0}
+.cyd-app .badge{font-size:11px;padding:2px 10px;border-radius:999px;font-weight:700;white-space:nowrap}
+.cyd-app .b-x1{background:var(--gray-soft);color:var(--gray)}
+.cyd-app .b-x2{background:var(--accent-soft);color:var(--accent)}
+.cyd-app .b-x3{background:var(--warn-soft);color:var(--warn)}
+.cyd-app .b-x4{background:var(--ok-soft);color:var(--ok)}
+.cyd-app .b-x5{background:var(--gray-soft);color:var(--ink2);text-decoration:line-through}
+.cyd-app .verifier{margin-top:8px;font-size:12.5px;color:var(--ink2)}
+.cyd-app .subsum{display:inline-block;margin-top:8px;font-size:12.5px;color:var(--ink2);background:var(--chip);border:1px solid var(--line);border-radius:8px;padding:2px 9px}
+.cyd-app .subrow{border-left:3px solid var(--line);padding:6px 0 6px 12px;margin:8px 0}
+.cyd-app .subrow .badge{margin-right:6px}
+
+/* ---------- 现在 ---------- */
+.cyd-app .cols{display:grid;grid-template-columns:1.15fr 1fr;gap:12px;align-items:start}
+.cyd-app .tl{margin:0;padding:0;list-style:none}
+.cyd-app .tl li{position:relative;padding:0 0 20px 28px}
+.cyd-app .tl li::before{content:"";position:absolute;left:6px;top:8px;width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.cyd-app .tl li::after{content:"";position:absolute;left:10px;top:22px;bottom:1px;width:2px;background:var(--line)}
+.cyd-app .tl li:last-child::after{display:none}
+.cyd-app .tl time{font-size:12.5px;color:var(--ink2)}
+.cyd-app .tl .old{display:none}
+.cyd-app .tl.showold .old{display:block}
+.cyd-app #moreTl{margin-top:2px;border:1px dashed var(--line);background:transparent;color:var(--ink2);border-radius:10px;padding:7px 14px;font-size:12.5px;cursor:pointer;width:100%}
+.cyd-app #moreTl:hover{color:var(--accent);border-color:var(--accent)}
+.cyd-app .decision{border:1px solid color-mix(in srgb,var(--warn) 40%,var(--line));border-left:4px solid var(--warn);background:var(--warn-soft);border-radius:16px;padding:15px 17px;margin-bottom:12px}
+.cyd-app .decision.decided{border-color:var(--line);border-left-color:var(--ok);background:var(--panel)}
+/* 已废弃 = 终态（与功能卡 .feat.deprecated 同一套处理）：灰化 + 降透明 + 标题删除线 */
+.cyd-app .decision.obsolete{border-color:var(--line);border-left-color:var(--line);background:var(--gray-soft);opacity:.55;cursor:default}
+.cyd-app .decision.obsolete > h4{text-decoration:line-through}
+.cyd-app .decision.obsolete .did{color:var(--ink2)}
+.cyd-app .decision h4{margin:0 0 3px;font-size:16px}
+.cyd-app .decision .did{font-size:11px;color:var(--warn);font-weight:700;letter-spacing:.5px}
+.cyd-app .decision.decided .did{color:var(--ok)}
+.cyd-app .optbtn{display:flex;gap:10px;align-items:flex-start;width:100%;text-align:left;margin-top:8px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:9px 12px;cursor:pointer;font-size:14px;color:var(--ink);transition:.15s}
+.cyd-app .optbtn:hover{border-color:var(--warn);transform:translateY(-1px)}
+.cyd-app .optbtn b{min-width:20px;color:var(--warn)}
+.cyd-app .optbtn .tick{margin-left:auto;color:var(--accent);font-weight:800;visibility:hidden}
+.cyd-app .optbtn.sel{border-color:var(--accent);background:var(--accent-soft)}
+.cyd-app .optbtn.sel .tick{visibility:visible}
+.cyd-app .optbtn[disabled]{cursor:default;opacity:.75}
+.cyd-app .optbtn[disabled]:hover{transform:none;border-color:var(--line)}
+.cyd-app .optbtn .chosen{color:var(--ok);font-weight:700}
+.cyd-app .note{width:100%;margin-top:8px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--ink);padding:8px 11px;font:inherit;font-size:14px;line-height:1.6;min-height:54px;resize:vertical}
+.cyd-app .todo{display:flex;gap:9px;align-items:flex-start;font-size:14px;margin-top:8px}
+.cyd-app .todo input{margin-top:5px;accent-color:var(--ok)}
+.cyd-app .todo input[disabled]{cursor:default}
+/* 待办勾选后的确认条：勾选框只改界面，点「确认」才发消息 */
+.cyd-app .confirmbar{display:flex;align-items:center;gap:8px;margin-top:12px;padding-top:12px;border-top:1px dashed var(--line)}
+.cyd-app .confirmbar .snote{margin:0;flex:1 1 auto;border-left:0;padding-left:0}
+/* 离线「已报 · 待生效」行内标记 */
+.cyd-app .pending-tag{display:inline-block;font-size:11px;border-radius:999px;padding:2px 9px;background:var(--warn-soft);color:var(--warn);font-weight:600;white-space:nowrap}
+/* 决策与待办 tab 顶部工具行 + 「已选 n 项」 */
+.cyd-app .dtools{display:flex;gap:8px;flex-wrap:wrap;margin:2px 0 12px}
+.cyd-app .selcount{font-size:12.5px;color:var(--ink2);align-self:center;margin-right:auto}
+
+/* ---------- 关系图全屏（弹窗式铺满窗口）：给 .graphbox 加 .fs ----------
+   z-index 55 —— 低于 .ovl(60)，所以在全屏里点节点弹出的面板照常盖在上面；
+   SVG 高度仍由 renderGraph.layoutHeight() 算死写进行内样式（与整页模式同款），
+   所以这里只负责把容器钉满窗口 + 保持头/图例/图三段的纵向排列。 */
+.cyd-app .graphbox.fs{position:fixed;inset:0;z-index:55;margin:0;border:0;border-radius:0;box-shadow:none;display:flex;flex-direction:column;background:var(--panel)}
+.cyd-app .graphbox.fs .ghead{flex:none}
+.cyd-app .graphbox.fs .legend{flex:none}
+.cyd-app .graphbox.fs svg{flex:0 0 auto;min-height:0}
 .cyd-app.fullgraph .graphbox svg{height:calc(100vh - 360px);min-height:440px}
-/* 整页模式（会话页顶部「功能地图」tab）：只留关系图并铺满可用高度。
-   宿主自己的标签栏与输入框保持原样——这里只裁剪本插件自己的版面，不碰宿主 DOM。 */
+
+/* ---------- 整页模式（会话页顶部「功能地图」tab）：只留关系图并铺满可用高度。
+   宿主自己的标签栏与输入框保持原样 —— 这里只裁剪本插件自己的版面，不碰宿主 DOM。 ---------- */
 .cyd-app.cyd-immersive{display:flex;flex-direction:column;height:100%;min-height:0;overflow:hidden}
 .cyd-app.cyd-immersive .wrap{display:flex;flex-direction:column;width:100%;max-width:none;height:100%;min-height:0;margin:0;padding:10px 12px 12px}
 .cyd-app.cyd-immersive header.top,.cyd-app.cyd-immersive .strip,.cyd-app.cyd-immersive nav.tabs,
 .cyd-app.cyd-immersive #project,.cyd-app.cyd-immersive #now,.cyd-app.cyd-immersive #guide,
-.cyd-app.cyd-immersive #foot,.cyd-app.cyd-immersive .filters,.cyd-app.cyd-immersive .progress,
+.cyd-app.cyd-immersive .filters,.cyd-app.cyd-immersive .progress,
 .cyd-app.cyd-immersive .plabel,.cyd-app.cyd-immersive .grid{display:none !important}
 .cyd-app.cyd-immersive section#features{display:flex;flex-direction:column;flex:1;min-height:0;margin:0}
 .cyd-app.cyd-immersive .graphbox{display:flex;flex-direction:column;flex:1;min-height:0;margin:0}
@@ -33,45 +316,137 @@
 .cyd-app.cyd-immersive .graphbox svg{flex:0 0 auto;min-height:0}
 .cyd-app.cyd-immersive .ghead{flex:none;min-width:0;gap:10px}
 .cyd-app.cyd-immersive .ghead b{flex:none}
-.cyd-app.cyd-immersive .ghead span:not(.gtools){flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cyd-app.cyd-immersive .ghead span:not(.gtools):not(.viewswitch){flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* ↑ 这条给"标题/提示省略号"用的规则**必须排除切换条**：切换条是 span，会被它的
+   flex:1 1 auto 拉满；侧栏面板没有这条规则所以看不出来。该规则特异性更高，
+   只改基础规则会被它盖掉（实测：叠加后甚至被压成 2px），所以**在这里排除**才有效。 */
 .cyd-app.cyd-immersive .ghead .gtools{flex:none}
 .cyd-app.cyd-immersive .legend{flex:none}
-/* 节点面板里的「直接和 agent 说一句」区块：输入框 + 醒目的主发送按钮 + 小胶囊快捷追问 */
-.cyd-app .askbox{border:1px solid var(--accent);border-radius:12px;background:var(--accent-soft);padding:14px 16px;margin:0 0 16px}
-.cyd-app .askbox .kv{margin-top:0}
-.cyd-app .askrow{display:flex;gap:10px;align-items:stretch;margin:8px 0 10px}
-.cyd-app .askrow textarea.note{flex:1;width:auto;margin:0;min-height:74px;background:var(--panel)}
-.cyd-app .asksend{flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-width:120px;padding:10px 18px;border:1px solid var(--accent);border-radius:12px;background:var(--accent);color:var(--on-solid);font-family:inherit;font-size:14px;font-weight:700;line-height:1.2;cursor:pointer;box-shadow:0 2px 10px rgba(20,92,235,.3)}
-.cyd-app .asksend:hover{filter:brightness(1.09)}
-.cyd-app .asksend:active{transform:translateY(1px)}
-.cyd-app .asksend:disabled{opacity:.55;cursor:default;box-shadow:none}
-.cyd-app .asksend .ico{font-size:20px;line-height:1}
-.cyd-app .asksend .txt{white-space:nowrap}
-.cyd-app .askquick{display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin-top:2px}
-.cyd-app .askquick .lab{font-size:12.5px;color:var(--ink2)}
-.cyd-app .askchip{border:1px dashed var(--line);background:var(--panel);color:var(--ink2);border-radius:999px;padding:3px 11px;font-family:inherit;font-size:12.5px;cursor:pointer}
-.cyd-app .askchip:hover{border-style:solid;border-color:var(--accent);color:var(--accent)}
-/* 弹层内的返回条（版本差异 → 返回版本列表） */
-.cyd-app .sheetnav{display:flex;align-items:center;gap:10px;margin:2px 0 12px;padding-bottom:10px;border-bottom:1px dashed var(--line)}
-.cyd-app .sheetnav .actbtn{padding:5px 12px;font-size:13px}
-.cyd-app #verBtn{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:999px;padding:6px 13px;cursor:pointer;font-size:14px;box-shadow:var(--shadow);margin-right:8px}.cyd-app .verrow{display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px solid var(--line);padding:9px 0}.cyd-app .verrow:last-child{border-bottom:0}.cyd-app .diffbox{font:12.5px/1.6 Consolas,"Courier New",monospace;border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:46vh}.cyd-app .dline{white-space:pre-wrap;word-break:break-all;padding:1px 10px}.cyd-app .dline.add{background:var(--ok-soft);color:var(--ok)}.cyd-app .dline.del{background:var(--warn-soft);color:var(--warn);text-decoration:line-through}
-.cyd-app #setBtn{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:999px;padding:6px 13px;cursor:pointer;font-size:14px;box-shadow:var(--shadow);margin-right:8px}.cyd-app .setrow{border-bottom:1px solid var(--line);padding:12px 0;font-size:14px}.cyd-app .setrow:last-of-type{border-bottom:0}.cyd-app .setrow label{display:block;line-height:1.8}.cyd-app .setrow input[type="text"],.cyd-app .setrow input[type="number"]{border:1px solid var(--line);border-radius:8px;padding:5px 9px;background:var(--panel);color:var(--ink);font:inherit;margin-top:4px}
 
-/* 关系图全屏（弹窗式铺满窗口）：给 .graphbox 加 .fs。
-   z-index 55 —— 低于 .ovl(60)，所以在全屏里点节点弹出的面板照常盖在上面；
-   SVG 高度仍由 renderGraph.layoutHeight() 算死写进行内样式（与整页模式同款），
-   所以这里只负责把容器钉满窗口 + 保持头/图例/图三段的纵向排列。 */
-.cyd-app .graphbox.fs{position:fixed;inset:0;z-index:55;margin:0;border:0;border-radius:0;box-shadow:none;display:flex;flex-direction:column;background:var(--panel)}
-.cyd-app .graphbox.fs .ghead{flex:none}
-.cyd-app .graphbox.fs .legend{flex:none}
-.cyd-app .graphbox.fs svg{flex:0 0 auto;min-height:0}
-/* 术语表 Tab（📖）：表格复用 table.gloss；空态 / 歧义 / 表头不符 的引导卡 + 指令按钮 + 格式示例 */
+/* ---------- 术语表 Tab（📖）：表格一律 .stable；空态/歧义/表头不符 的引导卡 + 指令按钮 + 格式示例 ---------- */
 .cyd-app .card.warncard{border-color:color-mix(in srgb,var(--warn) 45%,var(--line))}
-.cyd-app .codeblock{background:var(--chip);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:12.5px/1.7 Consolas,"Courier New",monospace;white-space:pre;overflow:auto;margin:10px 0 0}
-.cyd-app #glossary .actrow{margin:12px 0 16px;display:flex;gap:8px;flex-wrap:wrap}
-.cyd-app #glossary .actrow button.primary{background:var(--accent);color:var(--on-solid);border:1px solid var(--accent);border-radius:10px;padding:8px 16px;font-size:14px;font-weight:600;cursor:pointer;box-shadow:var(--shadow)}
-.cyd-app #glossary .actrow button.primary:hover{filter:brightness(1.06)}
-.cyd-app #glossary .actrow button.primary:disabled{opacity:.55;cursor:default}
-.cyd-app button.mini{background:var(--chip);border:1px solid var(--line);color:var(--ink2);border-radius:8px;padding:2px 9px;font-size:12.5px;cursor:pointer}
-.cyd-app button.mini:hover{border-color:var(--accent);color:var(--accent)}
-.cyd-app #glossary code{background:var(--chip);border:1px solid var(--line);border-radius:6px;padding:0 5px;font-size:12.5px}
+.cyd-app .codeblock{background:var(--chip);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font:12.5px/1.7 Consolas,"Courier New",monospace;white-space:pre;overflow:auto;margin:12px 0 0}
+.cyd-app .actrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px;padding-top:12px;border-top:1px dashed var(--line)}
+.cyd-app #glossary code{background:var(--chip);border:1px solid var(--line);border-radius:8px;padding:0 5px;font-size:12.5px}
+
+/* ---------- 弹层排版三原语：.sblock / .snote / .stable ---------- */
+.cyd-app .sblock{margin-top:18px}
+.cyd-app .sblock:first-child{margin-top:0}
+.cyd-app .sblock > * + *{margin-top:6px}
+.cyd-app .sblock > h4{margin:0;font-size:14px;font-weight:600}
+.cyd-app .sblock > h4 + *{margin-top:8px}
+.cyd-app .sblock > .sblocktext{margin:0;font-size:14px;line-height:1.7}
+.cyd-app .ev .btn.mini svg{display:block}
+.cyd-app .stablewrap{overflow-x:auto}
+.cyd-app .stable{width:100%;border-collapse:collapse;font-size:12.5px}
+.cyd-app .stable th,.cyd-app .stable td{padding:8px 10px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}
+.cyd-app .stable th{background:var(--chip);font-weight:600}
+.cyd-app .stable tbody tr:nth-child(even){background:color-mix(in srgb,var(--chip) 60%,transparent)}
+.cyd-app .stable th.num,.cyd-app .stable td.num{text-align:right;font-variant-numeric:tabular-nums}
+/* 待生效明细「内容」列：原文逐字显示、允许任意处折行（copy-deck §8.6） */
+.cyd-app .stable td.itext{overflow-wrap:anywhere;min-width:12em}
+.cyd-app .ignline{display:block;font-size:12.5px}
+
+/* ---------- 弹层（拍板中心 / 审计 / 功能详情 / 版本 / 设置） ---------- */
+.cyd-app .ovl{position:fixed;inset:0;background:rgba(15,20,30,.45);display:none;align-items:flex-start;justify-content:center;z-index:60;padding:40px 16px}
+.cyd-app .ovl.on{display:flex}
+.cyd-app .sheet{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow-pop);max-width:760px;width:100%;max-height:calc(100vh - 90px);overflow:hidden;padding:0;position:relative;display:flex;flex-direction:column}
+.cyd-app .sheethead{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:18px 24px 12px;border-bottom:1px solid var(--line);flex:none}
+.cyd-app .sheetbody{overflow:auto;padding:18px 24px 24px;flex:1;min-height:0}
+.cyd-app .sheethead h3{margin:0;font-size:16px;display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+.cyd-app .xbtn{border:1px solid var(--line);background:var(--panel);color:var(--ink2);border-radius:50%;width:30px;height:30px;cursor:pointer;font-size:14px;line-height:1;flex:none}
+.cyd-app .xbtn:hover{border-color:var(--accent);color:var(--accent)}
+/* 标签列 + 值列两列网格（§12.3）：标签与值可区分，值不再与标签连成一句 */
+.cyd-app .kv{display:grid;grid-template-columns:5em 1fr;gap:4px 8px;align-items:baseline;font-size:14px;margin-top:8px}
+.cyd-app .kv b{color:var(--ink2);font-weight:600;margin-right:0}
+.cyd-app .kv > *{min-width:0}
+.cyd-app .kv:not(:has(> b)){display:block}
+.cyd-app .depc{display:inline-block;background:var(--chip);border:1px solid var(--line);border-radius:999px;padding:3px 12px;font-size:12.5px;margin:4px 6px 0 0;cursor:pointer;color:var(--ink)}
+.cyd-app .depc:hover{border-color:var(--accent);color:var(--accent)}
+.cyd-app details{margin-top:8px}
+.cyd-app summary{cursor:pointer;font-size:12.5px}
+/* 弹层内的返回条（版本差异 → 返回版本列表） */
+.cyd-app .sheetnav{display:flex;align-items:center;gap:8px;margin:0 0 12px;padding-bottom:8px;border-bottom:1px dashed var(--line)}
+/* 拍板浮层底部跳转行（在 .sheetbody 之外，不随内容滚动） */
+.cyd-app .sheetfoot{flex:none;padding:12px 24px;border-top:1px solid var(--line);display:flex;justify-content:flex-end}
+.cyd-app .sheetfoot .linkbtn{border:0;background:none;color:var(--accent);font:inherit;font-size:12.5px;cursor:pointer;padding:0}
+.cyd-app .sheetfoot .linkbtn:hover{text-decoration:underline}
+.cyd-app .verrow{display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px solid var(--line);padding:9px 0}
+.cyd-app .verrow:last-child{border-bottom:0}
+.cyd-app .diffbox{font:12.5px/1.6 Consolas,"Courier New",monospace;border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:46vh}
+.cyd-app .dline{white-space:pre-wrap;word-break:break-all;padding:1px 10px}
+.cyd-app .dline.add{background:var(--ok-soft);color:var(--ok)}
+.cyd-app .dline.del{background:var(--warn-soft);color:var(--warn);text-decoration:line-through}
+
+/* ---------- 设置弹层 ---------- */
+.cyd-app .setrow{border-bottom:1px solid var(--line);padding:12px 0;font-size:14px}
+.cyd-app .setrow:last-of-type{border-bottom:0}
+.cyd-app .setrow label{display:block;line-height:1.8}
+.cyd-app .setrow input[type="text"],.cyd-app .setrow input[type="number"]{border:1px solid var(--line);border-radius:10px;padding:5px 9px;background:var(--panel);color:var(--ink);font:inherit;margin-top:4px}
+.cyd-app .setnum{width:90px}
+.cyd-app .settext{width:100%}
+
+/* ---------- 节点面板发送框（DSH 原生形态）----------
+   一个输入框只允许**一层**边框：边框画在 .composer 容器上；内层 textarea 无边框、无 outline、
+   背景透明，并且**显式压掉全局 :focus-visible 的描边**（那就是截图里"两个蓝框"的第二个）。 */
+.cyd-app .composerlabel{font-size:12.5px;color:var(--ink2);margin:0 0 6px}
+.cyd-app .composer{border:1px solid var(--line);border-radius:16px;background:var(--panel);padding:10px 12px;margin-bottom:6px;transition:.15s}
+.cyd-app .composer:focus-within{border-color:var(--accent)}
+.cyd-app .composer textarea{border:0;background:transparent;outline:none;resize:none;width:100%;display:block;padding:0;margin:0;font:inherit;font-size:14px;line-height:1.6;min-height:24px;max-height:96px;overflow-y:auto}
+.cyd-app .composer textarea:focus,.cyd-app .composer textarea:focus-visible{outline:none !important;border:0}
+/* 守卫：说明文字不许塞回框内（§12.4） */
+.cyd-app .composer > .snote{display:none}
+.cyd-app .composerbar{display:flex;align-items:center;gap:6px;margin-top:8px}
+.cyd-app .composer .chips{display:flex;gap:6px;flex:1 1 auto;min-width:0;flex-wrap:wrap;align-items:center}
+.cyd-app .composer .chiplab{font-size:12.5px;color:var(--ink2)}
+.cyd-app .composer .chip{border:1px solid var(--line);background:var(--panel);color:var(--ink2);border-radius:999px;padding:3px 11px;font:inherit;font-size:12.5px;cursor:pointer;white-space:nowrap}
+.cyd-app .composer .chip:hover{border-color:var(--accent);color:var(--accent)}
+.cyd-app .composer .send{flex:none;width:32px;height:32px;border-radius:999px;padding:0;border:1px solid var(--accent);background:var(--accent);color:var(--on-solid);display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.cyd-app .composer .send:hover{filter:brightness(1.06)}
+.cyd-app .composer .send:disabled{background:var(--chip);border-color:var(--line);color:var(--ink2);filter:none;cursor:default}
+.cyd-app .composer .send svg{display:block}
+.cyd-app .composer-note{margin:0 0 18px}
+
+/* ---------- toast ---------- */
+.cyd-app .toast{position:fixed;left:50%;bottom:34px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--bg);padding:10px 20px;border-radius:999px;font-size:14px;opacity:0;pointer-events:none;transition:.25s;box-shadow:var(--shadow-pop);z-index:70}
+.cyd-app .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ---------- 窄栏（右侧栏 / 小窗口）：按容器宽度切 .narrow，不隐藏 header 与掌控条，只重排 ---------- */
+.cyd-app.narrow header.top{display:flex}
+.cyd-app.narrow .wrap{max-width:none;padding:12px 12px 24px}
+.cyd-app.narrow{font-size:12.5px;line-height:1.6}
+.cyd-app.narrow .brand h1{font-size:16px}
+.cyd-app.narrow .brand .by{display:none}
+.cyd-app.narrow .iconbtn{width:28px;height:28px}
+.cyd-app.narrow .strip{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin:12px 0 6px}
+/* 68px 级：3 行 + 2×6px 间隙；含按钮的 pill 走 flex（日期可省略号收缩，按钮绝不被裁） */
+.cyd-app.narrow .pill{flex:none;min-width:0;width:auto;height:66px;padding:8px 8px}
+.cyd-app.narrow .pill .v{font-size:12.5px;line-height:1.3;-webkit-line-clamp:2}
+.cyd-app.narrow .pill .v:has(.btn.mini){display:flex;align-items:center;justify-content:center;gap:4px}
+.cyd-app.narrow .pill .v .vtxt{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cyd-app.narrow .pill .v .btn.mini{flex:none}
+.cyd-app.narrow .card{padding:14px 14px}
+.cyd-app.narrow .card h3,.cyd-app.narrow .sheethead h3,.cyd-app.narrow .ghead b{font-size:14px}
+.cyd-app.narrow nav.tabs{gap:6px}
+.cyd-app.narrow nav.tabs button{padding:6px 12px;font-size:13px}
+.cyd-app.narrow .cols{grid-template-columns:1fr;gap:12px}
+.cyd-app.narrow .btn,.cyd-app.narrow .lede,.cyd-app.narrow .kv,.cyd-app.narrow .toast,.cyd-app.narrow .setrow,
+.cyd-app.narrow .composer textarea{font-size:12.5px}
+.cyd-app.narrow .kv{grid-template-columns:4em 1fr}
+.cyd-app.narrow .composerbar{flex-wrap:wrap;align-items:flex-end}
+.cyd-app.narrow .composer .chips{flex-wrap:wrap}
+.cyd-app.narrow .composer .send{margin-left:auto;align-self:flex-end}
+.cyd-app.narrow .stable{display:block;overflow-x:auto}
+.cyd-app.narrow .empty{font-size:12.5px;line-height:1.6}
+.cyd-app.narrow .sheet{max-width:none;max-height:calc(100vh - 24px)}
+.cyd-app.narrow .sheethead{padding:14px 14px 12px}
+.cyd-app.narrow .sheetbody{padding:12px 14px 18px}
+
+@page{margin:12mm}
+@media print{/* 打印一律按浅色纸面渲染：复位主题变量，压过 prefers-color-scheme 与 [data-theme="dark"] */
+.cyd-app{--bg:#fff !important;--panel:#fff !important;--ink:#1b2331 !important;--ink2:#5b6575 !important;--line:#c9d0dc !important;--accent:#2f6fed !important;--accent-soft:#e8effe !important;--ok:#179a50 !important;--ok-soft:#e5f6ec !important;--warn:#c07f00 !important;--warn-soft:#fdf3e0 !important;--gray:#8a93a3 !important;--gray-soft:#eef1f6 !important;--chip:#f2f4f8 !important;--on-solid:#fff !important;--shadow-card:none !important;--shadow-pop:none !important;background:#fff !important;color:#1b2331 !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.cyd-app{background:#fff !important}/* 隐藏交互壳；.ovl.on 必须一起压掉，否则弹层会盖在正文上一起打印 */
+.cyd-app nav.tabs, .cyd-app .iconbtn, .cyd-app .filters, .cyd-app .ghead span, .cyd-app .ovl, .cyd-app .ovl.on, .cyd-app .nodepop, .cyd-app .toast, .cyd-app #moreTl, .cyd-app #updBtn, .cyd-app .btn[data-cp], .cyd-app .btn.primary, .cyd-app .actrow, .cyd-app .composer{display:none !important}
+.cyd-app section{display:block !important}/* 展开被“查看更早的”折叠的时间线；证据按钮不再整体隐藏，文件路径照常打印 */
+.cyd-app .tl .old{display:block !important}.cyd-app .feat.deprecated,.cyd-app .decision.obsolete{opacity:1;background:var(--chip)}.cyd-app .graphbox{overflow:visible}.cyd-app .ev .btn.mini, .cyd-app .ev a{background:none;border:0;padding:0;color:#1b2331;text-decoration:underline}.cyd-app .card, .cyd-app .feat, .cyd-app .graphbox, .cyd-app .decision{box-shadow:none !important;break-inside:avoid;page-break-inside:avoid}
+}

@@ -9,6 +9,32 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-13
+
+### Added
+
+- **`TECH.md`（技术地图）**：固定七字段 `模块 / 层 / 职责 / 技术 / 状态 / 证据 / 连到`（`### 子项` 复用），`层` 为自由文本、纵向位置按**首次出现顺序**，**默认随 init 建立**；幽灵边复用 `references/graph-visuals.md` §B
+- **`CHANGES.md`（变更规则）**：文件名不写死（与术语表同构的识别链）、最小骨架、**默认随 init 建立**；从 FEATURES + 证据 + 依赖推出骨架，并对「地图变了而规则没更新」产漂移 WARN
+- **「功能 | 技术」视图切换**：放在功能地图 tab 的工具栏，**不新增 tab**（六 tab 的顺序与数量不变）
+- **陈旧／搬迁信号**（两端同文案，各有差分夹具 + 非恒真反例）
+  - **S3 模块级陈旧**：与 `.versions/` 最近一份 `TECH.md` 快照对比，按模块算失效率 → `tech_stale{modules,ratio}`；技术视图标题旁 `⚠`、图例下 `.snote`、审计弹层一行（**陈旧必须比正确更显眼**）
+  - **S4 搬迁检测**：本轮 `.facts.json` 里 `change: deleted` 的路径 ∩ 模块 / 功能 / 使用流程 / 时间线的证据 → WARN
+  - 两条都 **fail-closed**：无快照、无命中一律不产（不许恒真信号）
+- **版本位**（`.cyd.json`）：`format` 与 `writer:{skill,at}`；`format` 超前、或 `writer.skill` 比当前插件版本新 → 两端同一条 WARN。`writer.skill` 由渲染器按 `manifest.yaml` 写入，面板侧比对**构建期注入**的 `CYD_SKILL_VERSION`
+- **`health.declared_refs`**：`CHANGES.md` / `TECH.md` 两份声明类文件的证据**计入归置但审计单列**（防后门）
+- **`glossStatus` 可选失败 flag** `meta_error` / `meta_missing`：`.cyd.json` 非法 JSON / 指定术语表不存在必须是 flag（吞异常可以、静默吞事实不行）；**缺 flag = 降级**——不产 WARN、不报错，也不得当成「已检查无问题」
+
+### Fixed
+
+- **整页「功能地图」里隐藏宿主输入框座席**：声明式 CSS（`[data-conversation-scroll]:has(.cyd-immersive) > [data-composer-seat]`），**不动宿主的结构与样式**；**三个例外保留**（有待审批 / 待提问 / 待复核计划时输入框必须留着）
+- **「功能 | 技术」切换条宽度**：切换条贴合两个按钮（`|容器宽 − 按钮和| ≤ 4px`；整页视图与侧栏面板内各有一条断言）
+- **线上不再渲染可见边标签**（`.edgelabel === 0`）：关系名改走 `title` / `data-rel`，每条边仍带关系名
+
+### Changed
+
+- 配套 skill 版本 `1.4.0` → **`1.6.0`**；数据契约升到 **v1.6**（契约内不再内联任何中文 WARN 原文，唯一来源是 `references/copy-deck.md` §16.6）
+- `lib/client.js` 增加**构建期注入**的 skill 版本常量 `CYD_SKILL_VERSION`：读不到 `manifest.yaml` 的 `version` 即 **FATAL**，不再静默留 `null`（否则「版本比对新」这条判据会永不触发）
+
 ## [0.5.4] - 2026-10-10
 
 ### Added

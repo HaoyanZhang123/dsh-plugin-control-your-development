@@ -2,11 +2,14 @@
 
 > 触发：完成了一个功能/阶段、修完一批问题、用户说"更新一下仪表盘"，或日常开发告一段落。
 
-0. **先收信箱**：读 `dev-dashboard/.inbox.jsonl`（没有就跳过）。里面每行一条 JSON，是面板直发的拍板/验证/指令（`type`: decide / verify / command）。逐条落实：decide → 按 decide 场景落定决策卡；verify → 按 verify 场景盖章；command → 按文字指令执行。全部处理完**清空该文件**（写空），再往下走。
+0. **动手前先做三件事**（改任何 Markdown 之前，顺序 0a → 0b → 0c）：
+   - **0a 干净检查（git）**：`<Python解释器> <skill目录>/scripts/snapshot_version.py dev-dashboard/ preflight`。退 3 = `dev-dashboard/` 有未提交改动，脚本会逐条列出脏文件；**把这份清单念给用户**，让他三选一（`git commit` / `git stash` / 明确说「继续」），**不许静默继续**。退 0 但输出写着「无 git，跳过检查」时，照实告诉用户这次没有提交基线——降级要说出来，不算通过。
+   - **0b 写前快照**：`<Python解释器> <skill目录>/scripts/snapshot_version.py dev-dashboard/ save --note "更新前自动快照"`。改坏 Markdown 时有回退基点；`.versions/` 自动只留最近 20 版，更早的历史交给 git。
+   - **0c 先收信箱**：读 `dev-dashboard/.inbox.jsonl`（没有就跳过）。里面每行一条 JSON，是面板直发的拍板/验证/指令（`type`: decide / verify / command）。逐条落实：decide → 按 decide 场景落定决策卡；verify → 按 verify 场景盖章；command → 按文字指令执行。全部处理完**把该文件截断为空文件**（写空字符串，`.write_text("")`），**不是删除文件**——面板以「文件是否存在」判断数据源，删掉会把「待生效 0」变成「缺数据」。再往下走。
 1. **采集事实**：`<Python解释器> <skill目录>/scripts/collect_facts.py dev-dashboard/`（两处占位符都替换成实际路径）。
 2. **逐条归置** .facts.json 里的每条事实（一条都不许漏）：
    - 与某功能相关 → 更新 FEATURES.md：补证据路径、改状态（AI 上限「可用」）、修订简介；
-   - 划分拿不准时守 stance 第 11 条：功能是"用户能验收的价值单元"；开发步骤进时间线，不新建小功能；功能内部的几块组成用 `### 子项:`；
+   - 划分拿不准时守 stance 第 11 条：功能是"用户能验证的价值单元"；开发步骤进时间线，不新建小功能；功能内部的几块组成用 `### 子项:`；
    - 值得让用户知道 → NOW.md 时间线**顶部**加一条人话（"做成了什么、对你意味着什么"），带证据路径；
    - 用户指令式状态变更（"把「X」标为进行中 / 废弃「X」 / 恢复为设想"，常由仪表盘详情窗的按钮直发或复制而来）→ 按用户说的改 FEATURES.md 状态，时间线记一笔人话；
    - 纯内部工程（重构、依赖升级、CI、格式化）→ 追加到 `.dashboard-ignore`；

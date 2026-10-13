@@ -3,7 +3,7 @@
 > Turn the development process into a product dashboard you can actually read and control.
 > Human-readable Markdown files are the single source of truth; the dashboard is pinned inside DSH (right sidebar + a full-page "Feature Map" tab on top of the conversation), and decisions you make on the panel go straight to the AI. Export a single-file offline web page only when you need to share.
 
-Versions: skill v1.4.0 · panel plugin v0.5.4 | License: [MIT](LICENSE) | 语言：[中文](README.md)
+Versions: skill v1.6.0 · panel plugin v0.6.0 | License: [MIT](LICENSE) | 语言：[中文](README.md)
 
 ---
 
@@ -15,6 +15,7 @@ You're building a product with AI, but code, commit logs and terminals are not y
 - Where every feature stands, with a progress bar that counts only features **you have personally verified**; large features can be split into **sub-items**, collapsed by default on the map and expanded on click;
 - What changed recently and what decisions are **waiting for you** — open it and know, and **one click on an option sends it straight to the AI**, no copy-paste;
 - No wording drift in long projects: an optional **glossary** standardizes names, and aliases written into the body raise a "terminology drift" warning in data health.
+- The same map switches to a **Tech** view: how these features are actually built (modules / layers / tech / evidence / dependencies), and it speaks up about **what has gone stale** — evidence that can no longer be found, evidence files deleted and possibly moved, or a dashboard written by a newer plugin.
 
 It is a DSH skill (teaches the AI to maintain your dashboard) plus a DSH panel plugin (right sidebar, plus a full-page "Feature Map" tab on top of the conversation). Want an offline web page you can send to others? Just say "export the web version".
 
@@ -68,6 +69,8 @@ For full installation options (global install, panel plugin, uninstall & upgrade
 - `FEATURES.md`: status — where every feature stands, with evidence and dependencies; large features can be split into **sub-items** (collapsed into a badge on the map, expanded on click);
 - `NOW.md`: the pulse — what happened lately, what's waiting for your decision;
 - `GLOSSARY.md`: the glossary — the single naming standard across the project (created by default with init; the filename is yours to choose — the table header is what matters); it has its own "📖 Glossary" tab, and aliases in the body raise a "terminology drift" warning with a per-row "unify" action.
+- `TECH.md`: the tech map — which modules build these features, which layer each sits in, and what depends on what; **created by default with init**, viewed through the **Features | Tech** switch in the Feature Map, and module evidence follows the same red line as feature evidence;
+- `CHANGES.md`: change rules — how changes in this project should be filed (created by default with init as a first draft derived from features and evidence paths; anything that cannot be derived is left as a placeholder to confirm);
 
 **Progress defined by you (state machine)**
 Every feature moves along Idea → In Progress → Usable → Verified. The AI may mark a feature "Usable" at most; "Verified" happens only when you say so — and the progress bar counts verified features only. States can also move back: revoking a verification returns to Usable (nothing broke — the stamp is just withdrawn), rework returns to In Progress, deprecation moves to Deprecated, and a deprecated feature can be restored to Idea. Every rollback gets a line in the timeline.
@@ -76,7 +79,7 @@ Every feature moves along Idea → In Progress → Usable → Verified. The AI m
 In the decision center, pick an option, add a note, and click "📤 Send decision" — it goes straight into the current conversation; the "Start this / Rework / Deprecate" buttons on feature details work the same way. If the AI isn't online, the message is first recorded into `dev-dashboard/.inbox.jsonl` and picked up automatically on the next update — nothing gets lost. Every decision you make is recorded in the timeline, and a **version snapshot** is saved automatically (the 🕓 button lets you look back and compare with the current state anytime).
 
 **Full-page "Feature Map" tab**
-At the top of the conversation page, alongside "Chat / Trajectory": view the feature relationship graph at full-page width, with wheel zoom, drag-to-pan and one-click fit-to-screen, plus a toolbar "⛶ Fullscreen" that fills the window (click again or press Esc to exit); node width adapts to the name, long names wrap and truncate with the full text on hover; file paths are truncated in the middle with the full path on hover.
+At the top of the conversation page, alongside "Chat / Trajectory": view the feature relationship graph at full-page width, with wheel zoom, drag-to-pan and one-click fit-to-screen, plus a toolbar "⛶ Fullscreen" that fills the window (click again or press Esc to exit); node width adapts to the name, long names wrap and truncate with the full text on hover; file paths are truncated in the middle with the full path on hover. The toolbar also switches to a **Tech** view: modules laid out by layer with dependencies as edges, and a link to a module that does not exist yet is drawn as a broken stub labelled with what is missing (the button is there even without a `TECH.md`, with a one-click "create tech map" in the empty state). **In the full-page map the host input box no longer takes up space** — kept when there is a pending approval / question / plan review.
 
 **Single-file offline web page (optional export)**
 Want to show a partner or client? Say "export the web version": a single `index.html` — zero dependencies, zero network, light/dark adaptive, print-friendly.
@@ -85,6 +88,12 @@ Want to show a partner or client? Say "export the web version": a single `index.
 - Every code change must be either incorporated into the dashboard or explicitly ignored — **silent omission is not allowed**;
 - Missing evidence files or unfiled facts make the render step fail loudly, instead of shipping a dashboard that "looks fine";
 - Every feature description must cite files that actually exist; fabrication is not possible.
+
+**The map speaks up when a part is out of date**
+When a tech module's evidence can no longer be found at all, a ⚠ appears next to the tech-view title (the same sentence under the legend and in the audit): `技术地图里有 N 个模块的证据找不到了：X。` / `这份地图可能已经跟不上代码了。` / `去技术地图里把这几条证据改对。`. Files deleted in this round that happen to be evidence raise "证据文件已被删除（可能搬迁）" for you to confirm. Both signals are **fail-closed** — no previous snapshot or no match means nothing is produced, so there are no permanently-screaming false alarms. Files declared only by the tech map or the change rules are listed **separately** in the audit (with a reminder above 10).
+
+**When the dashboard is newer than the plugin, it says so instead of silently misreading**
+If `dev-dashboard/.cyd.json` came from a newer plugin or skill (format ahead of this build, or a writer version newer than the installed plugin), both the panel and the offline page show the same three lines — `.cyd.json 是更新版插件写的，当前版本读不全。` / `所以这次不改它，免得把新内容写坏。` / `升级插件后再看就行。` — and the file is **read-only**: an older build never rewrites newer data.
 
 ## Installation
 
@@ -123,7 +132,7 @@ dsh-plugin-control-your-development/
    └─ control-your-development/      ← the capability itself
       ├─ SKILL.md / manifest.yaml    ← skill definition
       ├─ static/                     ← the AI's working discipline and workflow
-      ├─ templates/                  ← three-file templates + page templates
+      ├─ templates/                  ← six human-readable file templates (PRODUCT / FEATURES / NOW / glossary / change rules / tech map) + page templates
       ├─ scripts/                    ← render / collect / watch (pure Python stdlib)
       └─ references/                 ← data format specification
 ```
@@ -163,7 +172,7 @@ No. The skill alone maintains the dashboard (the offline web page can still be e
 The web version reads and writes `dev-dashboard/` in your project, which requires you to **grant folder access**: the browser shows one permission prompt — choose the **project root containing `dev-dashboard/`**. The browser remembers it afterwards. The right sidebar panel needs no such grant — it reads through DSH's own interface.
 
 **How do I update to a new version?**
-Plugin: DSH → Plugins → Uninstall, then Add plugin with `dsh-plugin-control-your-development` (you can also pin a version, e.g. `dsh-plugin-control-your-development@0.5.4`); afterwards **refresh the page (Ctrl+R) or restart DSH**. Skill: updates automatically with the plugin; if you installed it manually, copy the folder again.
+Plugin: DSH → Plugins → Uninstall, then Add plugin with `dsh-plugin-control-your-development` (you can also pin a version, e.g. `dsh-plugin-control-your-development@0.6.0`); afterwards **refresh the page (Ctrl+R) or restart DSH**. Skill: updates automatically with the plugin; if you installed it manually, copy the folder again.
 
 **macOS / Linux?**
 Yes for macOS: **verified on real machines, both macOS and Windows** (web page + right sidebar panel). Linux is not verified on a real machine, but the scripts use cross-platform APIs only and paths are written portably.
