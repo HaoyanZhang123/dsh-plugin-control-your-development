@@ -119,7 +119,15 @@
 .cyd-app .ev a, .cyd-app .ev button{font-size:12.5px;background:var(--chip);border:1px solid var(--line);border-radius:8px;padding:3px 10px;color:var(--ink2);text-decoration:none;cursor:pointer;transition:.15s}
 .cyd-app .ev a:hover, .cyd-app .ev button:hover{border-color:var(--accent);color:var(--accent)}
 .cyd-app .ev a.miss{border-color:color-mix(in srgb,var(--warn) 60%,var(--line));color:var(--warn)}
-.cyd-app .evrow{display:inline-flex;align-items:center;gap:3px;margin-right:4px}
+/* 证据路径胶囊：窄栏单行省略、复制键永不被裁（§12.12）。
+   `.evtxt` 必须 `display:block` —— 在 `<a>`（分支②③）里它是普通行内元素，`text-overflow` 不生效、
+   文字会画到卡片外面（实测卡片内容盒 404px 时溢出 54.5px）；在 `<button>`（分支①④）里它是 flex 项、
+   本就被块化，此声明无副作用。复制键的判据是专属类名 `.evcp`，**不能用** `.btn.mini`/`[data-cp]`：
+   路径片本身也是 `.btn.mini`（分支①④）并带 `data-cp`（分支④）。 */
+.cyd-app .evrow{display:inline-flex;align-items:center;gap:3px;margin-right:4px;max-width:100%}
+.cyd-app .evrow>button, .cyd-app .evrow>a{min-width:0}
+.cyd-app .evtxt{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cyd-app .evrow>.evcp{flex:none}
 
 /* ---------- 功能地图 ---------- */
 .cyd-app .filters{display:flex;gap:8px;flex-wrap:wrap;margin:2px 0 14px}
@@ -446,7 +454,16 @@
 @media print{/* 打印一律按浅色纸面渲染：复位主题变量，压过 prefers-color-scheme 与 [data-theme="dark"] */
 .cyd-app{--bg:#fff !important;--panel:#fff !important;--ink:#1b2331 !important;--ink2:#5b6575 !important;--line:#c9d0dc !important;--accent:#2f6fed !important;--accent-soft:#e8effe !important;--ok:#179a50 !important;--ok-soft:#e5f6ec !important;--warn:#c07f00 !important;--warn-soft:#fdf3e0 !important;--gray:#8a93a3 !important;--gray-soft:#eef1f6 !important;--chip:#f2f4f8 !important;--on-solid:#fff !important;--shadow-card:none !important;--shadow-pop:none !important;background:#fff !important;color:#1b2331 !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .cyd-app{background:#fff !important}/* 隐藏交互壳；.ovl.on 必须一起压掉，否则弹层会盖在正文上一起打印 */
-.cyd-app nav.tabs, .cyd-app .iconbtn, .cyd-app .filters, .cyd-app .ghead span, .cyd-app .ovl, .cyd-app .ovl.on, .cyd-app .nodepop, .cyd-app .toast, .cyd-app #moreTl, .cyd-app #updBtn, .cyd-app .btn[data-cp], .cyd-app .btn.primary, .cyd-app .actrow, .cyd-app .composer{display:none !important}
+.cyd-app nav.tabs, .cyd-app .iconbtn, .cyd-app .filters, .cyd-app .ghead span, .cyd-app .ovl, .cyd-app .ovl.on, .cyd-app .nodepop, .cyd-app .toast, .cyd-app #moreTl, .cyd-app #updBtn, .cyd-app .evcp, .cyd-app .btn.primary, .cyd-app .actrow, .cyd-app .composer{display:none !important}
+/* ↑ 隐藏的复制键判据是**专属类名 `.evcp`**，不是 `.btn[data-cp]`：`data-cp` 也落在**分支④的路径片**上
+   （无 evidenceAction/evidenceUrl 时"整片即复制"，`CORE:1109`）⇒ 用 `[data-cp]` 会把那条路径
+   在纸面上**整条隐藏**（实测 print 下隐藏路径片 143 个）。`data-cp` **属性必须保留**：
+   点击处理器靠 `closest('[data-cp]')`（`CORE:3094`）—— 只改打印选择器，不删属性。 */
 .cyd-app section{display:block !important}/* 展开被“查看更早的”折叠的时间线；证据按钮不再整体隐藏，文件路径照常打印 */
 .cyd-app .tl .old{display:block !important}.cyd-app .feat.deprecated,.cyd-app .decision.obsolete{opacity:1;background:var(--chip)}.cyd-app .graphbox{overflow:visible}.cyd-app .ev .btn.mini, .cyd-app .ev a{background:none;border:0;padding:0;color:#1b2331;text-decoration:underline}.cyd-app .card, .cyd-app .feat, .cyd-app .graphbox, .cyd-app .decision{box-shadow:none !important;break-inside:avoid;page-break-inside:avoid}
+/* 纸面没有悬停，`…` 之后拿不到全文 ⇒ 证据路径恢复折行、不许截断（§12.12）。用类名精确覆盖，
+   **不用 `*`**（会把不该重置的弹性/溢出一并清掉）；复制键在打印态本就 display:none。 */
+.cyd-app .evrow{max-width:none}
+.cyd-app .evrow>button, .cyd-app .evrow>a{min-width:auto}
+.cyd-app .evtxt, .cyd-app .evrow>.evcp{white-space:normal;overflow:visible;text-overflow:clip;flex:none}
 }

@@ -1100,13 +1100,13 @@ function evHtml(list){
   return (list || []).map(e => {
     const disp = esc(truncMid(e.path));
     const full = esc(e.path);
-    const cp = '<button class="btn mini" data-cp="' + full + '" title="复制完整路径">' + COPY_ICON + '</button>';
+    const cp = '<button class="btn mini evcp" data-cp="' + full + '" title="复制完整路径">' + COPY_ICON + '</button>';
     const canOpen = e.exists && env.evidenceAction;
     const url = !canOpen && e.exists && env.evidenceUrl ? env.evidenceUrl(e.path) : null;
-    if (canOpen) return '<span class="evrow"><button class="btn mini" data-ev="' + full + '" title="' + full + '（点击打开）">' + disp + '</button>' + cp + '</span>';
-    if (url) return '<span class="evrow"><a href="' + url + '" target="_blank" rel="noopener" title="' + full + '（在浏览器中打开）">' + disp + '</a>' + cp + '</span>';
-    if (!e.exists) return '<span class="evrow"><a class="miss" title="' + full + '（路径不存在）">' + disp + '</a></span>';
-    return '<span class="evrow"><button class="btn mini" data-cp="' + full + '" title="' + full + '（点击复制完整路径）">' + disp + '</button></span>';
+    if (canOpen) return '<span class="evrow"><button class="btn mini" data-ev="' + full + '" title="' + full + '（点击打开）"><span class="evtxt">' + disp + '</span></button>' + cp + '</span>';
+    if (url) return '<span class="evrow"><a href="' + url + '" target="_blank" rel="noopener" title="' + full + '（在浏览器中打开）"><span class="evtxt">' + disp + '</span></a>' + cp + '</span>';
+    if (!e.exists) return '<span class="evrow"><a class="miss" title="' + full + '（路径不存在）"><span class="evtxt">' + disp + '</span></a></span>';
+    return '<span class="evrow"><button class="btn mini" data-cp="' + full + '" title="' + full + '（点击复制完整路径）"><span class="evtxt">' + disp + '</span></button></span>';
   }).join('');
 }
 
