@@ -7,6 +7,16 @@
 
 ---
 
+## 使用视频预览
+
+
+https://github.com/user-attachments/assets/725f67f9-b18e-426e-9dab-52aeb6e30188
+
+
+https://github.com/user-attachments/assets/ffe674a0-6fc2-4ff4-9677-883313ace114
+
+
+
 ## 这是什么
 
 你在用 AI 做产品，但代码、提交记录、命令行都不是你的语言。**control-your-development** 把"开发做到哪了"翻译成一份产品视角的仪表盘：
@@ -44,19 +54,19 @@
 ## 看一看
 
 **仪表盘「项目」首页**：一句话定位、当前方向、掌控条。
-<img width="2968" height="1736" alt="image" src="docs/images/home.png" />
+<img width="2270" height="1712" alt="image" src="https://github.com/user-attachments/assets/899b55c0-4689-414e-b399-1860044937ed" />
 **「功能地图」页**：功能卡片五态（设想 / 进行中 / 可用 / 已验证 / 已废弃）+ 依赖关系图。
-<img width="2648" height="1078" alt="image" src="docs/images/features.png" />
+<img width="2208" height="1206" alt="image" src="https://github.com/user-attachments/assets/00f2b951-9461-4f64-bfd8-941939424f6a" />
 **「现在」页**：时间线与等你拍板的决策卡。
-<img width="2620" height="1256" alt="image" src="docs/images/now.png" />
+<img width="2256" height="1340" alt="image" src="https://github.com/user-attachments/assets/cb178727-c988-4024-9fe0-812452a8be57" />
+<img width="2272" height="1290" alt="image" src="https://github.com/user-attachments/assets/d48a39d7-7a80-43d6-a55b-bf1e45b5e9bf" />
 **DSH 右侧边栏内嵌面板**（与 文件 / 终端 / 浏览器 同列，标签带当前项目名）。
-<img width="1042" height="1088" alt="image" src="docs/images/panel.png" />
+<img width="1290" height="1448" alt="image" src="https://github.com/user-attachments/assets/074cf2e8-e31d-40b6-b597-b911c733af1a" />
 **关系图「⛶ 全屏」**：功能一多，小栏里显示不下——点工具栏的全屏进**真·窗口全屏**看图，再点一次或按 Esc 退出；拿不到全屏能力时退回铺满视口的弹层。
-<img width="3070" height="1910" alt="image" src="https://github.com/user-attachments/assets/5424e6a5-6d9a-4cb1-86e0-1ec9b81528f1" />
-
-<img width="1920" height="1080" alt="image" src="docs/images/fullscreen-effect.png" />
+<img width="2284" height="1740" alt="image" src="https://github.com/user-attachments/assets/ec2310c1-ff2f-4e15-873f-35c0fda61cb1" />
 **「📖 术语表」页**：标准用词 / 指什么 / 别名·曾用名 一张表钉住用词；别名写进正文会在数据健康里报「用词漂移」，明细可逐条「让 AI 统一」。
-<img width="2968" height="2000" alt="image" src="docs/images/glossary-tab.png" />
+<img width="2272" height="1706" alt="image" src="https://github.com/user-attachments/assets/b6fb6aeb-1c36-4b39-9f4f-fb2fdeed5f50" />
+
 
 ## 功能亮点
 
