@@ -20,6 +20,9 @@ jobs:
       # 本轮实测 108064 B）。关掉字节码写入。
       # 注意：必须是 "1"——实测置 "0" **不生效**（skill/ 下照样出现 __pycache__）。
       PYTHONDONTWRITEBYTECODE: "1"
+      # Windows runner 的 Python 默认 stdout=cp1252，打印中文（build_panel.py 的 OK 行）会
+      # UnicodeEncodeError ⇒ cross-platform(windows) 误红（v0.6.2 实测）。这里强制 UTF-8。
+      PYTHONIOENCODING: "utf-8"
     steps:
       - uses: actions/checkout@v4
 
@@ -78,6 +81,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONIOENCODING: "utf-8"
     steps:
       - uses: actions/checkout@v4
 
