@@ -5,6 +5,8 @@
 
 版本：skill v1.6.2 · 面板插件 v0.6.2　|　许可：[MIT](LICENSE)　|　语言：[English](README.en.md)
 
+<img width="1280" height="427" alt="f6d590dff9d8870500ca74dcd2fca2e6_720" src="https://github.com/user-attachments/assets/513debd0-7450-4c36-b89e-62f59b4f1d50" />
+
 ---
 
 ## 使用视频预览
