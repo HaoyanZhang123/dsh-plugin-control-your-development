@@ -1,7 +1,7 @@
 # control-your-development
 
 > 一句话定位：把开发过程翻译成用户看得懂、能掌控的产品仪表盘（人话 Markdown → DSH 面板，可选导出单文件 HTML）。
-> 所属项目：control-your-development　版本：1.6.1　状态：分发级
+> 所属项目：control-your-development　版本：1.6.2　状态：分发级
 
 ## 何时用
 
@@ -73,8 +73,8 @@
 - **解释器**：**Python 3.7+**（用到 `sys.stdout.reconfigure`、`subprocess.run(capture_output=True, text=True)`、`datetime.fromisoformat`，故最低 3.7；DSH 自带运行时满足）。脚本不写死解释器路径：看护脚本内部用 `sys.executable` 启动渲染器，人工/agent 调用时由调用方写出 DSH 自带 python.exe 的完整路径（Windows 上光写 `python` 可能落到系统 Python）。
 - **依赖**：纯标准库（json/re/subprocess/pathlib 等），零第三方包，无需联网；git 为可选增强——有 git 用 git 采集，无 git 自动退化为文件修改时间扫描并在输出中声明来源。
 - **降级**：无 git → mtime 采集（来源可见）；看护脚本不可用时 → workflow 本就要求"改完即渲染"，仪表盘依旧最新（注意：**网页不会自己变**——init 启动的看护任务只在它存活期间生效，会话结束或任务被回收后要说一句"更新一下仪表盘"）；不可审计 ≠ 通过——.facts.json 损坏、证据路径失效或越界、「已验证」缺验证记录、事实未归置都会报 BLOCKER（退出码 2），绝不静默放行。
-- **未验证**：仅在 Windows + DSH 自带 Python 3 上实测（三个脚本 --self-test 全绿）；macOS / Linux 未实机验证（仅用跨平台 API，预期可用）；git 与 mtime 双采集分支均已在冒烟项目（plugins/control-your-development/smoke/served-demo）实测。
+- **未验证**：仅在 Windows + DSH 自带 Python 3 上实测（三个脚本 --self-test 全绿）；macOS / Linux 未实机验证（仅用跨平台 API，预期可用）；git 与 mtime 双采集分支均已在冒烟项目（projects/dsh-plugin-control-your-development/smoke/served-demo）实测。
 
 ## 冒烟记录
 
-见 `plugins/control-your-development/evals/`。
+见 `projects/dsh-plugin-control-your-development/evals/`。

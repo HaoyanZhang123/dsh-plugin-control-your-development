@@ -9,6 +9,20 @@
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-10-18
+
+### Fixed
+
+- **在 DSH 0.2.1-rc.2 上装不上（发布版 peer 区间过窄）**：npm 0.6.1 声明 `@deepseek-ai/dsh-agent|dsh-llm|dsh-settings: ">=0.2.0-0 <0.2.1-0"`，而宿主 `dsh-app-boot@0.2.1-rc.2` ⇒ 兼容判定 false：安装被拒并回滚，已装也会在启动时被 `skippedBundles` **静默跳过**（只在 stderr 留一行）。区间放宽为 `>=0.2.0-0`（保留 `-0` 后缀、不设上界）。
+- **本地 dev 链接随工厂重构失效**：插件从 `plugins/…` 迁到 `projects/<name>/plugin/` 后，profile 里的 `link:` 指向已删除目录 ⇒ 包解析失败、面板消失。安装文档补上迁移后的路径。
+- **读文件分页条件写反（既有缺陷，v0.6.2 发现）**：`src/client.src.js` 把宿主 `read` 的 `eof` 语义用反了——`eof=true` 才表示本页含文件最后一行；原写法 `if (!v.eof) break` 会在**还有下一页时提前停止**，导致 **>2000 行的文件被静默截断**。现改为 `if (v.eof) break`，超过一页继续翻页（`lib/client.js` 由 `build_panel.py` 重建）。
+
+### Changed
+
+- **在 DSH 0.2.1-rc.2 上完成真机验证**：客户端 bundle 装载、右侧栏 tab 类型与 guide 入口注册、面板渲染均实测通过（证据见 `knowledge/version-compatibility.md` §7）。
+- 展示元信息对齐新版官方要求：保留顶层 `icon`（优先）并新增 `exports["./icon"]` 指向同一文件；`locale` 的 `meta.title/description` 保持。
+- `project.yml` 的开发基准运行时更新为 `0.2.1-rc.2`。
+
 ## [0.6.1] - 2026-10-15
 
 ### Fixed

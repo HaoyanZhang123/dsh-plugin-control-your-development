@@ -89,7 +89,7 @@ cp -R dsh-plugin-control-your-development/skill/control-your-development ~/.dsh/
 dsh-plugin-control-your-development
 ```
 
-走 npm registry，**国内会自动命中镜像**（已发布 **0.4.2**，官方源与 npmmirror 均可查）。包已自带配套 skill，安装后插件会把它放进全局技能目录。
+走 npm registry，**国内会自动命中镜像**（已发布 **0.6.2**，官方源与 npmmirror 均可查）。包已自带配套 skill，安装后插件会把它放进全局技能目录。
 
 ### 方式 2：仓库地址（能连 GitHub 时可用）
 

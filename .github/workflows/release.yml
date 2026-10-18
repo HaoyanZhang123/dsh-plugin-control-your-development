@@ -43,10 +43,13 @@ jobs:
         run: |
           node -e "const v=require('./package.json').version, t=process.env.GITHUB_REF_NAME.replace(/^v/,''); if(v!==t){throw new Error('tag '+t+' != package.json '+v)} console.log('version ok', v)"
 
-      - name: 包形态校验（dsh.bundle / files 必须带 skill）
+      - name: 包形态校验（dsh.bundle / files 必须带 skill / 打包内容不许含垃圾）
         run: |
           node -e "const p=require('./package.json'); if(!p.dsh||!p.dsh.bundle||!p.dsh.bundle.patch){throw new Error('missing dsh.bundle')} if(!(p.files||[]).includes('skill')){throw new Error('files missing skill')} console.log('package ok', p.name, p.version)"
           npm pack --dry-run
+          # 反向断言：只查"缺不缺"挡不住垃圾进包（v0.5.4 实测带出 57.8 kB 字节码）。
+          # files 白名单里的否定项负责挡，这里负责**证明它真的挡住了**。
+          node -e "const {execSync}=require('child_process'); const out=execSync('npm pack --dry-run --json',{encoding:'utf8'}); const files=JSON.parse(out)[0].files.map(f=>f.path); const junk=files.filter(f=>f.includes('__pycache__')||f.endsWith('.pyc')||f.endsWith('.tgz')||f.endsWith('.log')); if(junk.length){throw new Error('打包内容混入垃圾: '+junk.join(', '))} console.log('pack clean:', files.length, 'files')"
 
       - name: 发布到 npm（OIDC，无 token / 无 OTP）
         run: npm publish --access public --provenance
@@ -64,3 +67,48 @@ jobs:
             echo "没有 $NOTES，退回自动生成的 changelog"
             gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
           fi
+
+  # 跨平台构建校验：发布出去要给 Windows / macOS / Linux 用户装，
+  # 但发布只需要一次（publish job 在 ubuntu 上）。这里只验证**打包与静态检查在其它平台也成立**。
+  cross-platform:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: 打印平台（失败时好定位）
+        run: node -e "console.log(process.platform, process.arch, process.version)"
+
+      - name: skill 自检（跨平台必须同样过）
+        run: |
+          python3 skill/control-your-development/scripts/render_dashboard.py --self-test
+          python3 skill/control-your-development/scripts/collect_facts.py --self-test
+          python3 skill/control-your-development/scripts/watch_dashboard.py --self-test
+
+      - name: 面板产物与源码一致（逐字节；行尾不同会在这里炸）
+        shell: bash
+        run: |
+          python3 tools/build_panel.py
+          git diff --exit-code -- lib/client.js
+
+      - name: 包形态与打包卫生（同 publish job 的判据，只是不发布）
+        shell: bash
+        run: |
+          node -e "const p=require('./package.json'); if(!p.dsh||!p.dsh.bundle||!p.dsh.bundle.patch){throw new Error('missing dsh.bundle')} if(!(p.files||[]).includes('skill')){throw new Error('files missing skill')} console.log('package ok', p.name, p.version)"
+          node -e "const {execSync}=require('child_process'); const out=execSync('npm pack --dry-run --json',{encoding:'utf8'}); const files=JSON.parse(out)[0].files.map(f=>f.path); const junk=files.filter(f=>f.includes('__pycache__')||f.endsWith('.pyc')); if(junk.length){throw new Error('打包内容混入垃圾: '+junk.join(', '))} console.log('pack clean:', files.length, 'files')"
+
+      # 图标不合规 = 插件在插件列表里没有图标（DSH 读 package.json 的 icon 字段）；
+      # 只检查后缀挡不住「.webp 文件名 + PNG 内容」这类，所以连**文件头**一起断言。
+      - name: icon 合规（webp 后缀 + 文件真实存在 + RIFF/WEBP 头）
+        shell: bash
+        run: |
+          node -e "const fs=require('fs');const p=require('./package.json');const icon=p.icon;if(!icon){throw new Error('package.json 缺 icon')}if(!/\.webp$/.test(icon)){throw new Error('icon 必须是 .webp: '+icon)}const f=icon.replace(/^\.\//,'');if(!fs.existsSync(f)){throw new Error('icon 文件不存在: '+f)}const b=fs.readFileSync(f);if(b.slice(0,4).toString('latin1')!=='RIFF'||b.slice(8,12).toString('latin1')!=='WEBP'){throw new Error('icon 不是合法 WEBP: '+f)}console.log('icon ok',f,b.length,'bytes')"

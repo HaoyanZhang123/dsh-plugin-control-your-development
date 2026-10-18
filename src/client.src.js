@@ -104,7 +104,7 @@ window.__ModuleLoader__.load({
       for (var i = 0; i < 50; i++){
         const v = await rpcValue(remote.workspaceFiles.read(sessionId, path, { offset: offset, limit: page }, signal));
         out += v.text || '';
-        if (!v.eof) break;
+        if (v.eof) break;   // eof=true 表示本页含文件最后一行（宿主契约）；写反会静默截断 >2000 行的文件
         const lines = v.lines || 0;
         if (!lines) break;
         offset = (v.offset || offset) + lines;
@@ -465,7 +465,7 @@ window.__ModuleLoader__.load({
          自己变成了仪表盘，从侧栏回来仍是。**根因**：我按 **kind** 传参，依据是这里原先那句注释，
          而那句来自**生态里的一个例子**（dsh-context 的 id 与 kind 恰好同串 ⇒ 对参数语义零信息量）：
          **"生态里有例子" ≠ "有契约"**。详见
-         `plugins/control-your-development/notes/2026-10-13-opentab-参数语义歧义.md`。
+         `projects/dsh-plugin-control-your-development/notes/2026-10-13-opentab-参数语义歧义.md`。
          修法（方向 A，已批准）：改成「**揭示右侧栏 + 激活我们那个 tab**」两步，**不再调 openTab**。
          ⚠ **本行以下的行为按修法改造前不要依赖**（本注释只负责不让下一个人再照着旧结论写一遍）。 */
       function openDashboardTab(){

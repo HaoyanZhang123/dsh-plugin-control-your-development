@@ -2,7 +2,7 @@
 
 > 用途：**执行者改代码时的唯一文案依据**。本文件给的是定稿值，不是建议、不含「可选/待定」。
 > 事实源：`output/review/文案与设计规范清单-v1.md`（用户逐条批注，「你的裁定」列即决定）+ 批注后对话补充的 6 条决定 + 队长对 5 处内部冲突的裁决（见 §13）。
-> 位置缩写：`CORE` = `.dsh/skills/control-your-development/templates/dashboard.core.js`；`SHELL` = `templates/dashboard.shell.html`；`CSS` = `templates/dashboard.core.css`；`SRC` = `plugins/dsh-plugin-control-your-development/src/client.src.js`；`HOST` = `plugins/dsh-plugin-control-your-development/lib/index.js`；`SKILLDIR` = `.dsh/skills/control-your-development`。
+> 位置缩写：`CORE` = `.dsh/skills/control-your-development/templates/dashboard.core.js`；`SHELL` = `templates/dashboard.shell.html`；`CSS` = `templates/dashboard.core.css`；`SRC` = `projects/dsh-plugin-control-your-development/plugin/src/client.src.js`；`HOST` = `projects/dsh-plugin-control-your-development/plugin/lib/index.js`；`SKILLDIR` = `.dsh/skills/control-your-development`。
 > 行号取自评审稿 v1 的扫描（2026-10-11），已抽样复核仍对得上（`CORE:592/634/1059/1234/1268/1327/1438`、`SHELL:3-6/34`、`SRC:204-205/230/246/380`、`HOST:23-25`）。若生产文件已变动，**以内容匹配为准，行号仅供参考**。
 > 排版规则见 `design-tokens.md`；本文件只定文字。
 > **两条全局纪律**（先读，后面每一行都受它约束）：

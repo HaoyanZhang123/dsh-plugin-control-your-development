@@ -78,6 +78,15 @@ def check_tarball(pnpm, node):
         for need in REQUIRED_FILES:
             if ("package/" + need) not in entries:
                 problems.append(f"打包内容缺少 {need}")
+        # 反向断言：**多没多**。只查"缺不缺"挡不住垃圾进包 ——
+        # v0.5.4 实测带出 57.8 kB __pycache__/*.pyc，而当时本函数全绿。
+        # .gitignore 对 pnpm/npm pack 无效，所以必须在这里显式挡。
+        JUNK_SUFFIXES = (".pyc", ".pyo", ".log", ".tgz", ".tmp", ".orig", ".rej")
+        junk = [e for e in entries
+                if "__pycache__" in e or ".git" in e.split("/") or e.endswith(JUNK_SUFFIXES)
+                or "/node_modules/" in ("/" + e)]
+        if junk:
+            problems.append(f"打包内容混入垃圾 {len(junk)} 项（前后各 3 项）：{junk[:3]} ... {junk[-3:] if len(junk) > 3 else ''}")
         return (tgz, entries), problems
 
 
