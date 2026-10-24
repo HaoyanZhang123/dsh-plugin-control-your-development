@@ -11,45 +11,41 @@
     </div>
   </header>
   <div class="strip" id="strip"></div>
+  <div class="runbar" id="runbar" hidden></div>
+  <div class="receipt" id="receipt" hidden></div>
   <nav class="tabs">
     <button data-tab="project" class="on">🏠 项目</button>
     <button data-tab="features">🗺 功能地图</button>
     <button data-tab="now">⚡ 现在</button>
     <button data-tab="decisions">⚖ 决策与待办</button>
     <button data-tab="glossary">📖 术语表</button>
-    <button data-tab="guide">❓ 使用指南</button>
   </nav>
 
-  <section id="project" class="on"></section>
-  <section id="features"></section>
-  <section id="now"></section>
-  <section id="decisions"></section>
-  <section id="glossary"></section>
+  <div class="workspace">
+    <main class="mainarea">
+      <section id="project" class="on"></section>
+      <section id="features"></section>
+      <section id="now"></section>
+      <section id="decisions"></section>
+      <section id="glossary"></section>
+    </main>
+    <aside class="inspector" id="inspector" hidden aria-live="polite">
+      <div class="inshead">
+        <div class="institle" id="insTitle"></div>
+        <button class="iconbtn" id="insClose" title="关闭检查器（Esc）">✕</button>
+      </div>
+      <div class="insbody" id="insBody"></div>
+    </aside>
+  </div>
 
-  <section id="guide">
-    <div class="card">
-      <h3>功能简介</h3>
-      <p class="lede">control-your-development 仪表盘把开发进展翻译成人话。你能看到产品能做什么、怎么用、走到哪一步。需要你拿主意的地方，会摆在这里等你拍板。</p>
-    </div>
-    <div class="card">
-      <h3>上手方式</h3>
-      <ol class="steps">
-        <li data-n="1"><b>建立仪表盘</b><br><span class="muted">在聊天框输入 <code>/control-your-development</code>，或直接说一句 "control my development"</span></li>
-        <li data-n="2"><b>照常开发</b><br><span class="muted">每完成一个阶段，仪表盘就会更新。想立刻刷新，点顶部「更新」。</span></li>
-        <li data-n="3"><b>随时掌握全局</b><br><span class="muted">打开会话右侧栏，点击打开「开发仪表盘」，会话页顶部是整页「功能地图」。顶部徽章都能点开看详情。要离线分享就说「导出网页版」。</span></li>
-        <li data-n="4"><b>处理「等你拍板」</b><br><span class="muted">点顶部「等你拍板」打开拍板面板 → 勾选项、可写补充 → 「发送拍板」。会话不在线时会先记下，下次更新生效。</span></li>
-        <li data-n="5"><b>亲手验证</b><br><span class="muted">试用过某功能后，在它的功能卡上点「✅ 我已验证」，进度条前进。</span></li>
-      </ol>
-    </div>
-    <div class="card">
-      <h3>⚖ 决策与待办怎么用</h3>
-      <p class="lede">需要你拍板的事、等你做的待办都在这一页。勾选后点「发送拍板」，我来落定；做完一件待办，勾一下就行。</p>
-    </div>
-    <div class="card">
-      <h3>待办不做也能跑</h3>
-      <p class="lede">待办只是提醒你还没确认的事，不做也不会挡住开发。</p>
-    </div>
-  </section>
+  <div class="drawer" id="drawer">
+    <button class="drawerhead" id="drawerBtn" aria-expanded="false">
+      <span class="dwtitle">进展与决策</span>
+      <span class="dwsum" id="drawerSum"></span>
+      <span class="dwcaret" aria-hidden="true">▾</span>
+    </button>
+    <div class="drawerbody" id="drawerBody"></div>
+  </div>
 </div>
 <div class="toast" id="toast"></div>
 <div class="ovl" id="ovl"><div class="sheet" id="sheet"></div></div>

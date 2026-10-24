@@ -1,201 +1,40 @@
-/* control-your-development 仪表盘：浏览器宿主引导（双击 html 离线打开 + File System Access 直读写回）
-   依赖同页先加载的 dashboard.core.js（window.CYD）与 window.__CYD_DATA__。 */
-/* webToast：core 的 toast 在 init 后挂到 window，FS 层提示复用它 */
-function webToast(m){ if (window.__CYD_TOAST__) window.__CYD_TOAST__(m); else console.log('[cyd]', m); }
-
-/* ---------- 文件夹直连（File System Access） ---------- */
-const FSOK = 'showDirectoryPicker' in window;
-let dirHandle = null;
-function idb(){
-  return new Promise((res, rej) => {
-    const r = indexedDB.open('cyd-dash', 1);
-    r.onupgradeneeded = () => r.result.createObjectStore('kv');
-    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
-  });
-}
-async function saveHandle(h){
-  try{ const db = await idb();
-    return new Promise((res, rej) => { const tx = db.transaction('kv', 'readwrite'); tx.objectStore('kv').put(h, 'dir'); tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
-  }catch(e){}
-}
-async function loadHandle(){
-  try{ const db = await idb();
-    return new Promise((res, rej) => { const tx = db.transaction('kv', 'readonly'); const q = tx.objectStore('kv').get('dir'); q.onsuccess = () => res(q.result || null); q.onerror = () => rej(q.error); });
-  }catch(e){ return null; }
-}
-async function getDir(){
-  if (!FSOK) return null;
-  let h = dirHandle || await loadHandle();
-  if (h){
-    let p = '';
-    try{ p = await h.queryPermission({ mode: 'readwrite' }); }catch(e){}
-    if (p === 'prompt'){ try{ p = await h.requestPermission({ mode: 'readwrite' }); }catch(e){} }
-    if (p === 'granted'){ dirHandle = h; return h; }
-  }
-  webToast('请选择项目根目录（包含 dev-dashboard 的文件夹）');
-  try{
-    dirHandle = await window.showDirectoryPicker({ id: 'cyd', mode: 'readwrite' });
-    await saveHandle(dirHandle);
-    return dirHandle;
-  }catch(e){ return null; }
-}
-async function readText(root, rel){
-  const parts = rel.split('/'); let h = root;
-  for (let i = 0; i < parts.length - 1; i++) h = await h.getDirectoryHandle(parts[i]);
-  const f = await h.getFileHandle(parts[parts.length - 1]);
-  return (await f.getFile()).text();
-}
-async function writeText(root, rel, text){
-  const parts = rel.split('/'); let h = root;
-  for (let i = 0; i < parts.length - 1; i++) h = await h.getDirectoryHandle(parts[i]);
-  const f = await h.getFileHandle(parts[parts.length - 1], { create: true });
-  const w = await f.createWritable();
-  await w.write(text); await w.close();
-}
-async function fileExists(root, rel){
-  const parts = rel.split('/'); let h = root;
-  for (let i = 0; i < parts.length - 1; i++){ try{ h = await h.getDirectoryHandle(parts[i]); }catch(e){ return false; } }
-  try{ await h.getFileHandle(parts[parts.length - 1]); return true; }catch(e){ return false; }
-}
-
-/* ---------- 页面内刷新：重读文件 → assembleData（共享组装） ---------- */
-async function reloadData(){
-  if (!FSOK) return null;
-  const root = await getDir();
-  if (!root) return null;
-  const prod = CYD.norm(await readText(root, 'dev-dashboard/PRODUCT.md'));
-  const feat = CYD.norm(await readText(root, 'dev-dashboard/FEATURES.md'));
-  const now = CYD.norm(await readText(root, 'dev-dashboard/NOW.md'));
-  let factsRaw = null, ignoreRaw = null;
-  try{ factsRaw = await readText(root, 'dev-dashboard/.facts.json'); }catch(e){}
-  try{ ignoreRaw = await readText(root, 'dev-dashboard/.dashboard-ignore'); }catch(e){}
-  /* 术语表：判定**调用共享核**（`CYD.resolveGlossary`），这里只做 IO 注入。
-     离线网页同样没有列目录能力 → 候选集按惯用名探测（那是 IO，不是判定）。
-     读 `.cyd.json` 失败**不再静默**：原文照传，由共享核判成 `meta_error` → 与 Python 同一条 WARN。 */
-  /* 读不到 .cyd.json（不存在 / 无权限）→ metaRaw = null = "没有这个文件"，**不产 flag**
-     （flag 只表示"文件在、但内容不是合法 JSON 对象"，见契约 §167）；读失败本身不该让刷新抛错。 */
-  let metaRaw = null;
-  try{ metaRaw = await readText(root, 'dev-dashboard/.cyd.json'); }catch(e){ metaRaw = null; }
-  const probe = ['GLOSSARY.md', 'glossary.md', '术语表.md', '词汇表.md', 'TERMS.md'];
-  const texts = {};
-  for (const c of probe){
-    try{ const t = await readText(root, 'dev-dashboard/' + c); if (t != null) texts[c] = t; }catch(e){}
-  }
-  let metaHint = null;
-  try{ metaHint = metaRaw ? JSON.parse(metaRaw) : null; }catch(e){ metaHint = null; }
-  const extra = metaHint && typeof metaHint === 'object'
-    ? [metaHint.glossary, metaHint.glossary_file].filter(x => typeof x === 'string' && x.trim()) : [];
-  for (const c of extra){
-    if (texts[c] === undefined){ try{ const t = await readText(root, 'dev-dashboard/' + c); if (t != null) texts[c] = t; }catch(e){} }
-  }
-  const glossStatus = CYD.resolveGlossary({
-    metaRaw,
-    /* 惯用名按**大小写去重**：Windows 不区分文件名大小写，`GLOSSARY.md` 与 `glossary.md` 会读到同一文件 → 两个同内容候选 → 判 ambiguous → 术语表整块静默失效（仅 Windows）。 */
-    listMd: Object.keys(texts).filter((k, i, arr) => arr.findIndex(x => x.toLowerCase() === k.toLowerCase()) === i),
-    readText: n => (texts[n] === undefined ? null : texts[n])
-  });
-  const glossName = glossStatus.file;
-  let glossRaw = null;
-  if (glossName){
-    if (texts[glossName] != null) glossRaw = texts[glossName];
-    else { try{ glossRaw = await readText(root, 'dev-dashboard/' + glossName); }catch(e){ glossRaw = null; } }
-  }
-  /* 声明类文件（TECH.md / CHANGES.md）：**离线网页也必须读**。
-     契约要求"面板与离线网页看到同一结果" —— 只由 Python 内联、web.js 这条实时链不读的话，
-     走实时刷新路径时技术视图会退化成空态（实测过）。判定仍调**共享核**，这里只做 IO 注入。 */
-  const declaredOf = async kind => {
-    const names = kind === 'tech' ? ['TECH.md', 'tech.md', '技术地图.md'] : ['CHANGES.md', 'changes.md', '变更规则.md'];
-    const dt = {};
-    for (const c of names){
-      if (texts[c] !== undefined){ dt[c] = texts[c]; continue; }
-      try{ const t = await readText(root, 'dev-dashboard/' + c); if (t != null) dt[c] = t; }catch(e){}
-    }
-    let hint = null;
-    try{ hint = metaRaw ? JSON.parse(metaRaw) : null; }catch(e){ hint = null; }
-    const extra = (hint && typeof hint === 'object')
-      ? [hint[kind], hint[kind + '_file']].filter(x => typeof x === 'string' && x.trim()) : [];
-    for (const c of extra){
-      if (dt[c] === undefined){ try{ const t = await readText(root, 'dev-dashboard/' + c); if (t != null) dt[c] = t; }catch(e){} }
-    }
-    /* 惯用名按**大小写去重**（Windows 不区分大小写：TECH.md 与 tech.md 是同一文件 → 会被判 ambiguous） */
-    const listMd = Object.keys(dt).filter((k, i, arr) => arr.findIndex(x => x.toLowerCase() === k.toLowerCase()) === i);
-    const st = CYD.resolveDeclared({ kind, metaRaw, listMd, readText: n => (dt[n] === undefined ? null : dt[n]) });
-    return { st, raw: st.file ? dt[st.file] : null };
-  };
-  const techD = await declaredOf('tech');
-  const changesD = await declaredOf('changes');
-  return CYD.assembleData(
-    /* 刻意不传 inboxRaw：离线网页读不到 .inbox.jsonl（也没有文件写入权限），
-       inbox_pending 保持 undefined —— 掌控条不渲染「⏳ 待生效」徽章（契约 v1.5）。 */
-    { prod, feat, now, glossRaw, glossName, glossStatus, factsRaw, ignoreRaw,
-      techRaw: techD.raw, techName: techD.st.file, techStatus: techD.st,
-      changesRaw: changesD.raw, changesName: changesD.st.file, changesStatus: changesD.st,
-      workspace_uri: window.__CYD_DATA__.workspace_uri },
-    p => fileExists(root, p));
-}
-
-function setVerified(md, name, dateStr){
-  const lines = md.split('\n');
-  let start = -1, end = lines.length;
-  for (let i = 0; i < lines.length; i++){
-    const m = lines[i].match(/^##\s*功能\s*[:：]\s*(.+?)\s*$/);
-    if (m && m[1] === name){ start = i; break; }
-  }
-  if (start < 0) throw new Error('找不到功能「' + name + '」');
-  for (let i = start + 1; i < lines.length; i++){ if (/^##\s*功能\s*[:：]/.test(lines[i])){ end = i; break; } }
-  let si = -1, vi = -1;
-  for (let i = start + 1; i < end; i++){
-    if (/^-\s*状态\s*[:：]/.test(lines[i])) si = i;
-    if (/^-\s*验证\s*[:：]/.test(lines[i])) vi = i;
-  }
-  if (si < 0) throw new Error('功能块缺少状态行');
-  lines[si] = '- 状态: 已验证';
-  const vl = '- 验证: 用户在 ' + dateStr + ' 验证过';
-  if (vi >= 0) lines[vi] = vl; else lines.splice(si + 1, 0, vl);
-  return lines.join('\n');
-}
-function prependTimeline(md, line){
-  const lines = md.split('\n');
-  for (let i = 0; i < lines.length; i++){
-    if (/^##(?!#)\s*时间线/.test(lines[i].trim())){ lines.splice(i + 1, 0, line); return lines.join('\n'); }
-  }
-  throw new Error('找不到时间线小节');
-}
-
-
-/* ---------- 写回：FEATURES.md 状态 + NOW.md 时间线 ---------- */
-async function verifyWrite(name){
-  if (!FSOK) return 'fallback';
-  const root = await getDir();
-  if (!root) return 'fallback';
-  let fm = CYD.norm(await readText(root, 'dev-dashboard/FEATURES.md'));
-  const cur = CYD.parseFeatures(fm).find(x => x.name === name);
-  if (!cur) throw new Error('文件中找不到功能「' + name + '」');
-  if (cur.status !== '可用') return 'fallback';
-  fm = setVerified(fm, name, CYD.fmtDate(new Date()));
-  const nf = CYD.parseFeatures(fm);
-  const n = nf.filter(x => x.status === '已验证').length, t = nf.filter(x => x.status !== '已废弃').length;
-  let nm = CYD.norm(await readText(root, 'dev-dashboard/NOW.md'));
-  nm = prependTimeline(nm, '- ' + CYD.fmtDT(new Date()) + ' | 你验证了「' + name + '」，进度前进到 ' + n + '/' + t);
-  await writeText(root, 'dev-dashboard/FEATURES.md', fm);
-  await writeText(root, 'dev-dashboard/NOW.md', nm);
-  return 'ok';
-}
-
-/* ---------- 启动（浏览器宿主） ---------- */
+/* control-your-development 仪表盘：离线网页引导（**只读快照**，v1.7）。
+   依赖同页先加载的 dashboard.core.js（window.CYD）、window.__CYD_DATA__ 与 window.__CYD_META__。
+   **这里没有任何写能力**：没有目录授权（File System Access）、没有文件写入、没有实时运行控制——
+   按契约「读模型 · 消费方职责」，离线页只冻结一份数据并说清它是什么时候、由哪个版本导出的。
+   要更新：重新导出（在对话里说「更新仪表盘」），不靠这个页面自己变。 */
 (function(){
-  const DATA = window.__CYD_DATA__;
-  CYD.init(document.getElementById('app'), {
+  const DATA = window.__CYD_DATA__ || null;
+  const META = window.__CYD_META__ || {};
+  const toast = m => { if (window.__CYD_TOAST__) window.__CYD_TOAST__(m); else console.log('[cyd]', m); };
+  const mount = document.getElementById('app');
+  if (!DATA || !DATA.project){
+    /* 读模型缺失就明说缺什么，不渲染半张空壳（"读不到就说读不到"） */
+    CYD.ensureCss();
+    mount.classList.add('cyd-app');
+    mount.innerHTML = '<div class="empty">这份离线快照里没有数据（__CYD_DATA__ 为空）。'
+      + '<br><br>回到对话里说一句「更新仪表盘」重新导出。</div>';
+    return;
+  }
+  /* 导出时刻与来源版本：契约要求离线页标出它们，否则"冻结数据"会被当成实时 */
+  const exported = META.exportedAt || META.generatedAt || '';
+  const ver = (META.producer && META.producer.version) || '';
+  CYD.init(mount, {
     data: DATA,
     browserTab: true,
-    capabilityNote: '直写环境：' + (FSOK ? '✅ 支持（Edge/Chrome）' : '⚠ 不支持，将使用复制指令模式'),
-    evidenceUrl: p => DATA.workspace_uri + '/' + encodeURI(p).replace(/#/g, '%23').replace(/\?/g, '%3F'),
-    reload: reloadData,
-    verifyWrite
+    /* 冻结快照的元信息：renderStrip 用它标注导出时刻；intentRaw 由共享核 parseIntent 解析 */
+    viewMeta: META,
+    intentRaw: META.intentRaw === undefined ? null : META.intentRaw,
+    /* 离线页永远是"快照已冻结"：新鲜度只能靠重新导出，不假装能校验 */
+    viewStatus: { state: 'fresh', mismatched: [], meta: META },
+    capabilityNote: '离线只读快照'
+      + (exported ? ' · 导出于 ' + exported : '')
+      + (ver ? ' · 源版本 ' + ver : '')
+      + '；数据不会自动更新，要更新请重新导出。',
+    /* 只读：不给刷新（没法重读文件）、不给写回（没有写权限） */
+    reload: null,
+    verifyWrite: null,
+    requestUpdate: null,
+    evidenceUrl: p => (DATA.workspace_uri || '') + '/' + String(p).split('/').map(encodeURIComponent).join('/'),
   });
-  (async function(){
-    if (!FSOK) return;
-    try{ const hd = await loadHandle(); if (hd && await hd.queryPermission({ mode: 'readwrite' }) === 'granted') dirHandle = hd; }catch(e){}
-  })();
 })();
-

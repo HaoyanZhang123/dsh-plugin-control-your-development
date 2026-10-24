@@ -3,7 +3,7 @@
 > 把开发过程翻译成你看得懂、能掌控的产品仪表盘。
 > 人话 Markdown 是事实源；仪表盘钉在 DSH 里（右侧边栏 + 会话页顶部整页功能地图），面板上的拍板直接送达 AI；需要分享时才导出单文件离线网页。
 
-版本：skill v1.6.2 · 面板插件 v0.6.2　|　许可：[MIT](LICENSE)　|　语言：[English](README.en.md)
+版本：skill v1.7.0 · 面板插件 v0.7.0　|　许可：[MIT](LICENSE)　|　语言：[English](README.en.md)
 
 ---
 

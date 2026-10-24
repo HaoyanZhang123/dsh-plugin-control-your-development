@@ -81,7 +81,7 @@ def _seg_match(s: str, p: str) -> bool:
 
 
 def glob_match(path: str, pattern: str) -> bool:
-    """最小 glob 语义（契约 v1.2，与共享核 JS 侧 globMatch 逐字同构）：
+    """最小 glob 语义（契约 v1.2；v1.7 起**只有这一份实现**——共享核的 globMatch 已随 JS 解析删除）：
     双星号跨目录、单星号不跨目录、问号单字符、大小写敏感、不支持字符类。
     线性匹配（不用正则），因此没有灾难性回溯。"""
     ss = path.split("/")
@@ -286,6 +286,46 @@ def read_prev_tech(dash: Path):
             except OSError:
                 return None
     return None
+
+
+def read_prev_tech_path(dash: Path):
+    """`read_prev_tech` 选中的**那个文件**（相对路径要进读模型指纹；内容规则仍只有 `read_prev_tech` 一处）。"""
+    idx = dash / ".versions" / "index.json"
+    if not idx.is_file():
+        return None
+    try:
+        data = json.loads(idx.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    vers = data.get("versions") if isinstance(data, dict) else None
+    if not isinstance(vers, list):
+        return None
+    for v in reversed(vers):
+        d = v.get("dir") if isinstance(v, dict) else None
+        if not isinstance(d, str):
+            continue
+        f = dash / ".versions" / d / "TECH.md"
+        if f.is_file():
+            return f
+    return None
+
+
+def _declared_format(dash: Path) -> int:
+    """`.cyd.json` 声明的**事实格式版本**（读模型透出为 `format`）。
+
+    缺失 / 非整数 / 布尔 ⇒ 1：那是"向后兼容的正常情况"，也是渲染器能安全消费的那一版
+    （契约「版本位分三件」；更高 format 的 WARN 与只读由 `cyd_format_state` 管，不在这里判）。
+    """
+    meta = dash / CYD_META
+    if not meta.is_file():
+        return CYD_FORMAT_SUPPORTED
+    try:
+        obj = json.loads(meta.read_text(encoding="utf-8-sig"))
+    except Exception:
+        return CYD_FORMAT_SUPPORTED
+    fmt = obj.get("format", CYD_FORMAT_SUPPORTED) if isinstance(obj, dict) else CYD_FORMAT_SUPPORTED
+    bad = isinstance(fmt, bool) or not isinstance(fmt, int)
+    return CYD_FORMAT_SUPPORTED if bad else fmt
 
 
 def parse_tech(text, warnings):
@@ -655,6 +695,162 @@ def file_hash(path):
         return None
 
 
+VIEW_FILE = ".view.json"
+VIEW_SCHEMA_VERSION = 1
+VIEW_PRODUCER = "control-your-development"
+
+
+def view_norm_bytes(raw: bytes) -> bytes:
+    """读模型指纹的**规范化**（契约「读模型 · 指纹」）：去 UTF-8 BOM，CRLF / CR 归一成 LF。
+
+    **为什么必须成文并两端各实现一份**：宿主侧（node）要能独立重算同一串指纹，
+    所以规则不能藏在实现细节里 —— 字节不同 ⇒ 面板误报 stale，字节相同 ⇒ 才叫"同一份事实"。
+    """
+    if raw.startswith(b"\xef\xbb\xbf"):
+        raw = raw[3:]
+    return raw.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+
+
+def view_hash_bytes(raw: bytes) -> str:
+    return hashlib.sha256(view_norm_bytes(raw)).hexdigest()
+
+
+def view_hash_text(text: str) -> str:
+    return view_hash_bytes(text.encode("utf-8"))
+
+
+VIEW_ABSENT = "\u0000absent"
+
+
+def view_file_hash(path) -> "str | None":
+    """文件指纹；不存在 ⇒ None（"当时没有这个文件"是可比的初始状态，与 file_hash 同口径）。"""
+    p = Path(path)
+    try:
+        return view_hash_bytes(p.read_bytes()) if p.is_file() else None
+    except OSError:
+        return None
+
+
+def view_file_hash_or_absent(path) -> str:
+    """**参与新鲜度、但可能出现得晚**的输入的指纹：缺失时给一个确定的"缺席值"。
+
+    为什么不能"缺了就跳过这个键"：消费方只重算**记录里已有的键**，于是"文件后来才出现"
+    （例如先渲染、后采集出 `.facts.json`）永远判不出 stale —— 那是一整类静默过期。
+    缺席值必须两边同一串（node 侧同名常量），否则又变成跨端漂移。
+    """
+    h = view_file_hash(path)
+    return h if h is not None else view_hash_text(VIEW_ABSENT)
+
+
+def view_evidence_hash(entries) -> str:
+    """`@evidence`：数据里全部证据路径的 (`相对路径`, `是否存在`) 快照。
+
+    entries = [(归一化相对路径, exists: bool)]。**按路径字节序排序**后序列化成紧凑 JSON
+    （ensure_ascii=False / separators=(",", ":")），再走同一规范化 + SHA-256。
+    宿主侧用同一份规则从 data 里重建它，所以这里**不许**做额外过滤（越界路径 exists=False 也照收）。
+    """
+    # **按路径去重**：同一条证据被多个归属引用是常态（功能/流程/时间线/技术地图），
+    # 重复条目对"这份事实依赖哪些文件"零信息量，却让两端的排序稳定性变成负担。
+    # 同一路径的不同 exists 不可能同时为真（口径唯一），取最后一次即可。
+    uniq = {}
+    for rel, ex in entries:
+        uniq[str(rel)] = bool(ex)
+    pairs = sorted(uniq.items(), key=lambda kv: kv[0].encode("utf-8"))
+    payload = json.dumps([[k, v] for k, v in pairs], ensure_ascii=False, separators=(",", ":"))
+    return view_hash_text(payload)
+
+
+def view_sources_hash(dash: Path) -> str:
+    """`@sources`：`dev-dashboard/*.md` 的**文件名快照**（不含内容）。
+
+    为什么需要它：术语表 / TECH / CHANGES 的真实文件名是**嗅探**出来的。用户新建一个候选
+    Markdown 时，解析结论可能变（歧义、换选中文件），而"选中的文件"那些键都不会变 ——
+    没有这条快照，这种变化会**静默不 stale**。内容仍由各选中文件的键覆盖，这里只管"出现了谁"。
+    """
+    names = [p.name for p in dash.glob("*.md")] if dash.is_dir() else []
+    # 按 UTF-8 字节序（不是 str 的码点序）：宿主侧 node 用 Buffer 比较，两边必须同一口径
+    names.sort(key=lambda s: s.encode("utf-8"))
+    return view_hash_text(json.dumps(names, ensure_ascii=False, separators=(",", ":")))
+
+
+def view_cyd_hash(dash: Path) -> str:
+    """`@cyd`：`.cyd.json` 里**影响语义的那一小撮**（选中的文件 / format / 用户指定项）。
+
+    为什么不能整份纳入：`updated_at` / `writer.at` 每轮都变，纳入即"一渲染完就 stale"。
+    为什么必须纳入：`{"glossary": "..."}` 是**用户按面板提示亲手写进去的选择**；不纳入的话用户
+    改完毫无反应（面板没有别的路能察觉），解析结论会静默停在旧的那一份。
+    """
+    meta = dash / CYD_META
+    subset = {}
+    try:
+        obj = json.loads(meta.read_text(encoding="utf-8-sig")) if meta.is_file() else {}
+        if not isinstance(obj, dict):
+            obj = {}
+    except Exception:
+        obj = {}
+    for k in ("format", "glossary", "glossary_file", "glossary_source",
+              "tech", "tech_file", "tech_source", "changes", "changes_file", "changes_source"):
+        v = obj.get(k)
+        if v is not None:
+            subset[k] = v
+    return view_hash_text(json.dumps(subset, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
+
+
+def view_prevtech_hash(rel_path) -> str:
+    """`@prevtech`：**选中了哪一份**上一轮 TECH 快照（只记路径，不记内容）。
+
+    为什么需要：`.versions/index.json` 改指另一份**已存在**的快照时，文件内容都没动，正文哈希
+    当然不变 —— 但"拿哪一份当上一轮"变了，S3「技术地图跟不上了」的结论跟着变。不纳入就是
+    "信号整块静默滞后"。
+    """
+    return view_hash_text(json.dumps([str(rel_path)], ensure_ascii=False, separators=(",", ":")))
+
+
+def write_view(dash: Path, data, source_hashes, fmt, generated_at) -> Path:
+    """把读模型**原子**写到 `dev-dashboard/.view.json`（契约「读模型 · 原子写」）。
+
+    临时文件同目录 ⇒ 同一文件系统 ⇒ `os.replace` 是原子的；任何时刻读到的都是完整一份。
+    异常路径必须清理临时文件：残留的 `.tmp*` 会被门禁当成"半写痕迹"。
+    """
+    payload = {
+        "schemaVersion": VIEW_SCHEMA_VERSION,
+        "producer": {"name": VIEW_PRODUCER, "version": _skill_version() or ""},
+        "format": fmt,
+        "generatedAt": generated_at,
+        "sourceHashes": source_hashes,
+        "data": data,
+    }
+    out = dash / VIEW_FILE
+    tmp = dash / (VIEW_FILE + ".tmp-" + str(os.getpid()))
+    try:
+        with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n")
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, out)
+    finally:
+        if tmp.exists():
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+    return out
+
+
+def read_inbox_raw(inbox_path: Path):
+    """`.inbox.jsonl` 的**原始文本**（离线导出要用它冻结"导出时刻的待生效"）。
+
+    三态：文件不存在 → `""`；读到 → 原文；读取失败（IO／权限）→ `None`（"读不到"≠"没有"）。
+    **不再在渲染器里解析它**：计数与明细只由共享核 `CYD.parseIntent` 一处解析（v1.7）。
+    """
+    try:
+        return inbox_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return ""
+    except OSError:
+        return None
+
+
 def concurrent_edit(path, expected_hash, label=""):
     """**乐观并发检查**（契约 :552 形态③：两份插件副本 / 两个宿主并发写同一份机器文件）。
 
@@ -964,7 +1160,7 @@ def layout_graph(feats, warnings):
 def legacy_ignore_warnings(patterns, ref_paths):
     """`.dashboard-ignore` 旧写法失效 WARN —— **行为式判据**（契约 :504-521）+ 文案逐字 deck:599。
 
-    作用域＝**两端**（ignore 解析与匹配两端各有实现；`warnings[]` 由 dual_parser_diff.py 逐条比对）。
+    作用域＝**渲染器单端**（v1.7 起 ignore 解析与匹配只有渲染器这一侧；文案定稿由 warn_copy_check 按 `作用域：渲染器` 核对）。
 
     **为什么是行为式**：看模式形状必然误报 ——
       ① 漏掉最危险的一类：**旧版 `*`/`?` 能跨 `/`**，新版按 `/` 分段（`*.log` 旧版命中 `dist/app.log`、
@@ -1024,7 +1220,7 @@ def compute_tech_stale(prev_tech_raw, tech_doc, workspace: Path):
       · `0 < 失效率` 的模块计入 `modules`（**全灭也算** —— 声明还在、文件全没了正是"地图跟不上了"最该说的情况；
         S1 那条 WARN 管的是"本轮声明被清空"，与这条不是一回事）；
       · 无快照 / 快照解析不出模块 / 没有一个模块失效 → `None`（**fail-closed 不产**，不用"本轮为空"近似）。
-      · `ratio` = 总体失效率 = Σ失效 / Σ分母（4 位小数；两端必须逐位一致，由 dual_parser_diff 的 tech_stale 夹具守）。
+      · `ratio` = 总体失效率 = Σ失效 / Σ分母（4 位小数；只此一份实现，消费方只读不算）。
 
     存在性走 `_exists_like_audit` —— **不在渲染器里另写一套 stat 规则**。
     """
@@ -1141,41 +1337,6 @@ def audit(evidence_paths, workspace, facts_path, ignore_path):
     return matrix, missing, invalid, pending, facts_detail, patterns
 
 
-def parse_inbox(inbox_path: Path, warnings):
-    """`.inbox.jsonl` 未收取行的**计数与逐条内容**（同一次读取——两次读取会造出"计数与明细不一致"的第二事实源）。
-    三态同口径：文件不存在或空 → `(0, [])`；某行不是合法 JSON 对象 → 跳过 + WARN（不阻断）；
-    读取失败（IO／权限）→ `(None, None)`（"读不到"与"没有"必须可区分）。不参与 ok 判定。
-
-    读取失败刻意**不写 warnings**：warnings 是两端逐条比对的数据字段，而 JS 侧只拿到 `inboxRaw = null`
-    （看不见 OS 错误原文），写进去必然与共享核分叉；失败状态由 `None` 本身表达。"""
-    try:
-        text = inbox_path.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return 0, []
-    except OSError:
-        return None, None
-    n = 0
-    items = []
-    for line in text.splitlines():
-        s = line.strip()
-        if not s:
-            continue
-        try:
-            obj = json.loads(s)
-        except Exception:
-            obj = None
-        if not isinstance(obj, dict):
-            warnings.append(f"{inbox_path.name} 里有一行不是合法 JSON 对象，已跳过该行")
-            continue
-        n += 1
-        items.append({
-            "type": obj.get("type") if isinstance(obj.get("type"), str) else "",
-            "text": obj.get("text") if isinstance(obj.get("text"), str) else "",
-            "ts": obj.get("ts") if isinstance(obj.get("ts"), str) else "",
-        })
-    return n, items
-
-
 def render(dashboard: Path, workspace: Path, write_html=None):
     """渲染（审计）dev-dashboard。write_html：True=强制写 index.html；False=不写；
     None=自动（仅当 index.html 已存在时更新它，不主动生成）——v1.3 起网页版是可选导出。"""
@@ -1287,7 +1448,7 @@ def render(dashboard: Path, workspace: Path, write_html=None):
     tech_stale = compute_tech_stale(prev_tech, tech_doc, ws)
     if tech_stale:
         # 文案**逐字取自 copy-deck §16.6**（两端必须逐字同序；JS 同一段在 `techStaleLines()`，
-        # 逐条比对由 dual_parser_diff 守）。模块名**最多列 3 个、超出加「等」**（deck 要求：
+        # 逐条核对由 view_model_test 的 warnings 断言与 warn_copy_check 守）。模块名**最多列 3 个、超出加「等」**（deck 要求：
         # 别让变量把句子撑过 40 字）。
         _stale_names = list(tech_stale["modules"])
         _stale_shown = "、".join(_stale_names[:3]) + ("等" if len(_stale_names) > 3 else "")
@@ -1332,8 +1493,9 @@ def render(dashboard: Path, workspace: Path, write_html=None):
         blockers.append(".facts.json 损坏，无法审计覆盖性")
     elif pending > 0:
         blockers.append(f"{pending} 条变更事实未归置（收录进时间线/功能证据，或写入 .dashboard-ignore）")
-    # 待生效条数与逐条明细（v1.5）：以 .inbox.jsonl 为准，**同一次读取**；不参与 ok。
-    inbox_pending, inbox_items = parse_inbox(dash / ".inbox.jsonl", warnings)
+    # 待生效（意图状态）**不进事实视图**（v1.7，契约「读模型 · 意图不在读模型里」）：
+    # 面板与离线页都拿原始文本交给共享核 parseIntent 解析；这里只为离线导出冻结"导出时刻的原文"。
+    inbox_raw = read_inbox_raw(dash / ".inbox.jsonl")
     def ev_objs(paths):
         """与 audit 同口径：先规范化，越界路径一律视为不存在（避免"徽章缺失/矩阵存在"自相矛盾）。"""
         out = []
@@ -1351,6 +1513,7 @@ def render(dashboard: Path, workspace: Path, write_html=None):
         counts[f["status"]] = counts.get(f["status"], 0) + 1
     counts["total_active"] = sum(counts[s] for s in STATUSES if s != "已废弃")
 
+    generated_at = datetime.now().astimezone().isoformat(timespec="seconds")
     data = {
         "project": {
             "name": proj["name"], "intro": proj["intro"], "stage": proj["stage"],
@@ -1374,8 +1537,6 @@ def render(dashboard: Path, workspace: Path, write_html=None):
                    "evidence_missing": missing, "evidence_invalid": invalid,
                    "facts_pending": max(pending, 0), "facts_error": facts_error, "source": facts_source,
                    "facts_generated_at": facts_generated_at,
-                   "inbox_pending": inbox_pending,
-                   "inbox_items": inbox_items,
                    "verify_missing": no_verify,
                    "glossary_drift": drift, "glossary_status": gstatus,
                    "tech_status": tstatus, "changes_status": cstatus,
@@ -1383,6 +1544,68 @@ def render(dashboard: Path, workspace: Path, write_html=None):
                    "tech_stale": tech_stale,
                    "facts": facts_detail, "ignore": ignore_patterns, "warnings": warnings},
     }
+
+    # ---- 读模型（v1.7）：**每次 render 都写**，与是否导出 HTML 无关（契约「读模型 · 消费方职责」）----
+    # 指纹覆盖 = 契约「读模型 · 指纹」；可选文件缺失就不产那个键（不是空串）。
+    _src = {
+        "PRODUCT.md": view_file_hash(dash / "PRODUCT.md"),
+        "FEATURES.md": view_file_hash(dash / "FEATURES.md"),
+        "NOW.md": view_file_hash(dash / "NOW.md"),
+    }
+    if gpath is not None:
+        _src[gpath.name] = view_file_hash(gpath)
+    if tpath is not None:
+        _src[tpath.name] = view_file_hash(tpath)
+    if cpath is not None:
+        _src[cpath.name] = view_file_hash(cpath)
+    # 这两件**必须始终产键**（缺席用确定的缺席值）：它们可能在首次渲染之后才出现，
+    # "后来才出现"必须能判成 stale，否则读模型会带着旧 facts 静默显示"完整"。
+    for _opt in (".facts.json", ".dashboard-ignore"):
+        _src[_opt] = view_file_hash_or_absent(dash / _opt)
+    # 参与漂移判定的最近一版 TECH.md：按它自己的相对路径登记（内容规则只有 read_prev_tech 一处）
+    _prev_path = read_prev_tech_path(dash)
+    if _prev_path is not None:
+        try:
+            _rel_prev = _prev_path.relative_to(dash).as_posix()
+        except ValueError:
+            _rel_prev = _prev_path.name
+        _src[_rel_prev] = view_file_hash(_prev_path)
+        _src["@prevtech"] = view_prevtech_hash(_rel_prev)
+    else:
+        # 没有快照也要有键：快照"后来才出现 / 被 prune 掉"同样会改变漂移判定的前提
+        _src["@prevtech"] = view_prevtech_hash("")
+    # @evidence：数据里的**每一条**证据路径 + 存在性（越界 = False，与证据矩阵同口径）
+    _ev_entries = []
+    _exists_cache_ev = {}
+
+    def _ev_add(items):
+        for _e in items:
+            if isinstance(_e, dict):
+                _ev_entries.append((_e["path"], bool(_e["exists"])))
+            elif isinstance(_e, str):
+                # 技术地图的 `evidence` 是**路径字符串数组**（契约「顶层 tech」明确不重复一份 exists），
+                # 存在性在这里按 audit 的同一口径现算 —— 与 node 侧 evidenceEntries 对齐（它也只看 path）。
+                _rel = _e.replace("\\", "/")
+                _ev_entries.append((_rel, _exists_like_audit(ws, _rel, _exists_cache_ev)))
+
+    for _f in feats:
+        _ev_add(ev_objs(_f["evidence"]))
+        for _c in _f["children"]:
+            _ev_add(ev_objs(_c["evidence"]))
+    for _j in proj["journey"]:
+        _ev_add(ev_objs(_j["evidence"]))
+    for _t in timeline:
+        _ev_add(ev_objs(_t["evidence"]))
+    for _m in tech_doc["modules"]:
+        _ev_add(ev_objs(_m["evidence"]))
+        for _mc in (_m.get("children") or []):
+            _ev_add(ev_objs(_mc["evidence"]))
+    _src["@evidence"] = view_evidence_hash(_ev_entries)
+    # @sources：dev-dashboard/*.md 的**文件名快照**（嗅探结论可能因新建候选文件而变）
+    _src["@sources"] = view_sources_hash(dash)
+    # @cyd：用户手写的解析结论（选术语表 / format）—— 用户照面板提示改完必须能让读模型过期
+    _src["@cyd"] = view_cyd_hash(dash)
+    write_view(dash, data, _src, _declared_format(dash), generated_at)
 
     # index.html 写出规则（v1.3）：--html 强制；--no-html 不写；默认仅在该文件已存在时更新
     do_write = (dash / "index.html").is_file() if write_html is None else write_html
@@ -1416,8 +1639,21 @@ def render(dashboard: Path, workspace: Path, write_html=None):
                .replace("<", "\\u003c")
                .replace("\u2028", "\\u2028")
                .replace("\u2029", "\\u2029"))
+    # 离线页的只读元数据：导出时刻 + 数据来源版本 + 冻结的待生效原文（面板与离线页同一个 parseIntent 解析）
+    meta_payload = (json.dumps({
+        "schemaVersion": VIEW_SCHEMA_VERSION,
+        "producer": {"name": VIEW_PRODUCER, "version": _skill_version() or ""},
+        "format": _declared_format(dash),
+        "generatedAt": generated_at,
+        "exportedAt": generated_at,
+        "intentRaw": inbox_raw,
+    }, ensure_ascii=False)
+        .replace("<", "\\u003c")
+        .replace("\u2028", "\\u2028")
+        .replace("\u2029", "\\u2029"))
     html = tpl.replace("/*__CYD_CORE__*/", core, 1).replace("/*__CYD_WEB__*/", web, 1)
     html = html.replace("/*__DATA__*/null", "/*__DATA__*/" + payload, 1)
+    html = html.replace("/*__META__*/null", "/*__META__*/" + meta_payload, 1)
     html = html.replace("__TITLE__", html_mod.escape(proj["name"], quote=True))
     out = dash / "index.html"
     with open(out, "w", encoding="utf-8", newline="\n") as fh:
@@ -1465,7 +1701,7 @@ def self_test():
         assert code == 0 and (dash / "index.html").is_file(), "--html 应强制生成 index.html"
         html = (dash / "index.html").read_text(encoding="utf-8")
         for marker in ("演示项目", "核心功能", "扩展功能", "自检决策", "src/app.js", "🌓",
-                       "\"multi\": true", "workspace_uri", "inbox_pending",
+                       "\"multi\": true", "workspace_uri",
                        "子项", "汇总", '"glossary"', "仪表盘",
                        '📖 术语表', "还没有术语表"):
             assert marker in html, f"产物缺少标记: {marker}"
@@ -1473,13 +1709,18 @@ def self_test():
         flat = html.replace('\\"', '"')
         for marker in ('data-tab="project"', 'id="project"', 'data-tab="features"', 'id="features"',
                        'data-tab="now"', 'id="now"', 'data-tab="decisions"', 'id="decisions"',
-                       'data-tab="glossary"', 'id="glossary"', 'data-tab="guide"', 'id="guide"'):
+                       'data-tab="glossary"', 'id="glossary"'):
             assert marker in flat, f"产物缺少结构标记: {marker}"
-        # v1.5 六 tab 顺序：项目 / 功能地图 / 现在 / 决策与待办 / 术语表 / 使用指南
+        # v1.7 五 tab 顺序：项目 / 功能地图 / 现在 / 决策与待办 / 术语表（**使用指南已删**，D2）
         assert (flat.index('data-tab="project"') < flat.index('data-tab="features"') < flat.index('data-tab="now"')
-                < flat.index('data-tab="decisions"') < flat.index('data-tab="glossary"')
-                < flat.index('data-tab="guide"')), \
-            "六 tab 顺序不对（应为 项目 / 功能地图 / 现在 / 决策与待办 / 术语表 / 使用指南）"
+                < flat.index('data-tab="decisions"') < flat.index('data-tab="glossary"')), \
+            "五 tab 顺序不对（应为 项目 / 功能地图 / 现在 / 决策与待办 / 术语表）"
+        # 反向断言：独立「使用指南」必须整块消失（导航 / section / 固定文案一处都不许留）
+        for gone in ('data-tab="guide"', 'id="guide"', '上手方式', '待办不做也能跑'):
+            assert gone not in flat, f"使用指南残留: {gone}"
+        # 统一工作区（v1.7）：右侧检查器 + 底部进展/决策抽屉
+        for marker in ('id="inspector"', 'id="insBody"', 'id="drawer"', 'id="drawerBody"'):
+            assert marker in flat, f"产物缺少统一壳结构: {marker}"
         # 用词漂移：别名「看板」写进 NOW.md 正文 → 进 warnings（不阻断）
         (dash / "NOW.md").write_text(
             "# 现在\n\n## 时间线\n- 2026-01-01 09:10 | 看板更新完毕\n", encoding="utf-8")
@@ -1605,7 +1846,7 @@ def self_test():
             "[data-question-key],[data-plan-review-key])){display:none}\n"
             "/* 注释里出现 .cyd-app 也不能给别的选择器开绿灯 */.nope{a:b}\n") == ['.nope'], \
             "已作用域判据误伤：`.cyd-app` / @keyframes / `:has(.cyd-immersive)` 都必须放行，注释不得开绿灯"
-        # S3（任务②）**正反两侧**（单元级；端到端那条 WARN 的两端逐字一致由 dual_parser_diff 的 tech_stale 夹具守）：
+        # S3（任务②）**正反两侧**（单元级；端到端那条 WARN 的措辞由 warn_copy_check 守）：
         # 正向 = 快照声明两条、只剩一条 ⇒ 0 < 失效率 ⇒ 产；三条反向 = 都在 / 无快照 / 模块不在本轮 ⇒ 都不产。
         # 注：TECH 模块的 `证据` 是**一行、逗号分隔多路径**（多行 `- 证据:` 只留最后一行 —— 与 FEATURES 不同）。
         _tech = ("# 技术地图\n\n## 模块: 渲染\n- 层: 界面\n- 职责: 画图\n- 状态: 可用\n"
@@ -1623,7 +1864,7 @@ def self_test():
         assert compute_tech_stale(None, _doc, root) is None, "S3 反向②：无快照却仍产（fail-closed 破了）"
         assert compute_tech_stale(_tech, parse_tech("# 技术地图\n\n## 模块: 别的\n- 层: 界面\n- 职责: x\n",
                                                     []), root) is None, "S3 反向③：模块不在本轮却仍产"
-        # S4 搬迁检测的**单元级正反三例**（端到端那两条 WARN 的两端逐字一致 + 顺序由 dual_parser_diff 的
+        # S4 搬迁检测的**单元级正反三例**（端到端那两条 WARN 的措辞 + 顺序由 warn_copy_check 的
         # 「搬迁检测-命中（产）」夹具守；这里守**判据本身**，且两条反向都要真的不产 —— 防恒真）。
         _fd_of = lambda *items: [{"path": p, "kind": "code", "change": c, "pending": False}
                                  for p, c in items]

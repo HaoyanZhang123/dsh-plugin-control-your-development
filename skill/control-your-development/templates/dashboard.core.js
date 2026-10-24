@@ -12,8 +12,8 @@ function fmtDT(d){ return fmtDate(d) + ' ' + pad(d.getHours()) + ':' + pad(d.get
    `rawFallback` 为真时改为**原样返回原文**（明细浮层的「时间」列要看到原始 ts，见 copy-deck §8.6）。
    字段层不管这个 —— health.facts_generated_at 只负责把字符串原样透出。 */
 /* 「久未采集」阈值（天）。**只做显示层**：它是"相对于此刻"的判断 ——
-   写进 data/warnings 会被离线导出页**冻结成永久为真**，且两端各自取 now 会在阈值边界上产生跨端差异
-   （dual_parser_diff 变成偶发红）。所以这里按每次渲染现算，与 fmtRel 同层。
+   写进 data/warnings 会被离线导出页**冻结成永久为真**；而"此刻"每次打开都在变，写进数据就等于
+   把一次判断钉死。所以这里按每次渲染现算，与 fmtRel 同层。
    阈值 = **30**（copy-deck §16.6 定稿：采集是手动的，"两周没动"在正常节奏里太常见，14 会把其实
    没变化的项目也报成旧数据；真实天数每次都在「上次采集」一行显示，放宽不丢信息）。 */
 const FACTS_STALE_DAYS = 30;
@@ -82,29 +82,8 @@ function stripMd(s){
     .split('\n').map(l => l.replace(/^\s{0,3}(#{1,6}|[-*>+])\s+/, '')).join(' ')
     .replace(/\s+/g, ' ').trim();
 }
-function kindOf(p){
-  const n = p.split('/').pop().toLowerCase();
-  const ext = n.includes('.') ? '.' + n.split('.').pop() : '';
-  if (n.includes('test') || n.startsWith('spec')) return '测试';
-  if (['.md', '.txt', '.rst', '.adoc'].includes(ext)) return '文档';
-  if (['.py', '.js', '.ts', '.jsx', '.tsx', '.mjs', '.c', '.cpp', '.h', '.java', '.go', '.rs', '.rb', '.php', '.cs', '.swift', '.kt', '.sh', '.ps1', '.html', '.css', '.vue', '.svelte', '.sql'].includes(ext)) return '代码';
-  return '其他';
-}
-/* 最小 glob（与渲染器 scripts/render_dashboard.py 的 glob_match 同语义）：
-   双星号跨目录、单星号不跨目录、问号单字符、大小写敏感；线性匹配，无正则回溯风险。 */
-function segMatch(s, p){
-  let si = 0, pi = 0, star = -1, mark = 0;
-  while (si < s.length){
-    if (pi < p.length && (p[pi] === '?' || p[pi] === s[si])){ si++; pi++; continue; }
-    if (pi < p.length && p[pi] === '*'){ star = pi++; mark = si; continue; }
-    if (star >= 0){ pi = star + 1; si = ++mark; continue; }
-    return false;
-  }
-  while (pi < p.length && p[pi] === '*') pi++;
-  return pi === p.length;
-}
 /* 本插件支持的**事实源格式版本**（`.cyd.json.format`；契约「版本位分三件」L494）。
-   写者**只有渲染器** ⇒ 共享核的职责是**说出同一件事**（面板路径上用户看得见 + dual_parser_diff 能逐条比对），
+   写者**只有渲染器** ⇒ 共享核只负责把 `format` 读出来、在界面上说明"只读降级"，
    **不是**执行"不写回" —— 它没有写回动作（宿主 `verifyWrite: null`，写回走 notify/信箱）。 */
 const CYD_FORMAT_SUPPORTED = 1;
 /* 本插件版本（**构建期注入**）：`build_panel.py` 会把下行常量右侧的占位注释替换成 manifest.yaml 的 version
@@ -133,70 +112,9 @@ function semverCmp(a, b){
   if (pb.pre === '') return -1;
   return pa.pre < pb.pre ? -1 : 1;
 }
-function globMatch(path, pat){
-  const ss = path.split('/'), ps = pat.split('/');
-  let i = 0, j = 0, star = -1, mark = 0;
-  while (i < ss.length){
-    if (j < ps.length && ps[j] === '**'){ star = j++; mark = i; continue; }
-    if (j < ps.length && segMatch(ss[i], ps[j])){ i++; j++; continue; }
-    if (star >= 0){ j = star + 1; i = ++mark; continue; }
-    return false;
-  }
-  while (j < ps.length && ps[j] === '**') j++;
-  return j === ps.length;
-}
 
 
 /* ---------- JS 解析器（与渲染器同契约，用于页面内刷新） ---------- */
-function evError(rel){
-  if (/^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(rel)) return '网址（证据必须是工作区内的文件）';
-  if (rel.startsWith('/') || rel.startsWith('\\')) return '绝对路径';
-  if (/^[A-Za-z]:/.test(rel)) return '盘符绝对路径';
-  if (rel.split(/[\\/]/).includes('..')) return '上跳目录';
-  return '';
-}
-function stripComments(t){ return t.replace(/^\uFEFF/, '').replace(/<!--[\s\S]*?-->/g, ''); }
-function splitEv(raw){ return raw.split(',').map(x => x.trim()).filter(Boolean); }
-function parseProduct(text, warnings){
-  warnings = warnings || [];
-  const proj = { name: '未命名项目', intro: '', stage: '', direction: '', next: '', journey: [] };
-  text = stripComments(text);
-  const m = text.match(/^#\s+(.+)$/m);
-  if (m) proj.name = m[1].trim().split(/\s[—–-]{1,2}\s/)[0].trim() || m[1].trim();
-  const sec = text.split(/^##\s+/m);
-  const keymap = { '阶段': 'stage', '方向': 'direction', '下一步': 'next' };
-  for (let i = 1; i < sec.length; i++){
-    const lines = sec[i].split('\n'), head = lines[0].trim(), body = lines.slice(1);
-    if (head.startsWith('项目简介')){
-      const para = [];
-      for (const l of body){ if (l.trim().startsWith('#')) break; para.push(l.replace(/\s+$/, '')); }
-      proj.intro = para.join('\n').trim();
-    } else if (head.startsWith('当前方向')){
-      for (const l0 of body){
-        const mm = l0.trim().match(/^-\s*(阶段|方向|下一步)\s*[:：]\s*(.+)$/);
-        if (mm) proj[keymap[mm[1]]] = mm[2].trim();
-      }
-    } else if (head.startsWith('使用流程')){
-      for (const l0 of body){
-        const mm = l0.trim().match(/^\d+\.\s*(.+)$/);
-        if (!mm) continue;
-        const parts = mm[1].split('::').map(x => x.trim());
-        const step = { title: parts[0] || '', desc: '', evidence: [] };
-        for (const p of parts.slice(1)){
-          const em = p.match(/^证据\s*[:：]\s*(.+)$/);
-          if (em) step.evidence = splitEv(em[1]);
-          else if (!step.desc) step.desc = p;
-          else step.desc += ' :: ' + p;
-        }
-        proj.journey.push(step);
-      }
-    }
-  }
-  /* 与 Python parse_product 同字一条（copy-deck §16.6 定稿，清单 #1）：
-     PRODUCT.md 存在但没有 ## 项目简介 小节 → 两端都要产这条 WARN（此前只有 Python 产）。 */
-  if (!proj.intro) warnings.push('PRODUCT.md 缺少 ## 项目简介');
-  return proj;
-}
 const STATUSES = ['设想', '进行中', '可用', '已验证', '已废弃'];
 /* 确定性文本宽度（与 Python 渲染器逐字同构）：>U+2E00 按宽字符 14px，其余 8px。
    不用 canvas measureText——布局坐标要写进数据，两端必须算出一模一样的值。 */
@@ -232,690 +150,216 @@ function nodeDims(f){
   const lines = wrapName(f.name);
   return { w: Math.max(NODE_MIN_W, Math.min(NODE_MAX_W, textWidth(f.name) + NODE_PAD)), h: lines.length > 1 ? 58 : 42, lines };
 }
-function parseFeatures(text, warnings){
-  warnings = warnings || [];
-  text = stripComments(text);
-  const feats = []; let cur = null, curChild = null;
-  for (const line of text.split('\n')){
-    const s = line.trim();
-    const hm = s.match(/^##\s*功能\s*[:：]\s*(.+)$/);
-    if (hm){ if (cur) feats.push(cur); cur = { name: hm[1].trim(), status: '', desc: '', evidence: [], deps: [], verify: '', children: [] }; curChild = null; continue; }
-    const cm = s.match(/^###\s*子项\s*[:：]\s*(.+)$/);
-    if (cm){
-      if (!cur){ warnings.push('子项「' + cm[1].trim() + '」出现在任何功能之前，已忽略'); continue; }
-      curChild = { name: cm[1].trim(), status: '', desc: '', evidence: [], verify: '' };
-      cur.children.push(curChild); continue;
-    }
-    const target = curChild || cur;
-    if (!target) continue;
-    const fm = s.match(/^-\s*(状态|简介|证据|依赖|验证)\s*[:：]\s*(.*)$/);
-    if (!fm) continue;
-    const key = fm[1], val = fm[2].trim();
-    if (key === '依赖'){
-      if (curChild){ warnings.push('子项「' + curChild.name + '」（功能「' + cur.name + '」）不允许写依赖，已忽略'); continue; }
-      target.deps = (val === '' || val === '无') ? [] : splitEv(val);
-    }
-    else if (key === '状态') target.status = val;
-    else if (key === '简介') target.desc = val;
-    else if (key === '证据') target.evidence = splitEv(val);
-    else if (key === '验证') target.verify = val;
-  }
-  if (cur) feats.push(cur);
-  function check(item, label, missDesc){
-    if (!item.status){ warnings.push(label + '缺少状态字段'); item.status = '设想'; }
-    else if (!STATUSES.includes(item.status)){ warnings.push('「' + item.name + '」状态非法: ' + "'" + item.status + "'" + '（允许: ' + STATUSES.join('/') + '）'); item.status = '设想'; }
-    if (!item.desc){ warnings.push(label + '缺少简介'); item.desc = missDesc; }
-  }
-  feats.forEach(f => {
-    check(f, '功能「' + f.name + '」', '[待确认: 功能简介]');
-    const seenChild = new Set();
-    f.children.forEach(c => {
-      check(c, '功能「' + f.name + '」的子项「' + c.name + '」', '[待确认: 子项简介]');
-      if (seenChild.has(c.name)) warnings.push('功能「' + f.name + '」内子项重名：「' + c.name + '」，按首个解析');
-      seenChild.add(c.name);
-    });
-  });
-  return feats;
-}
-/* 术语表：第一张表 → [{term, meaning, aliases}]。与 Python 同契约
-   （表头接受「标准用词」的常见别名/英文写法；文件名不参与判断，所以调用方要把真实文件名传进来）。 */
-const GLOSS_HEADERS = ['标准用词', '术语', '用词', 'term', 'glossary term'];
-/* ---------- 术语表识别：**JS 侧唯一一份判定**（契约「术语表」节 §173-177）----------
-   宿主只做 IO 注入（读 .cyd.json / 列 .md / 读候选文本），判定全在这里：
-   ① .cyd.json 里用户手写的 `glossary` → 最高优先（指定了但不存在 → `meta_missing` flag + 退回自动识别）
-   ② `.cyd.json` 存在但不是合法 JSON 对象 → `meta_error` flag（继续按自动识别）
-   ③ 渲染器写下的 `glossary_file`（面板没有列目录能力，只能靠它知道真实文件名）
-   ④ 内容嗅探：候选里**唯一一个**表头符合契约的文件；命中多个 → ambiguous（不猜）
-   收敛前这段判定散在 driver 与两个宿主里（3 份），正是"面板比导出页少两条提示"的根因。
-   入参形状照契约：`{ metaRaw, listMd, readText }`（**函数本身不碰 IO**）。 */
-const GLOSS_HEADER_TERMS = ['标准用词', '术语', '用词', 'term', 'glossary term'];
-const GLOSS_FIXED_MD = ['PRODUCT.md', 'FEATURES.md', 'NOW.md'];
-function glossaryHeaderOk(text){
-  for (const line of stripComments(String(text == null ? '' : text)).split(/\r\n?|\n/)){
-    if (!line.trim().startsWith('|')) continue;
-    const cells = line.trim().replace(/^\|+/, '').replace(/\|+$/, '').split('|').map(c => c.trim());
-    return cells.length >= 3 && GLOSS_HEADER_TERMS.indexOf(cells[0].toLowerCase()) >= 0;
-  }
-  return false;
-}
-function resolveGlossary(inp){
-  const metaRaw = (inp && inp.metaRaw != null) ? String(inp.metaRaw) : null;
-  const listMd = (inp && inp.listMd) || [];
-  const readText = (inp && inp.readText) || (() => null);
-  const status = { file: null, source: 'none', candidates: [] };
-  let meta = null;
-  if (metaRaw !== null && metaRaw.trim() !== ''){
-    try{
-      const parsed = JSON.parse(stripComments(metaRaw));
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) meta = parsed;
-    }catch(e){ meta = null; }
-    if (!meta) status.meta_error = true;              // 存在、读得到，但不是合法 JSON 对象
-  }
-  if (meta){
-    const want = (typeof meta.glossary === 'string' && meta.glossary.trim()) ? meta.glossary.trim() : '';
-    if (want){
-      if (readText(want) != null){ status.file = want; status.source = 'explicit'; return status; }
-      status.meta_missing = want;                     // 指定了但工作区里没有 → flag + 退回自动识别
-    } else {
-      const rf = (typeof meta.glossary_file === 'string' && meta.glossary_file.trim()) ? meta.glossary_file.trim() : '';
-      if (rf && readText(rf) != null){
-        status.file = rf;
-        status.source = (typeof meta.glossary_source === 'string' && meta.glossary_source) ? meta.glossary_source : 'explicit';
-        return status;
-      }
-    }
-  }
-  /* 候选排序按**文件名**（UTF-16 码位序，与 Python `key=lambda q: q.name` 同口径）；
-     三大事实源按**大小写敏感**排除（契约明文，别改成不敏感） */
-  const hits = listMd.map(String)
-    .filter(n => n.toLowerCase().endsWith('.md') && GLOSS_FIXED_MD.indexOf(n) < 0)
-    .sort()
-    .filter(n => { const t = readText(n); return t != null && glossaryHeaderOk(t); });
-  if (hits.length === 1){ status.file = hits[0]; status.source = 'sniff'; return status; }
-  if (hits.length > 1){ status.source = 'ambiguous'; status.candidates = hits; return status; }
-  return status;
-}
-/* ---------- 技术地图 / 变更规则（v1.6）：与 Python parse_tech / parse_changes 逐字同口径 ----------
-   **不做代码解析**（保真红线）：层 / 技术 / 连到 只能来自用户声明。字段形状由契约钉死。 */
-function parseTech(text, warnings){
-  warnings = warnings || [];
-  text = stripComments(text);
-  const mods = [], layers = [];
-  let cur = null;
-  for (const line of text.split(/\r\n?|\n/)){
-    const s = line.trim();
-    const hm = s.match(/^##\s*模块\s*[:：]\s*(.+)$/);
-    if (hm){
-      cur = { name: hm[1].trim(), layer: '', duty: '', tech: '', status: '', evidence: [], links: [], children: [] };
-      mods.push(cur); continue;
-    }
-    const cm = s.match(/^###\s*子项\s*[:：]\s*(.+)$/);
-    if (cm){
-      if (!cur){ warnings.push('子项「' + cm[1].trim() + '」出现在任何模块之前，已忽略'); continue; }
-      cur.children.push({ name: cm[1].trim(), layer: '', duty: '', tech: '', status: '', evidence: [] });
-      continue;
-    }
-    if (!cur) continue;
-    const target = cur.children.length ? cur.children[cur.children.length - 1] : cur;
-    const fm = s.match(/^-\s*(层|职责|技术|状态|证据|连到)\s*[:：]\s*(.*)$/);
-    if (!fm) continue;
-    const key = fm[1], val = fm[2].trim();
-    if (key === '连到'){
-      if (cur.children.length) continue;                 // 子项不写「连到」（契约：忽略）
-      val.split(',').forEach(item => {
-        item = item.trim(); if (!item) return;
-        const lm = item.match(/^(.+?)\s*[（(](.*?)[）)]\s*$/);
-        cur.links.push({ name: (lm ? lm[1] : item).trim(), rel: (lm ? lm[2].trim() : '') });
-      });
-      continue;
-    }
-    if (key === '层') target.layer = val;
-    else if (key === '职责') target.duty = val;
-    else if (key === '技术') target.tech = val;
-    else if (key === '状态') target.status = val;
-    else if (key === '证据') target.evidence = splitEv(val);
-  }
-  const seen = new Set();
-  mods.forEach(m => {
-    if (seen.has(m.name)){
-      warnings.push('技术地图里有重名模块「' + m.name + '」，按第一个解析。请给其中一个改名。');
-      return;
-    }
-    seen.add(m.name);
-    if (m.layer && layers.indexOf(m.layer) < 0) layers.push(m.layer);   // 首次出现顺序
-    if (!m.layer) warnings.push('模块「' + m.name + '」没写层，位置可能不对。在 TECH.md 里给它补一行层。');
-    if (!m.duty) warnings.push('模块「' + m.name + '」没写职责，看不出这块是干什么的。在 TECH.md 里给它补一行职责。');
-    if (STATUSES.indexOf(m.status) < 0){
-      warnings.push('「' + m.name + '」状态非法: \'' + m.status + '\'（允许: 设想/进行中/可用/已验证/已废弃）');
-    }
-  });
-  if (mods.length && !mods.some(m => m.evidence.length)) warnings.push('技术地图没有证据，无法审计。');
-  return { modules: mods, layers };
-}
-function parseChanges(text, warnings){
-  text = stripComments(text);
-  const internal = [], rules = [];
-  let section = null;
-  for (const line of text.split(/\r\n?|\n/)){
-    const s = line.trim();
-    const h2 = s.match(/^##\s*(.+)$/);
-    if (h2){
-      const head = h2[1].trim();
-      section = head.startsWith('内部工程') ? 'internal' : (head.startsWith('变更归属') ? 'rules' : null);
-      continue;
-    }
-    if (!section || !s) continue;
-    if (s.startsWith('|')){
-      const cells = s.replace(/^\|+/, '').replace(/\|+$/, '').split('|').map(c => c.trim());
-      if (cells.length < 3 || !/[^\s\-:]/.test(cells[0])) continue;     // 表头行或分隔行
-      if (['路径 / 变更类型', '路径', '变更类型'].indexOf(cells[0]) >= 0) continue;
-      rules.push({ path: cells[0], action: cells[1], owner: cells[2] });
-      continue;
-    }
-    const bm = s.match(/^-\s*(.+?)\s*(?:→|->)\s*归置方式\s*[:：]\s*(.+)$/);
-    if (bm) internal.push({ path: bm[1].trim(), action: bm[2].trim() });
-  }
-  return { internal, rules };
-}
-function declaredSniffOk(kind, text){
-  const t = stripComments(String(text == null ? '' : text));
-  const heads = t.split(/\r\n?|\n/).map(l => l.trim()).filter(l => l.startsWith('## '));
-  const firstHead = heads.length ? heads[0].slice(3).trim() : '';
-  let cells = [];
-  for (const ln of t.split(/\r\n?|\n/)){
-    const s = ln.trim();
-    if (s.startsWith('|')){ cells = s.replace(/^\|+/, '').replace(/\|+$/, '').split('|').map(c => c.trim()); break; }
-  }
-  if (kind === 'tech'){
-    if (firstHead.startsWith('模块')) return true;
-    return cells.length >= 3 && cells[0].indexOf('模块') >= 0 && cells.indexOf('层') >= 0 && cells.indexOf('技术') >= 0;
-  }
-  if (firstHead.startsWith('内部工程') || firstHead.startsWith('变更归属')) return true;
-  return cells.length >= 3 && ['路径/变更类型', '路径', '变更类型'].indexOf(cells[0].replace(/\s/g, '')) >= 0
-    && cells.indexOf('归置方式') >= 0 && cells.indexOf('归属') >= 0;
-}
-function resolveDeclared(inp){
-  /* 与 resolveGlossary 同构的四级链（宿主只做 IO 注入）：.cyd.json 的 <kind> → 嗅探 → 歧义 → none */
-  const kind = inp && inp.kind;
-  const metaRaw = (inp && inp.metaRaw != null) ? String(inp.metaRaw) : null;
-  const listMd = (inp && inp.listMd) || [];
-  const readText = (inp && inp.readText) || (() => null);
-  const status = { file: null, source: 'none', candidates: [] };
-  let meta = null;
-  if (metaRaw !== null && metaRaw.trim() !== ''){
-    try{
-      const parsed = JSON.parse(stripComments(metaRaw));
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) meta = parsed;
-    }catch(e){ meta = null; }
-  }
-  if (meta){
-    const want = (typeof meta[kind] === 'string' && meta[kind].trim()) ? meta[kind].trim() : '';
-    if (want && readText(want) != null){ status.file = want; status.source = 'explicit'; return status; }
-    const rf = (typeof meta[kind + '_file'] === 'string' && meta[kind + '_file'].trim()) ? meta[kind + '_file'].trim() : '';
-    if (!want && rf && readText(rf) != null){
-      status.file = rf;
-      status.source = (typeof meta[kind + '_source'] === 'string' && meta[kind + '_source']) ? meta[kind + '_source'] : 'explicit';
-      return status;
-    }
-  }
-  const hits = listMd.map(String)
-    .filter(n => n.toLowerCase().endsWith('.md'))
-    .sort()
-    .filter(n => { const t = readText(n); return t != null && declaredSniffOk(kind, t); });
-  if (hits.length === 1){ status.file = hits[0]; status.source = 'sniff'; return status; }
-  if (hits.length > 1){ status.source = 'ambiguous'; status.candidates = hits; return status; }
-  return status;
-}
-function parseGlossary(text, warnings, name){
-  warnings = warnings || [];
-  name = name || 'GLOSSARY.md';
-  text = stripComments(text);
-  const entries = [];
-  const lines = text.split('\n');
-  const cellsOf = l => l.trim().replace(/^\|+/, '').replace(/\|+$/, '').split('|').map(c => c.trim());
-  for (let i = 0; i < lines.length; i++){
-    if (!lines[i].trim().startsWith('|')) continue;
-    const header = cellsOf(lines[i]);
-    if (header.length < 3 || GLOSS_HEADERS.indexOf((header[0] || '').toLowerCase()) < 0){
-      warnings.push(name + ' 第一张表我认不出来，暂时按没有术语表处理。'
-        + '去术语表页看表头示例，照它改就行。');
-      return entries;
-    }
-    let j = i + 1;
-    if (j < lines.length && /^\s*\|[|\-:\s]+\|\s*$/.test(lines[j])) j++;
-    while (j < lines.length && lines[j].trim().startsWith('|')){
-      const cells = cellsOf(lines[j]);
-      if (cells.length < 2 || !cells[0]){
-        warnings.push(name + ' 有一行列数不足或标准用词为空，已忽略该行');
-      } else {
-        const aliases = (cells[2] || '').split(/[、，,/]/).map(a => a.trim()).filter(Boolean);
-        entries.push({ term: cells[0], meaning: cells[1] || '', aliases });
-      }
-      j++;
-    }
-    return entries;
-  }
-  warnings.push(name + ' 里没有表格，按无术语表处理');
-  return entries;
-}
-/* 用词漂移：别名出现在 PRODUCT/FEATURES/NOW 正文（已剥注释）。texts: [[文件名, 正文]]。 */
-function glossaryDrift(entries, texts){
-  const drift = [];
-  entries.forEach(e => (e.aliases || []).forEach(alias => {
-    if (!alias || alias === e.term) return;
-    texts.forEach(([fname, body]) => {
-      let n = 0, idx = 0;
-      while ((idx = body.indexOf(alias, idx)) >= 0){ n++; idx += alias.length; }
-      if (n) drift.push({ alias, term: e.term, file: fname, count: n });
-    });
+/* ---------- 整链聚焦（契约 §4.2）：从图模型现算「祖先 + 后代」集合 ----------
+   **纯函数**：输入节点数组与目标名，输出 { up, down } 两个名字集合（不含自己）。
+   up = 该节点的依赖链（它依赖谁、那些又依赖谁……）；down = 依赖它的那些 + 它的子项。
+   环检测用已访问集合截断（契约要求"环不许造成死循环或重复计数"）。
+   放在模块级是为了能脱离 DOM 单测——**几何/坐标一概不碰**（契约要求 focus 不改变坐标）。 */
+function chainSet(nodes, name){
+  const list = (nodes || []).filter(n => n && typeof n.name === 'string');
+  const byName = new Map(list.map(n => [n.name, n]));
+  const rev = new Map();                       // 反向邻接：谁依赖我
+  list.forEach(n => (n.deps || []).forEach(d => {
+    if (typeof d !== 'string') return;
+    if (!rev.has(d)) rev.set(d, []);
+    rev.get(d).push(n.name);
   }));
-  return drift;
-}
-function parseNow(text, warnings){
-  warnings = warnings || [];
-  text = stripComments(text);
-  const timeline = [], decisions = [], todos = [];
-  let section = null, cur = null;
-  for (const line of text.split('\n')){
-    const s = line.trim();
-    const h2 = s.match(/^##(?!#)\s*(.+)$/);
-    if (h2){ const head = h2[1]; section = head.startsWith('时间线') ? 'tl' : head.startsWith('决策') ? 'dec' : head.startsWith('待办') ? 'todo' : null; continue; }
-    const h3 = s.match(/^###\s*(D\d+)\s+(.+)$/);
-    if (section === 'dec' && h3){ cur = { id: h3[1], title: h3[2].trim(), decided: '', options: [], multi: false, obsolete: false }; decisions.push(cur); continue; }
-    if (section === 'tl'){
-      const tm = s.match(/^-\s*(.+)$/);
-      if (tm){
-        const parts = tm[1].split('|').map(x => x.trim());
-        const e = { dt: parts[0], text: '', evidence: [] };
-        for (const p of parts.slice(1)){
-          const em = p.match(/^证据\s*[:：]\s*(.+)$/);
-          if (em) e.evidence = splitEv(em[1]);
-          else e.text = e.text ? e.text + ' | ' + p : p;
-        }
-        if (!e.text){ e.text = e.dt; e.dt = ''; }
-        timeline.push(e);
-      }
-    } else if (section === 'dec' && cur){
-      const sm = s.match(/^-\s*状态\s*[:：]\s*已定\s*([A-Za-z](?:\s*[、,，\s]\s*[A-Za-z])*)\s*$/);
-      if (sm){ cur.decided = sm[1].toUpperCase().replace(/[\s,，]+/g, '、'); continue; }
-      // v1.5 三态：待拍板 显式清空结论；已废弃 是终态（不进「待拍板」计数，界面按废弃样式渲染）
-      const pm = s.match(/^-\s*状态\s*[:：]\s*待拍板\s*$/);
-      if (pm){ cur.obsolete = false; cur.decided = ''; continue; }
-      const ob = s.match(/^-\s*状态\s*[:：]\s*已废弃\s*$/);
-      if (ob){ cur.obsolete = true; continue; }
-      const mm2 = s.match(/^-\s*多选\s*[:：]\s*是\s*$/);
-      if (mm2){ cur.multi = true; continue; }
-      const om = s.match(/^-\s*([A-Z])\s*[:：]\s*(.+)$/);
-      if (om) cur.options.push({ key: om[1], text: om[2].trim() });
-    } else if (section === 'todo'){
-      const dm = s.match(/^-\s*\[( |x|X)\]\s*(.+)$/);
-      if (dm) todos.push({ done: dm[1].toLowerCase() === 'x', text: dm[2].trim() });
-    }
-  }
-  decisions.forEach(d => {
-    if (!d.decided) return;
-    d.decided.split('、').forEach(k => {
-      if (!d.options.some(o => o.key === k)) warnings.push('决策 ' + d.id + ' 标为已定 ' + k + '，但没有对应选项');
-    });
-  });
-  return { timeline, decisions, todos };
-}
-function layoutGraph(feats, warnings){
-  warnings = warnings || [];
-  const active = feats.filter(f => f.status !== '已废弃');
-  const byName = {};
-  active.forEach(f => {
-    if (f.name in byName) warnings.push('功能名重复：「' + f.name + '」出现多次，依赖按首个同名解析');
-    else byName[f.name] = f;
-  });
-  const idx = new Map(active.map((f, i) => [f, i]));
-  const edges = active.map(f => f.deps.filter(d => d in byName).map(d => idx.get(byName[d])));
-  const resolved = {};
-  const remaining = new Set(active.map((f, i) => i));
-  let changed = true;
-  while (remaining.size && changed){
-    changed = false;
-    for (const i of [...remaining].sort((a, b) => a - b)){
-      if (edges[i].every(d => d in resolved)){
-        resolved[i] = edges[i].length ? Math.max.apply(null, edges[i].map(d => resolved[d])) + 1 : 0;
-        remaining.delete(i);
-        changed = true;
+  /* 沿一个方向做 BFS，已访问集合截断（环 / 重复引用都不会死循环或重复计数） */
+  const reach = (nb) => {
+    const out = new Set();
+    const stack = [name];
+    const seen = new Set([name]);
+    while (stack.length){
+      const cur = stack.pop();
+      for (const nxt of (nb(cur) || [])){
+        if (typeof nxt !== 'string' || seen.has(nxt)) continue;
+        seen.add(nxt); out.add(nxt); stack.push(nxt);
       }
     }
-  }
-  for (const i of [...remaining].sort((a, b) => a - b)){
-    warnings.push('依赖关系存在环（涉及「' + active[i].name + '」），该节点按第 0 层布局');
-    resolved[i] = 0;
-  }
-  /* v1.3：节点宽度按名称自适应；层间距按相邻层实际最大宽度算（与 Python 渲染器逐字同构） */
-  active.forEach(f => { const d = nodeDims(f); f.w = d.w; f.h = d.h; f.lines = d.lines; });
-  const layerMaxW = {};
-  active.forEach((f, i) => { const lv = resolved[i] || 0; layerMaxW[lv] = Math.max(layerMaxW[lv] || 0, f.w); });
-  const layerX = {};
-  let prev = null;
-  Object.keys(layerMaxW).map(Number).sort((a, b) => a - b).forEach(lv => {
-    if (prev === null) layerX[lv] = 90 + layerMaxW[lv] / 2;
-    else layerX[lv] = layerX[prev] + layerMaxW[prev] / 2 + layerMaxW[lv] / 2 + 64;
-    prev = lv;
-  });
-  const layerY = {};
-  active.forEach((f, i) => {
-    const lv = resolved[i] || 0;
-    const y0 = layerY[lv] === undefined ? 80 : layerY[lv];
-    f.x = layerX[lv]; f.y = y0 + f.h / 2;
-    layerY[lv] = y0 + f.h + 30;
-  });
-  return feats;
-}
-
-
-/* ---------- 数据组装（网页版与面板共用，两端唯一事实源） ---------- */
-/* parts: { prod, feat, now, factsRaw?, ignoreRaw?, inboxRaw?, glossRaw?, glossName?, glossStatus?, workspace_uri?, updated_at? }
-   inboxRaw 三态：字符串 = .inbox.jsonl 内容；null = 读取失败；不传（undefined）= 该环境本来没有这个数据源（离线网页）。
-   existsFn: async path => bool */
-async function assembleData(parts, existsFn){
-  const warnings = [];
-  const project = parseProduct(norm(parts.prod), warnings);
-  const features = layoutGraph(parseFeatures(norm(parts.feat), warnings), warnings);
-  const nw = parseNow(norm(parts.now), warnings);
-  /* 声明类文件（v1.6）：技术地图 / 变更规则 —— 与 Python parse_tech / parse_changes 同口径 */
-  const techDoc = parts.techRaw != null ? parseTech(norm(parts.techRaw), warnings) : { modules: [], layers: [] };
-  const changesDoc = parts.changesRaw != null ? parseChanges(norm(parts.changesRaw), warnings) : { internal: [], rules: [] };
-  /* 术语表（可选）与用词漂移（v1.3，与 Python 渲染器同口径） */
-  let glossary = [], drift = [];
-  if (parts.glossRaw != null){
-    glossary = parseGlossary(norm(parts.glossRaw), warnings, parts.glossName || 'GLOSSARY.md');
-    drift = glossaryDrift(glossary, [
-      ['PRODUCT.md', stripComments(norm(parts.prod))],
-      ['FEATURES.md', stripComments(norm(parts.feat))],
-      ['NOW.md', stripComments(norm(parts.now))]]);
-    drift.forEach(d => warnings.push('用词漂移：别名「' + d.alias + '」在 ' + d.file + ' 出现 ' + d.count + ' 次，标准用词是「' + d.term + '」'));
-  }
-  const normPath = p => String(p).replace(/\\/g, '/');
-  const pairs = [];
-  const collect = (owner, list) => (list || []).forEach(p => {
-    const rel = normPath(p);
-    pairs.push({ owner, path: rel, err: evError(rel) });
-  });
-  features.forEach(f => { collect(f.name, f.evidence); (f.children || []).forEach(c => collect(f.name + ' / ' + c.name, c.evidence)); });
-  project.journey.forEach(j => collect('使用流程', j.evidence));
-  nw.timeline.forEach(t => collect('时间线', t.evidence));
-  /* 技术地图的证据也进"归置 + 证据红线"（与功能证据同纪律）；变更规则是 glob，只参与归置/单列 */
-  (techDoc.modules || []).forEach(m => {
-    collect('技术地图 / ' + m.name, m.evidence);
-    (m.children || []).forEach(c => collect('技术地图 / ' + m.name + ' / ' + c.name, c.evidence));
-  });
-  const uniq = [...new Set(pairs.filter(p => !p.err).map(p => p.path.replace(/^\//, '')))];
-  const exMap = {};
-  await Promise.all(uniq.map(async p => { try{ exMap[p] = await existsFn(p); }catch(e){ exMap[p] = false; } }));
-  const withEx = list => (list || []).map(p => {
-    const rel = normPath(p);
-    if (evError(rel)) return { path: rel, exists: false };
-    const key = rel.replace(/^\//, '');
-    return { path: key, exists: !!exMap[key] };
-  });
-  features.forEach(f => { f.evidence = withEx(f.evidence); (f.children || []).forEach(c => { c.evidence = withEx(c.evidence); }); });
-  project.journey.forEach(j => j.evidence = withEx(j.evidence));
-  nw.timeline.forEach(t => t.evidence = withEx(t.evidence));
-  const invalid = [...new Set(pairs.filter(p => p.err).map(p => p.path))];
-  /* S3 部分失效（契约 L560）：与 S1 同一个载体 = `.versions/` 最近一份 TECH.md（`parts.techPrevRaw`）。
-     **无快照 → null（fail-closed）**：渲染层据此不产 ⚠ / .snote（不许假装"没问题"）。
-     判据逐条对齐 Python `compute_tech_stale`：只比**两边都在**的模块；分母 = **快照**为该模块声明的证据条数；
-     分子 = 其中现在不存在的条数；`0 < 失效率` 的模块计入 modules（全灭也算）。
-     存在性口径 = `evError` 越界 → false，否则 `existsFn`（与 matrix 同一份，不另写一套 stat 规则）。 */
-  let techStale = null;
-  if (parts.techPrevRaw != null){
-    const prevDoc = parseTech(norm(parts.techPrevRaw), []);
-    const curNames = new Set((techDoc.modules || []).map(m => m.name));
-    const exCache = {};
-    const existsOf = async p => {
-      const rel = normPath(p);
-      if (exCache[rel] !== undefined) return exCache[rel];
-      let ok = false;
-      if (!evError(rel)){ try { ok = await existsFn(rel.replace(/^\//, '')); } catch (e){ ok = false; } }
-      exCache[rel] = ok; return ok;
-    };
-    const staleMods = []; let missTot = 0, declTot = 0;
-    for (const pm of (prevDoc.modules || [])){
-      if (!curNames.has(pm.name)) continue;
-      const paths = pm.evidence || [];
-      if (!paths.length) continue;
-      let miss = 0;
-      for (const p of paths){ if (!(await existsOf(p))) miss++; }
-      declTot += paths.length; missTot += miss;
-      if (miss > 0) staleMods.push(pm.name);
-    }
-    if (staleMods.length && declTot > 0)
-      techStale = { modules: staleMods, ratio: Math.round(missTot / declTot * 10000) / 10000 };
-  }
-  /* tech_stale 非空 ⇒ 一条 WARN —— **推的时机见下面 S1 之后**（warnings[] 有序，两端顺序必须一致）。 */
-  const ignore = parts.ignoreRaw ? norm(parts.ignoreRaw).split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#')) : [];
-  let facts = [], factsError = '', factsSource = '', factsGeneratedAt = '';
-  if (!parts.factsRaw) factsError = 'missing';
-  else { try {
-    const parsed = JSON.parse(norm(parts.factsRaw));
-    const fmeta = (parsed && typeof parsed === 'object') ? parsed : {};
-    facts = fmeta.items || [];
-    factsSource = fmeta.source || '';
-    factsGeneratedAt = typeof fmeta.generated_at === 'string' ? fmeta.generated_at : '';
-  } catch (e){ factsError = 'corrupt'; } }
-  const evSet = new Set(pairs.map(p => p.path.replace(/^\//, '')));
-  let pending = 0;
-  const fd = facts.map(it => {
-    const p = normPath(it.path || '');
-    const hit = evSet.has(p) || ignore.some(pat => globMatch(p, pat));
-    if (!hit) pending++;
-    return { path: p, kind: it.kind || '', change: it.change || '', pending: !hit };
-  });
-  /* .dashboard-ignore 旧写法失效 WARN —— **行为式判据**（契约 :504-521）+ 文案逐字 deck:599。
-     作用域＝**两端**（ignore 解析与匹配两端各有实现，warnings[] 由 dual_parser_diff.py 逐条比对）。
-     为什么行为式：看形状必然误报 —— ① 漏"旧版 * 跨 /"，`*.log` 旧版命中 dist/app.log、新版只命中根目录；
-     ② "含大写"会误报"目录名真有大写"的情形（模式串本身判不出大小写是否与实际路径不符）。
-     参照集合 = 本轮 .facts.json 的 items[].path；旧语义 = 大小写不敏感 + `*`/`?` 跨 `/` + 支持字符类；
-     判据 = 存在 p 使「旧命中 ∧ 新 globMatch 不命中」⇒ 失效。两边都命中/都不命中 ⇒ 不报。
-     `!` 取反不列入判据（旧版也不支持，非升级问题）。X=首个、N=总数，一条 WARN 覆盖全部。 */
-  const _oldHit = (p, pat) => {
-    const pl = String(p).toLowerCase(), pt = String(pat).toLowerCase();
-    let rx = '';
-    for (let i = 0; i < pt.length; i++){
-      const ch = pt[i];
-      if (ch === '*') rx += '.*';
-      else if (ch === '?') rx += '[\\s\\S]';
-      else if (ch === '['){
-        const close = pt.indexOf(']', i + 1);
-        if (close > i){ rx += pt.slice(i, close + 1); i = close; }
-        else rx += '\\[';
-      } else rx += ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    }
-    try { return new RegExp('^' + rx + '$').test(pl); } catch (e){ return false; }
+    out.delete(name);
+    return out;
   };
-  const _refPaths = facts.map(it => normPath(it.path || ''));
-  const _badIgnore = [];
-  ignore.forEach(pat => {
-    if (pat.startsWith('!')) return;
-    if (_refPaths.some(p => _oldHit(p, pat) && !globMatch(p, pat))) _badIgnore.push(pat);
-  });
-  if (_badIgnore.length){
-    warnings.push('.dashboard-ignore 里「' + _badIgnore[0] + '」等 ' + _badIgnore.length + ' 条写法不再生效。'
-      + '旧写法和新版本的匹配规则不一样。' + '照实际路径改一下写法就行。');
-  }
-  const missing = uniq.filter(p => !exMap[p]);
-  const noVerify = features.filter(f => f.status === '已验证' && !f.verify).map(f => f.name);
-  features.forEach(f => (f.children || []).forEach(c => { if (c.status === '已验证' && !c.verify) noVerify.push(f.name + ' 的子项 ' + c.name); }));
-  const counts = {};
-  STATUSES.forEach(s => counts[s] = 0);
-  features.forEach(f => counts[f.status] = (counts[f.status] || 0) + 1);
-  counts.total_active = counts['设想'] + counts['进行中'] + counts['可用'] + counts['已验证'];
-  const seen = {}; const matrix = [];
-  for (const pr of pairs){
-    const key = pr.path;
-    if (!seen[key]){
-      seen[key] = { path: key, owners: [pr.owner], kind: kindOf(key), exists: !pr.err && !!exMap[key.replace(/^\//, '')] };
-      matrix.push(seen[key]);
-    } else if (!seen[key].owners.includes(pr.owner)) seen[key].owners.push(pr.owner);
-  }
-  matrix.sort((a, b) => a.path < b.path ? -1 : 1);
-  // 缺失 .facts.json 只表示还没采集（提示即可）；损坏表示门禁不可用（不健康）
-  const ok = missing.length === 0 && invalid.length === 0 && pending === 0 && factsError !== 'corrupt' && noVerify.length === 0;
-  /* ---- 声明类文件（v1.6）：归置算入 / 审计单列 / 三组漂移（与 Python render() 同口径）----
-     tech 侧单位是"文件"、changes 侧声明的是 glob（单位"路径/条目"）→ 两条 WARN 的措辞与 §16.4 标签同单位。 */
-  const techEv = [];
-  (techDoc.modules || []).forEach(m => {
-    (m.evidence || []).forEach(p => techEv.push(normPath(p)));
-    (m.children || []).forEach(c => (c.evidence || []).forEach(p => techEv.push(normPath(p))));
-  });
-  const ownedPaths = new Set(pairs.filter(p => p.owner.indexOf('技术地图 /') !== 0).map(p => p.path.replace(/^\//, '')));
-  const techOnly = techEv.filter(p => !ownedPaths.has(p.replace(/^\//, '')));
-  const declaredPaths = changesDoc.internal.concat(changesDoc.rules).map(r => r.path);
-  const changesOnly = declaredPaths.filter(p => ![...ownedPaths].some(o => globMatch(o, p)));
-  if (techOnly.length > 10) warnings.push('仅由技术地图引用的文件已有 ' + techOnly.length + ' 个，请复核这些模块的证据是否还准确。');
-  if (changesOnly.length > 10) warnings.push('仅由变更规则声明的路径已有 ' + changesOnly.length + ' 条，请复核这些规则是否还准确。');
-  const featNames = new Set(features.map(f => f.name));
-  changesDoc.internal.concat(changesDoc.rules).forEach(r => {
-    const om = String(r.owner || '').match(/功能\s*[「『](.+?)[」』]/);
-    if (om && !featNames.has(om[1])){
-      warnings.push('变更规则可能过期：规则「' + r.path + '」引用的功能「' + om[1] + '」已不在功能地图里，请确认。');
-    }
-  });
-  /* 漂移②：载体 = 上一轮 .versions/ 的 TECH.md（由宿主注入 techPrevRaw）；没注入 → 不产（fail-closed） */
-  if (parts.techPrevRaw != null){
-    const prevDoc = parseTech(norm(parts.techPrevRaw), []);
-    const curByName = {};
-    (techDoc.modules || []).forEach(m => curByName[m.name] = m);
-    (prevDoc.modules || []).forEach(pm => {
-      const cm = curByName[pm.name];
-      if ((pm.evidence || []).length && cm && !(cm.evidence || []).length){
-        warnings.push('技术地图可能过期：模块「' + pm.name + '」的证据都不在了，请确认。');
-      }
-    });
-  }
-  /* S3 的那条 WARN **在这里**推（不是算 tech_stale 的地方）：warnings[] 是**有序**的，
-     两端顺序必须一致 —— Python 的顺序是 S1（漂移②）在前、S3 在后，所以 JS 也照这个顺序推。
-     （先算 tech_stale、后在这里 push：算出来只是为了数据字段 + 这条 WARN。）
-    文案取自 `techStaleLines()`（**唯一生成处**）；三句各推一条，与 Python 的三条逐条对应。 */
-  if (techStale) techStaleLines(techStale).forEach(w => warnings.push(w));
-  /* S4 搬迁检测（判据与 Python `compute_moved_evidence` **同源**）：本轮 .facts.json 里 change === 'deleted'
-     的路径 ∩ 上面 techEv / features / project.journey / nw.timeline 的证据。两侧都没命中 ⇒ null
-     （**fail-closed 不产**，不许"有删除就报一句"，那等于恒真信号）。
-     ⚠ 取路径时**必须**用 `evPath`：这里的 `f.evidence` / `j.evidence` / `t.evidence` 已在上面被 `withEx`
-     换成了 `{path, exists}` 对象（`techDoc` 的证据**没有**被换，还是字符串）—— 两种形状都得吃。
-     规范化只走 `normPath`（反斜杠→正斜杠），与 Python 逐字同口径；名字按声明顺序去重。 */
-  const evPath = p => normPath((p && typeof p === 'object') ? (p.path || '') : p);
-  const movedEv = (() => {
-    const deleted = new Set();
-    fd.forEach(it => { if (it && it.change === 'deleted'){ const p = normPath(it.path || ''); if (p) deleted.add(p); } });
-    if (!deleted.size) return null;
-    const hit = list => (list || []).some(p => deleted.has(evPath(p)));
-    const add = (seq, name) => { if (seq.indexOf(name) < 0) seq.push(name); };
-    const techNames = [], featNames = [];
-    (techDoc.modules || []).forEach(m => {
-      const ev = (m.evidence || []).slice();
-      (m.children || []).forEach(c => (c.evidence || []).forEach(p => ev.push(p)));
-      if (hit(ev)) add(techNames, m.name);
-    });
-    features.forEach(f => {
-      const ev = (f.evidence || []).slice();
-      (f.children || []).forEach(c => (c.evidence || []).forEach(p => ev.push(p)));
-      if (hit(ev)) add(featNames, f.name);
-    });
-    if ((project.journey || []).some(j => hit(j.evidence))) add(featNames, '使用流程');
-    if ((nw.timeline || []).some(t => hit(t.evidence))) add(featNames, '时间线');
-    if (!techNames.length && !featNames.length) return null;
-    return { tech: techNames, features: featNames };
-  })();
-  if (movedEv) movedEvidenceLines(movedEv).forEach(w => warnings.push(w));
-  /* 漂移③：不需要历史 —— 本轮 .facts.json 的顶层目录 vs 本轮模块证据覆盖 */
-  const coveredTops = new Set(techEv.map(p => String(p).split('/')[0]));
-  const seenTops = [];
-  fd.forEach(it => {
-    const top = String((it && it.path) || '').split('/')[0];
-    if (top && seenTops.indexOf(top) < 0) seenTops.push(top);
-  });
-  seenTops.forEach(top => {
-    if (!coveredTops.has(top)) warnings.push('新目录 ' + top + ' 未进技术地图，请确认是内部工程还是漏了模块。');
-  });
+  const up = reach(cur => ((byName.get(cur) || {}).deps || []));        // 我依赖谁（向上）
+  const down = reach(cur => rev.get(cur) || []);                        // 依赖我的（向下）
+  const self = byName.get(name);
+  ((self && self.children) || []).forEach(c => { if (c && c.name !== name) down.add(c.name); });   // 子项也算后代
+  return { up: up, down: down };
+}
 
-  /* 术语表来源：文件名不写死 —— 宿主（面板 / 离线页）先按 .cyd.json 或表头嗅探解析，再把真实文件名传进来 */
-  const glossFile = parts.glossName || null;
-  const glossStatus = parts.glossStatus || { file: glossFile, source: glossFile ? 'sniff' : 'none', candidates: [] };
-  /* `.cyd.json` 出的岔子由宿主以 flag 喂进来（契约 v1.6 补录 `meta_error` / `meta_missing`）：
-     各产一条与 Python **逐字同文案**的 WARN（copy-deck §16.6 定稿，清单 #11/#12）。
-     缺 flag = **降级**（旧宿主）：不产 WARN、不报错，也不得当成"已检查且无问题"。 */
-  /* `.cyd.json.format`（契约 L494）：判据与 Python `cyd_format_state` **同一套、同一句**
-   （文案已按 copy-deck §16.6 定稿）。
-     缺失 ⇒ 视为 1（向后兼容）；非整数 ⇒ 按只读处理。 */
-  const _metaParsed = (() => { try { return parts.metaRaw ? JSON.parse(stripComments(String(parts.metaRaw))) : null; } catch (e){ return null; } })();
-  const _fmt = (_metaParsed && typeof _metaParsed === 'object' && _metaParsed.format !== undefined) ? _metaParsed.format : 1;
-  const _fmtBad = (typeof _fmt !== 'number' || !Number.isInteger(_fmt));     // B：格式无法解析（下一步＝改回一个数字）
-  const _wv = (_metaParsed && typeof _metaParsed === 'object' && _metaParsed.writer && typeof _metaParsed.writer === 'object') ? _metaParsed.writer.skill : null;
-  const _wcmp = semverCmp(_wv, CYD_SKILL_VERSION);
-  /* **A（deck:600 定稿）**：两个信号合成**一条** —— `format > 支持` **或** `writer.skill > 当前`。
-     尺子：**下一步相同 ⇒ 合并**（都是"升级插件"）；**下一步不同 ⇒ 分开**（B 见下）✓。
-     只看 `skill`、不看 `at`（at 每次真写都变 ⇒ 进比对会假红 ✗）；解析失败/版本为空 ⇒ 不产（fail-safe）。
-     **A 与 B 互斥**：同一份文件不可能既"比插件新"又"格式无法解析" ⇒ 用 else-if 保证**不会同时产** ✓。
-     文案逐字取 deck；**不带"待定稿"之类工程前缀**（那是内部状态泄漏到界面 ✗）。 */
-  const _aNewer = (!_fmtBad && _fmt > CYD_FORMAT_SUPPORTED) || (_wcmp !== null && _wcmp > 0);
-  if (_aNewer){
-    warnings.push('.cyd.json 是更新版插件写的，当前版本读不全。'
-      + '所以这次不改它，免得把新内容写坏。' + '升级插件后再看就行。');
-  } else if (_fmtBad){
-    warnings.push('.cyd.json 里的格式版本写得不对，读不出来。'
-      + '所以这次不改它，先按只读用。' + '把这一项改回一个数字就行。');
+/* ---------- 意图与回执（v1.7，R1–R9；模块级纯函数） ----------
+   一句话：**"已接受"不等于"已开始"更不等于"已完成"**。这里只做三件事：
+   ① 生成/复用一个 requestId（R3：网络重试复用它；真正重跑必须新 id）；
+   ② 把一次发送压成一条**回执**（accepted / queued / mailbox / failed 四态，绝无 "已完成"）；
+   ③ 把宿主给的会话快照读成**只读运行投影**（running / queued / steering / 未知）。
+   **不虚构 runId**：关联键只有 sessionId + requestId（R8）。 */
+const RECEIPT_STATES = ['accepted', 'queued', 'mailbox', 'failed'];
+const intent = {
+  /* 请求 id：优先宿主 WebCrypto；没有就退化成"时间戳+随机"，**同一进程内仍唯一**即可。
+     为什么不自己编 runId：没有任何宿主侧证据的 id 就是假遥测（R8 明令禁止）。 */
+  newRequestId(now, rand){
+    const t = typeof now === 'number' ? now : Date.now();
+    const r = typeof rand === 'string' ? rand : Math.random().toString(36).slice(2, 10);
+    return 'req-' + t.toString(36) + '-' + r;
+  },
+  /* 意图信封：只带定位所需的最小上下文（T 标准：不重复整张图、不塞长自然语言） */
+  envelope(action, subject, params){
+    return {
+      action: String(action || ''),
+      subject: subject == null ? null : String(subject),
+      params: (params && typeof params === 'object') ? params : {},
+    };
+  },
+  /* 回执：**只记录"我们确实观测到的那一步"**，剩下的交给主对话。
+     accepted = 宿主收下了；queued = 排在当前轮次之后；mailbox = 会话不在线，进了信箱；
+     failed = 明确失败（带原因）。**没有 completed**——完成只能由事实重读证明（R9）。 */
+  receipt(state, extra){
+    const st = RECEIPT_STATES.indexOf(state) >= 0 ? state : 'failed';
+    const e = extra || {};
+    return { state: st, requestId: e.requestId || null, placement: e.placement || null,
+             reason: e.reason || '', text: e.text || '' };
+  },
+  /* 回执的人话：四态各自一句，**不许把 accepted 说成"已生效"**（R2/R9） */
+  receiptText(rc){
+    const r = rc || {};
+    if (r.state === 'failed') return '发送失败' + (r.reason ? '（' + r.reason + '）' : '');
+    if (r.state === 'mailbox') return '已记下，下次更新时生效（会话不在线）';
+    if (r.state === 'queued') return '已进队列，处理见主对话';
+    return '已发送，处理见主对话';
+  },
+  /* 只读运行投影：**只从宿主的会话快照读**，读不到就说"观测不到"，不猜（R8/R9）。
+     输入形状（0.2.1-rc.2 的 client session snapshot）：{ running, pendingSubmissions:[{placement}] } */
+  project(snapshot){
+    if (!snapshot || typeof snapshot !== 'object') return { observed: false, state: 'unknown', reason: 'no-snapshot' };
+    if (typeof snapshot.running !== 'boolean') return { observed: false, state: 'unknown', reason: 'no-running-flag' };
+    const pend = Array.isArray(snapshot.pendingSubmissions) ? snapshot.pendingSubmissions : [];
+    const queued = pend.filter(x => x && x.placement === 'queued').length;
+    const steering = pend.filter(x => x && x.placement === 'steering').length;
+    const pe = snapshot.promptError;
+    return {
+      observed: true,
+      running: snapshot.running,
+      queued: queued, steering: steering,
+      state: pe ? 'error' : (snapshot.running ? 'running' : 'idle'),
+      error: pe ? String((pe.error && (pe.error.code || pe.error.message)) || pe.op || 'error') : '',
+      requestIds: pend.map(x => x && x.requestId).filter(x => typeof x === 'string'),
+    };
+  },
+  /* 停止中 → 已停止 的**唯一**判据：投影真的变 idle（对应宿主 turn/end，R4）。
+     停止请求返回只代表"请求已被接受"，不许直接显示已停止。
+     `stopped` 是"这一轮确实按请求停了"的记忆位：投影一变 idle 就置位，**直到下一轮开始**才清掉 ——
+     否则"已停止"会在同一帧被改成"空闲"，用户永远看不到（本轮浏览器验收实测到的真缺陷）。 */
+  stopState(projection, stopping, stopped){
+    if (!projection || projection.observed !== true) return 'unknown';
+    if (projection.running) return stopping ? 'stopping' : 'running';
+    if (stopping || stopped) return 'stopped';
+    return 'idle';
+  },
+};
+
+/* ---------- 检查器 / 抽屉的「事实层」（v1.7，模块级纯函数） ----------
+   与渲染分开的理由：这两块的**内容**（是什么/为什么/证据在哪/能做什么、进展与待拍板摘要）
+   是产品的判断，HTML 只是呈现。分开之后可以脱离 DOM 单测内容，也避免"文案散在模板串里"。 */
+function inspectorFacts(data, name){
+  const mods = (data && data.tech && data.tech.modules) || [];
+  const mod = mods.find(m => m.name === name);
+  if (mod){
+    return { kind: 'tech', title: name,
+             what: { 层: mod.layer, 职责: mod.duty, 技术: mod.tech, 状态: mod.status },
+             why: [], evidence: (mod.evidence || []).slice(),
+             links: (mod.links || []).map(l => l.name + (l.rel ? '（' + l.rel + '）' : '')) };
   }
-  if (glossStatus.meta_error === true){
-    warnings.push('.cyd.json 不是合法 JSON，已忽略（术语表按自动识别处理）');
-  } else if (typeof glossStatus.meta_missing === 'string' && glossStatus.meta_missing){
-    warnings.push('.cyd.json 指定的术语表「' + glossStatus.meta_missing + '」不存在，已退回自动识别');
-  }
-  /* 歧义是数据装配的结论，不是界面的事：契约（dashboard-format.md 术语表一节 + warnings 一节）要求
-     歧义时进 warnings 一条「术语表找到 N 个候选…」，与 Python 渲染器同文案同位置。
-     候选文件名只可能由宿主喂进来（共享核没有列目录能力），所以这里只负责产出这条警告。 */
-  if (glossStatus.source === 'ambiguous' && (glossStatus.candidates || []).length){
-    warnings.push('术语表找到 ' + glossStatus.candidates.length + ' 个候选（'
-      + glossStatus.candidates.join(' / ') + '），暂时按没有术语表处理。告诉我用哪一个，我来指定术语表。');
-  }
-  /* 待生效条数与逐条明细（v1.5）：以 .inbox.jsonl 为准，不做本地增量；**同一次解析**出计数与明细
-     （契约明令不得第二次读取）。undefined 表示这个环境没有该数据源（离线网页内刷新），此时不渲染徽章。 */
-  let inboxPending, inboxItems;
-  if (parts.inboxRaw !== undefined){
-    if (parts.inboxRaw === null){ inboxPending = null; inboxItems = null; }   // 读取失败：不猜
-    else {
-      const items = [];
-      norm(parts.inboxRaw).split('\n').forEach(line => {
-        const s = line.trim();
-        if (!s) return;
-        let obj = null;
-        try{ obj = JSON.parse(s); }catch (e){ obj = null; }
-        if (!obj || typeof obj !== 'object' || Array.isArray(obj)){
-          warnings.push('.inbox.jsonl 里有一行不是合法 JSON 对象，已跳过该行');
-          return;
-        }
-        items.push({
-          type: typeof obj.type === 'string' ? obj.type : '',
-          text: typeof obj.text === 'string' ? obj.text : '',
-          ts: typeof obj.ts === 'string' ? obj.ts : ''
-        });
-      });
-      inboxPending = items.length;
-      inboxItems = items;
-    }
-  }
-  return { project, features, timeline: nw.timeline, decisions: nw.decisions, todos: nw.todos, counts,
-    glossary, glossary_file: glossFile,
-    tech: techDoc, changes: changesDoc,
-    workspace_uri: parts.workspace_uri, updated_at: parts.updated_at || fmtDT(new Date()),
-    health: { ok, matrix, evidence_missing: missing, evidence_invalid: invalid,
-              facts_pending: pending, facts_error: factsError, source: factsSource,
-              facts_generated_at: factsGeneratedAt,
-              inbox_pending: inboxPending,
-              inbox_items: inboxItems,
-              verify_missing: noVerify,
-              glossary_drift: drift, glossary_status: glossStatus,
-              tech_status: parts.techStatus || { file: null, source: techDoc.modules.length ? 'sniff' : 'none', candidates: [] },
-              changes_status: parts.changesStatus || { file: null, source: changesDoc.rules.length ? 'sniff' : 'none', candidates: [] },
-              declared_refs: { changes_only: changesOnly, tech_only: techOnly },
-              tech_stale: techStale,
-              facts: fd, ignore, warnings } };
+  const feats = (data && data.features) || [];
+  const f = feats.find(x => x.name === name);
+  if (!f) return { kind: 'missing', title: name, what: null, why: [], evidence: [], links: [] };
+  const ups = (f.deps || []).filter(d => d !== name);
+  const downs = feats.filter(x => (x.deps || []).includes(name)).map(x => x.name);
+  return {
+    kind: 'feature', title: f.name,
+    what: { 简介: f.desc || '', 状态: f.status, 验证: f.verify || '' },
+    why: [].concat(ups.map(u => '依赖：' + u),
+                   downs.map(d => '被依赖：' + d),
+                   (f.children || []).map(c => '子项：' + c.name)),
+    evidence: (f.evidence || []).map(e => (e && typeof e === 'object') ? e.path : String(e)),
+    links: [],
+    status: f.status,
+  };
+}
+function drawerFacts(data){
+  const d = data || {};
+  const active = (d.counts && d.counts.total_active) || 0;
+  const verified = (d.counts && d.counts['已验证']) || 0;
+  const pending = (d.decisions || []).filter(x => !x.decided && !x.obsolete);
+  return {
+    summary: '已验证 ' + verified + '/' + active + (pending.length ? ' · 待拍板 ' + pending.length + ' 件' : ' · 没有待拍板'),
+    timeline: (d.timeline || []).slice(0, 3),
+    pending: pending.slice(0, 3),
+    verified: verified, active: active, pendingCount: pending.length,
+  };
+}
+
+/* ---------- 读模型状态判定（v1.7）----------
+   放在**模块级**而不是 init 里：这五态判定与状态条文案是整个"读不到就说读不到"的落点，
+   必须能脱离 DOM 被单测到（面板状态由宿主 RPC 给，离线页永远冻结成 fresh）。
+   五个状态之外的任何值一律按 unverified 处理（**"没校验"≠"新鲜"**，绝不默认放行）。 */
+const VIEW_STATES = ['fresh', 'stale', 'missing', 'unsupported', 'unverified'];
+const VIEW_STATE_TEXT = {
+  /* 事实格式比本插件新：能安全只读就降级（不猜字段），并在页首说清 */
+  newer_format: ['数据格式比当前插件新', '这份事实是更新版插件写的，只能按只读看。升级插件后再改。'],
+  stale: ['数据已过期', '源文件在最近一次生成之后改过，下面是上次生成的图。'],
+  missing: ['还没有读模型', '这个工作区还没有生成只读视图。'],
+  unsupported: ['读模型版本更高', '这份数据是更新版插件写的，当前面板只认得旧一版。'],
+  unverified: ['新鲜度未校验', '宿主没提供校验能力，无法确认这份数据是不是最新的。'],
+};
+const viewGate = {
+  normalize: function(s){
+    const st = (s && typeof s === 'object') ? s : {};
+    const state = VIEW_STATES.indexOf(st.state) >= 0 ? st.state : 'unverified';
+    return { state: state,
+             mismatched: Array.isArray(st.mismatched) ? st.mismatched.filter(x => typeof x === 'string') : [],
+             meta: (st.meta && typeof st.meta === 'object') ? st.meta : {} };
+  },
+  /* 只要不是 fresh 就按只读处理：包括"宿主没校验"，因为那时我们**不知道**它是不是旧的 */
+  isReadOnly: function(state){ return state !== 'fresh'; },
+  /* fresh 没有状态条文案：返回 null 而不是"回退到 unverified"，否则将来有人直接调它会把
+     "新鲜"渲染成"未校验"（文案层面的假信号比不渲染更坏）。未知状态才回退 unverified。 */
+  barText: function(state){
+    if (state === 'fresh') return null;
+    return VIEW_STATE_TEXT[state] || VIEW_STATE_TEXT.unverified;
+  },
+  /* 「事实格式版本比本插件新」⇒ **只读降级**（契约「读模型 · 文件形态」：format > 1 只读并说明）。
+     为什么单列一条而不是塞进 warnings[]：这条决定"能不能改事实"，必须在页首可见；
+     warnings[] 在审计弹层里，用户不点开就看不见。 */
+  newerFormat: function(meta){
+    const f = meta && Number.isInteger(meta.format) ? meta.format : null;
+    return f !== null && f > CYD_FORMAT_SUPPORTED;
+  },
+  /* 行内状态条是否出现（fresh 不显示） */
+  needsBar: function(state){ return state !== 'fresh'; },
+};
+
+/* ---------- 待生效（意图状态）的唯一解析处（v1.7） ----------
+   契约「读模型 · 意图（待生效）不在读模型里」：`.inbox.jsonl` 不进 `.view.json`，
+   面板（读文件原文）、宿主离线页（`__CYD_META__.intentRaw` 冻结的导出时刻原文）都调这一份。
+   **三态**：原文 `''` ⇒ pending 0；原文 `null`（读不到）⇒ pending null（界面显示 —，不猜 0）；
+   否则按未收取行数给整数。坏行跳过并计入 `badLines`（明细浮层提示），**不产生 warnings[]**
+   —— WARN 只由渲染器产出，面板不自己发明提示。`type` 只做"是不是字符串"的守卫，不解释语义。 */
+function parseIntent(rawText){
+  if (rawText == null) return { pending: null, items: null, badLines: 0 };
+  const items = [];
+  let bad = 0;
+  String(rawText).split(/\r\n?|\n/).forEach(line => {
+    const s = line.trim();
+    if (!s) return;
+    let obj = null;
+    try { obj = JSON.parse(s); } catch (e) { obj = null; }
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)){ bad++; return; }
+    items.push({
+      type: typeof obj.type === 'string' ? obj.type : '',
+      text: typeof obj.text === 'string' ? obj.text : '',
+      ts: typeof obj.ts === 'string' ? obj.ts : '',
+    });
+  });
+  return { pending: items.length, items: items, badLines: bad };
 }
 
 /* 样式只注入一次。导出给宿主：面板的空态/错误态在 init 之前就要用这份样式，不能各写一套内联值。 */
@@ -928,14 +372,30 @@ function ensureCss(){
 }
 /* 窄栏断点按**容器宽度**判定：面板塞在约 360px 的右侧栏里，而视口仍是 1920px，视口断点没有意义。 */
 const NARROW_MAX = 620;
+/* 工作区两列的**下限**：比 620 高。理由（实拍）：700px 窗口时"主区 + 320px 检查器"把正文挤到
+   ~340px，读起来像窄栏却又不是单栏 —— 中间那段最难用。两条阈值分开：
+   · 620 以下 = 真正的窄栏（证据行、卡片等沿用既有 narrow 样式）
+   · 860 以下 = 工作区退化单列（检查器改底部覆盖层），但其它排版仍按宽栏 */
+const STACK_MAX = 860;
 function syncNarrow(el){
   const w = el.clientWidth || 0;
   el.classList.toggle('narrow', w > 0 && w < NARROW_MAX);
+  el.classList.toggle('stacked', w > 0 && w < STACK_MAX);
 }
 function initDashboard(rootEl, env){
   ensureCss();
   let DATA = env.data;
 let lastJson = JSON.stringify(env.data);
+  /* ---------- 读模型状态（v1.7，契约「读模型 · 消费方职责」） ----------
+     env.viewStatus = { state, mismatched, meta:{schemaVersion, producer, format, generatedAt} }。
+     state 只有五态：fresh / stale / missing / unsupported / unverified（判定在模块级 viewGate 里，
+     与面板/离线的可测性同一处）。**非 fresh 时：保留旧图 + 明确标注 + 禁用依赖旧上下文的对象动作**
+     （拍板 / 待办 / 节点面板发送 / 追问）。这是"读不到就说读不到"的落点：不许把"没校验"当"新鲜"。 */
+  let VIEW = viewGate.normalize(env.viewStatus);
+  /* 待生效（意图）状态：由宿主读 `.inbox.jsonl` 原文后交给 parseIntent（离线页给导出时刻冻结的原文） */
+  let INTENT = parseIntent(env.intentRaw === undefined ? null : env.intentRaw);
+  /* 只读判定 = 读模型不是 fresh **或** 事实格式比本插件新（后者能安全读，但不能改） */
+  const readOnly = () => viewGate.isReadOnly(VIEW.state) || viewGate.newerFormat(VIEW.meta);
 let docKeyHandler = null;   // 全局只保留一个 Esc 处理器：init 幂等
   const qs = s => rootEl.querySelector(s);
   const qsa = s => Array.from(rootEl.querySelectorAll(s));
@@ -1117,16 +577,29 @@ function renderStrip(){
   const collected = fmtRel(d.health && d.health.facts_generated_at);
   /* pill 高度固定（CSS 88px），值超 2 行由 -webkit-line-clamp 省略；完整原文进 title（鼠标悬停可见）。 */
   const val = v => { const s = stripMd(v); return '<div class="v" title="' + esc(s) + '">' + esc(s) + '</div>'; };
-  /* ⏳ 待生效 N 条（v1.5）：N 以 .inbox.jsonl 文件为准，不做本地增量；底色仍由 ok 决定。
-     0 与「字段缺失（离线网页）」都不渲染；null（读取失败）显示 —，不猜数字。 */
-  const inboxN = d.health ? d.health.inbox_pending : undefined;
+  /* ⏳ 待生效 N 条：数据源是 `.inbox.jsonl` 原文（v1.7 起不进 data，见 parseIntent）。
+     **三态必须分成两支**：数字（含 0 —— 0 不渲染徽章，因为"没有待生效"不需要占位）；
+     null（读不到）→ **照常渲染徽章并显示 —**（"读不到"≠"没有"，把它藏起来就是本轮要消灭的假信号）。 */
+  const inboxN = INTENT.pending;
   /* 离线导出页带的是导出时刻的真实值，照常渲染，但 title 要注明它不会自动更新（copy-deck §1/§8.6） */
   const inboxTitle = env.browserTab ? ' title="导出时刻的待生效条数；网页版不会自动更新"' : '';
-  const inboxPill = (inboxN === undefined || inboxN === 0) ? ''
+  const inboxPill = (inboxN === null)
+    ? '<button class="pill pending" data-act="inbox" title="读不到待生效记录（不是 0 条）"><div class="k">⏳ 待生效 </div>'
+      + val('—') + '</button>'
+    : (inboxN === 0 || inboxN === undefined) ? ''
     : '<button class="pill pending" data-act="inbox"' + inboxTitle + '><div class="k">⏳ 待生效 </div>'
-      + val(inboxN === null ? '—' : inboxN + ' 条') + '</button>';
+      + val(inboxN + ' 条') + '</button>';
+  /* 离线快照的**首屏**出处（契约要求离线页标出导出时间与来源版本）：
+     面板走实时读模型，不需要这一格；离线页没有刷新通道，必须一进来就看得出"这是冻结的"。 */
+  const snapMeta = env.viewMeta || null;
+  const snapPill = snapMeta
+    ? '<div class="pill static" title="这份页面是导出的冻结快照，不会自动更新"><div class="k">离线快照</div>'
+      + val('导出于 ' + fmtRel(snapMeta.exportedAt || snapMeta.generatedAt, true)
+        + (snapMeta.producer && snapMeta.producer.version ? ' · v' + snapMeta.producer.version : '')) + '</div>'
+    : '';
   const h =
-    '<button class="pill" data-act="stage" title="当前方向"><div class="k">当前阶段</div>' + val(d.project.stage || '—') + '</button>'
+    snapPill
+    + '<button class="pill" data-act="stage" title="当前方向"><div class="k">当前阶段</div>' + val(d.project.stage || '—') + '</button>'
     + '<div class="pill static"><div class="k">数据更新于</div><div class="v" title="' + esc(stripMd(d.updated_at)) + '"><span class="vtxt">' + esc(stripMd(d.updated_at)) + '</span> <button class="btn mini" id="updBtn" title="重新读取并刷新页面">更新</button></div></div>'
     + (collected ? (() => {
         /* 久未采集（②：与 tech_stale 同族）：⚠ + 悬停说明；文案取自 `factsStaleLines()`（**唯一生成处**，
@@ -1171,15 +644,15 @@ function inboxType(it){
   return [it.type ? it.type : '未知类型', 'b-x1'];
 }
 function openInboxSheet(){
-  const h = DATA.health || {};
-  const n = h.inbox_pending;
-  const items = h.inbox_items;
+  const n = INTENT.pending;
+  const items = INTENT.items;
   const title = '⏳ 待生效' + ((n === null || n === undefined) ? '' : '（' + n + ' 条）');
   let body;
   if (items === null || items === undefined){
     body = '<p class="snote">读不到待生效明细，刷新面板后重试。</p>';
   } else if (!items.length){
     body = '<p class="snote">暂无</p>';
+    if (INTENT.badLines) body += '<p class="snote">另有 ' + INTENT.badLines + ' 行读不出来，已跳过。</p>';
   } else {
     body = '<div class="stablewrap"><table class="stable"><tr><th>类型</th><th>内容</th><th>时间</th></tr>'
       + items.map(it => {
@@ -1189,6 +662,7 @@ function openInboxSheet(){
           + '<td>' + esc(fmtRel(it.ts, true)) + '</td></tr>';
       }).join('')
       + '</table></div>';
+    if (INTENT.badLines) body += '<p class="snote">另有 ' + INTENT.badLines + ' 行读不出来，已跳过。</p>';
   }
   openSheet(title, body);
 }
@@ -1223,7 +697,7 @@ function renderProject(){
   qs('#project').innerHTML = h;
 }
 
-/* ---------- 术语表 Tab（📖，位于「现在」与「使用指南」之间） ----------
+/* ---------- 术语表 Tab（📖，五种 tab 里的最后一个；使用指南已删，D2） ----------
    术语表默认在建仪表盘时一并创建；文件名不写死 —— 靠表头契约识别（真实文件名见 .cyd.json 的 glossary_file）。
    四种状态都要有出口：有表 / 有漂移 / 文件在但表头不符 / 未启用（空态给一键建立）。 */
 const GLOSS_HEADER_DEMO = '| 标准用词 | 指什么 | 别名/曾用名 |\n| --- | --- | --- |\n| 开发仪表盘 | 本产品 | 看板、dashboard |';
@@ -1312,7 +786,7 @@ function graphBoxHtml(immersive, canSend){
      单一执行路径：这个判断只此一处。 */
   const techCanSend = !!canSend;
   /* 「功能 | 技术」切换放 `.ghead` 内、缩放控件左侧（契约「界面结构」+ §F1）：**不新增 tab**
-     （六 tab 顺序与数量不变），视角状态存内存、不持久化。 */
+     （v1.7 起五个 tab，顺序与数量到此为止不再变），视角状态存内存、不持久化。 */
   /* 整页的可见出口（文案已按 copy-deck §16.6 定稿）：按钮 `查看详情`。
      行为（2026-10-13 用户要求）＝①退出整页 ②在右侧边栏打开**完整仪表盘**
      （走宿主正式服务 `ctx.sidebarRight.openTab`，见 client.src.js 的 `face.openSidebar`）。
@@ -1326,6 +800,12 @@ function graphBoxHtml(immersive, canSend){
   /* S3 可见性（契约 L563「陈旧必须比正确更显眼」）：**不许只在审计弹层可见** ——
      技术视图里 ① 标题旁 `⚠`（悬停给全三句）② 图例下一条 `.snote`（给第一句）。
      两处**都从 `techStaleLines()` 取**（唯一生成处），不再各自拼字符串。 */
+  /* 「模块 > 0 但证据全空」的图例下提示（copy-deck §16.6 定稿；渲染器同时产同一条 WARN 进审计列表）。
+     **两处都从这一处判定取**：判据是"有模块、且所有模块（含子项）证据都为空"，与渲染器同一口径。 */
+  const techMods = (DATA.tech && DATA.tech.modules) || [];
+  const techNoEvidence = graphView === 'tech' && techMods.length > 0
+    && techMods.every(m => !(m.evidence || []).length
+      && (m.children || []).every(c => !(c.evidence || []).length));
   const ts = (DATA.health && DATA.health.tech_stale) || null;
   const tsShow = graphView === 'tech' && ts && ts.modules.length;
   const tsLines = tsShow ? techStaleLines(ts) : null;
@@ -1339,6 +819,8 @@ function graphBoxHtml(immersive, canSend){
       : '<span><i class="x1"></i>设想</span><span><i class="x2"></i>进行中</span><span><i class="x3"></i>可用</span><span><i class="x4"></i>已验证</span><span class="lgsub">拖节点可调整位置 · 点 ▸n 徽标展开子项</span>')
     + '</div>'
     + (tsShow ? '<p class="snote">' + esc(tsLines[0]) + '</p>' : '')
+    + (techNoEvidence ? '<p class="snote">技术地图没有证据，无法审计。</p>'
+      + '<p class="snote">给模块补上证据路径，就能核对了。</p>' : '')
     + (techEmpty
         ? (techNone
             ? '<div class="tech-empty"><b>还没有技术地图</b><p>技术地图说明这些功能是怎么搭起来的。</p><p>它和功能地图共用同一批证据，不另做一张图。</p>'
@@ -1391,9 +873,19 @@ function renderCards(f){
   const grid = qs('#featGrid');
   const list = f === 'all' ? DATA.features : DATA.features.filter(x => x.status === f);
   grid.innerHTML = list.length ? list.map(featCard).join('') : '<div class="empty">暂无该状态的功能</div>';
-  grid.querySelectorAll('.feat').forEach(c => c.onclick = e => {
-    if (e.target.closest('a,button,input,textarea')) return;
-    openFeatDetail(c.dataset.fname);
+  grid.querySelectorAll('.feat').forEach(c => {
+    /* 卡片与图节点**同一个选择面**：点卡片 = 固定选择 + 联动检查器（不再是另一个弹层）。
+       动作按钮（证据、验证）各自 stopPropagation，不会误触选择。 */
+    c.onclick = e => {
+      if (e.target.closest('a,button,input,textarea')) return;
+      selectNode(c.dataset.fname);
+    };
+    c.onkeydown = e => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      if (e.target.closest('a,button,input,textarea')) return;
+      e.preventDefault();
+      selectNode(c.dataset.fname);
+    };
   });
 }
 
@@ -1674,7 +1166,7 @@ const nodeG = {};           // 功能名 → 该节点的 <g>（降噪要按名�
     pop.style.left = left + 'px'; pop.style.top = top + 'px';
     clearTimeout(popTimer);
     pop.classList.add('on');
-    pop.onclick = ev => { ev.stopPropagation(); pop.classList.remove('on'); openNodePanel(f.name); };
+    pop.onclick = ev => { ev.stopPropagation(); pop.classList.remove('on'); selectNode(f.name); };
   }
   pop.addEventListener('mouseenter', () => { popHover = true; clearTimeout(popTimer); });
   pop.addEventListener('mouseleave', () => { popHover = false; hidePopSoon(); });
@@ -2043,7 +1535,7 @@ const nodeG = {};           // 功能名 → 该节点的 <g>（降噪要按名�
     if (m){
       gview.drag = false;
       if (m.moved) gview.adjusted = true;
-      else if (!cancelled){ pop.classList.remove('on'); openNodePanel(m.f.name); }
+      else if (!cancelled){ pop.classList.remove('on'); selectNode(m.f.name); }
       if (gview.deferred){ gview.deferred = false; doRefreshQuiet(); }   // 拖动期间押后的自动刷新
     }
     if (e && e.pointerId !== undefined){ try{ svg.releasePointerCapture(e.pointerId); }catch(err){} }
@@ -2051,6 +1543,23 @@ const nodeG = {};           // 功能名 → 该节点的 <g>（降噪要按名�
   svg.addEventListener('pointerup', e => endGesture(e, false));
   svg.addEventListener('pointercancel', e => endGesture(e, true));
   svg.addEventListener('lostpointercapture', () => { if (dragNode || panning) endGesture(null, true); });
+
+  /* ---------- hover / 键盘 focus = **临时预览**；pin 才持久（契约 §4.2/§4.3） ----------
+     预览与固定用同一个 applyFocus（单一实现）：预览改了，松开/离开就回到 pin 的那条链。
+     **只改透明度**：不移动任何坐标（契约硬约束），也不重排。 */
+  const previewTo = name => applyFocus(name || pinnedName, false);
+  qsa('.lyr-nodes>g[data-fname]').forEach(gEl => {
+    gEl.addEventListener('pointerenter', () => { if (!dragNode) previewTo(gEl.getAttribute('data-fname')); });
+    gEl.addEventListener('pointerleave', () => { if (!dragNode) previewTo(null); });
+    gEl.addEventListener('focus', () => previewTo(gEl.getAttribute('data-fname')));
+    gEl.addEventListener('blur', () => previewTo(null));
+  });
+  /* 点空白取消选择（点在节点/子项/缩放控件上不算） */
+  svg.addEventListener('click', e => {
+    if (e.target.closest('.lyr-nodes>g, .lyr-child>g, #gTools, .node')) return;
+    if (pinnedName) closeInspector();
+    else applyFocus(null, true);
+  });
   /* 缩放控件：＋ / － / 适应屏幕（以视野中心为锚点）/ 重置布局（把手动位置清掉） */
   const tools = qs('#gTools');
   if (tools){
@@ -2438,6 +1947,7 @@ function decisionDraft(root, did){
 async function sendDecision(root, did, btn){
   const d = decisionDraft(root, did);
   if (!d || d.empty) return;
+  if (readOnly()){ toast('数据已过期，先更新再看'); return; }
   if (btn) btn.disabled = true;
   try{
     const res = await env.decide({ id: d.dc.id, title: d.dc.title, keys: d.keys, note: d.note, text: d.msg });
@@ -2451,6 +1961,8 @@ async function sendDecision(root, did, btn){
 function copyDecision(root, did){
   const d = decisionDraft(root, did);
   if (!d || d.empty) return;
+  /* 过期状态复制出去的是**基于旧选项**的决策句 —— 与"发送"同一条闸（契约把拍板列入禁用清单） */
+  if (readOnly()){ toast('数据已过期，先更新再看'); return; }
   copyText(d.msg);
 }
 /* 已废弃 → 待拍板：走既有指令通道（离线退回复制），由我改文件并在时间线留痕 */
@@ -2477,6 +1989,11 @@ function syncTodoBar(root){
 async function confirmTodos(root, btn){
   const items = Array.from(pickedTodos);
   if (!items.length) return;
+  if (readOnly()){
+    toast('数据已过期，先更新再看');
+    pickedTodos.clear(); renderDecisions();
+    return;
+  }
   if (!env.command){
     copyText(items.map(todoCmd).join('\n'));
     toast('已复制指令 · 待粘贴');
@@ -2909,6 +2426,9 @@ function sendResultText(r, what, queuedText){
 /* 统一的直发：消息直接进主对话；拿不到通道或发送失败才退回复制，并把原因说清楚 */
 function dispatchSend(text, summary, btn){
   const send = env.ask || env.command;
+  /* 非 fresh ⇒ 依赖旧上下文的对象动作禁用（契约「读模型 · 消费方职责」）：
+     这里的话术会带着**过期的状态**发给 agent，比不给按钮更坏。 */
+  if (readOnly()){ toast('数据已过期，先更新再看：' + (VIEW.mismatched.length ? VIEW.mismatched.join('、') + ' 变过' : '读模型不是最新的')); return; }
   if (!send){
     copyText(text);
     toast('这个环境拿不到直发通道，已复制——粘贴到聊天框发送');
@@ -2929,9 +2449,10 @@ function sendToAgent(name, text, btn){
   const f = DATA.features.find(x => x.name === name);
   dispatchSend('【功能地图】「' + name + '」' + (f ? '（状态：' + f.status + '）' : '') + '——' + text, '功能地图：' + name, btn);
 }
-function bindFeatSheet(name, reopen, withAsk){
-  const sh = qs('#sheet');
-  sh.querySelectorAll('[data-dep]').forEach(b => b.onclick = () => openNodePanel(b.dataset.dep));
+function bindFeatSheet(name, reopen, withAsk, root){
+  /* root 默认 #sheet；检查器传自己的 #insBody —— 同一套绑定逻辑，不复制第二份 */
+  const sh = root || qs('#sheet');
+  sh.querySelectorAll('[data-dep]').forEach(b => b.onclick = () => selectNode(b.dataset.dep));
   sh.querySelectorAll('[data-cmd]').forEach(b => b.onclick = () => dispatchSend(b.dataset.cmd, '功能地图：' + name, b));
   if (withAsk){
     const ta = sh.querySelector('[data-asktext]');
@@ -3027,6 +2548,8 @@ async function doVerify(name, reopen){
   // 无论成功、发送、复制还是失败，都要把弹层里的按钮恢复到可用状态（否则会一直卡在"中…"）
   const back = typeof reopen === 'function' ? reopen : () => openFeatDetail(name);
   const restore = () => { try { back(); } catch (e) { /* 弹层已关闭也无所谓 */ } };
+  /* 「我已验证」要改事实（FEATURES.md + 时间线），读模型过期时这条请求会基于旧状态 —— 禁用 */
+  if (readOnly()){ toast('数据已过期，先更新再看'); return; }
   try{
     const res = env.verifyWrite ? await env.verifyWrite(name) : 'fallback';
     if (res === 'ok'){ closeSheet(); await doRefreshQuiet(); toast('✅ 已写入「已验证」'); return; }
@@ -3062,8 +2585,241 @@ function toast(msg){
   clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
 }
 
+/* ---------- 读模型状态条（v1.7） ----------
+   非 fresh 时**保留旧图**（它不是"没数据"，是"数据可能是旧的"），但必须：
+   ① 在页首说清状态与原因（含具体哪个源变了）；② 禁用依赖旧上下文的对象动作。
+   **文案克制**：D2 要求删掉说明书式文案，这里只给一句事实 + 一句下一步，不写用法指南。 */
+function clearViewBar(){
+  const b = qs('#viewbar'); if (b) b.remove();
+}
+function renderViewBar(){
+  clearViewBar();
+  if (!viewGate.needsBar(VIEW.state)) return;
+  const newer = viewGate.newerFormat(VIEW.meta);
+  const t = newer ? viewGate.barText('newer_format') : viewGate.barText(VIEW.state);
+  if (!t) return;
+  const why = VIEW.mismatched.length ? '变更的源：' + VIEW.mismatched.join('、') + '。' : '';
+  const when = VIEW.meta && VIEW.meta.generatedAt ? '（生成于 ' + esc(fmtRel(VIEW.meta.generatedAt, true)) + '）' : '';
+  const head = qs('#strip');
+  /* 整页模式（conversation.view）不渲染掌控条 ⇒ #strip 不存在；此时状态条挂在根容器最前面，
+     仍然"说清状态"（契约要求非 fresh 必须可见，与是否整页无关）。 */
+  const host = head ? head.parentNode : rootEl;
+  const el = document.createElement('div');
+  el.id = 'viewbar';
+  el.className = 'viewbar ' + (newer ? 'newer-format' : VIEW.state);
+  el.setAttribute('role', 'status');
+  el.innerHTML = '<b>' + esc(t[0]) + '</b><span>' + esc(t[1]) + esc(why) + esc(when) + '</span>'
+    + (env.reload && env.requestUpdate
+        ? '<button class="btn mini" data-viewupd>请求更新</button>'
+        : '');
+  if (head) host.insertBefore(el, head); else host.insertBefore(el, host.firstChild);
+  const ub = el.querySelector('[data-viewupd]');
+  if (ub) ub.onclick = () => {
+    ub.disabled = true;
+    Promise.resolve(env.requestUpdate()).then(r => {
+      ub.disabled = false;
+      toast(r === 'queued' ? '✓ 已记下，下次更新时生效' : '✓ 已发给对话，我来更新');
+    }).catch(() => { ub.disabled = false; toast('发送失败，请在聊天框对我说「更新仪表盘」'); });
+  };
+}
+
+/* ---------- 右侧检查器（v1.7，契约 §4.1/§4.3） ----------
+   回答四件事：是什么 / 为什么 / 证据在哪 / 能做什么。
+   **选择**与**动作**分开：点节点只做"固定选择 + 联动检查器"，动作按钮各是独立一步。 */
+let pinnedName = null;
+function inspectorEl(){ return qs('#inspector'); }
+function closeInspector(){
+  pinnedName = null;
+  const el = inspectorEl(); if (el){ el.hidden = true; }
+  applyFocus(null, true);
+  const box = qs('.graphbox'); if (box) box.classList.remove('focusing');
+}
+function inspectorBodyFor(name){
+  const F = inspectorFacts(DATA, name);
+  const mod = F.kind === 'tech' ? ((DATA.tech && DATA.tech.modules) || []).find(x => x.name === name) : null;
+  if (mod){
+    /* 技术模块：只有声明字段（**不做代码解析**），证据是路径列表 */
+    const kv = (k, v) => '<div class="kv kvwide"><b>' + k + '</b><span>'
+      + esc((v == null || String(v).trim() === '') ? '未填写' : String(v)) + '</span></div>';
+    return '<div class="sblock"><h4>是什么</h4>' + kv('层', mod.layer) + kv('职责', mod.duty)
+      + kv('技术', mod.tech) + kv('状态', mod.status) + '</div>'
+      + '<div class="sblock"><h4>证据在哪</h4>' + kv('证据', (mod.evidence || []).join(', '))
+      + kv('连到', (mod.links || []).map(l => l.name + (l.rel ? '（' + l.rel + '）' : '')).join(', ')) + '</div>'
+      + '<div class="sblock"><p class="snote">技术模块的详情来自 TECH.md 的声明；要改就改那份文件。</p></div>';
+  }
+  const f = DATA.features.find(x => x.name === name);
+  if (!f){
+    return '<div class="sblock"><p class="snote">这个节点在当前数据里查不到详情（可能已被改名或删除）。'
+      + '刷新后仍看不到，就让我更新仪表盘。</p></div>';
+  }
+  /* 功能：是什么（简介+状态）/ 为什么（依赖与被依赖）/ 证据在哪（证据行）/ 能做什么（动作区）
+     内容取自 inspectorFacts（纯函数，可脱离 DOM 单测），这里只负责排版。 */
+  const what = F.what || {};
+  const ups = (f.deps || []).filter(d => d !== name);
+  const downs = DATA.features.filter(x => (x.deps || []).includes(name)).map(x => x.name);
+  return '<div class="sblock"><h4>是什么</h4><p>' + esc(what.简介 || '（还没写简介）') + '</p>'
+    + '<p class="snote">状态：' + esc(what.状态 || '') + (what.验证 ? ' · 验证：' + esc(what.验证) : '') + '</p></div>'
+    + '<div class="sblock"><h4>为什么</h4>'
+    + '<p class="snote">' + (ups.length ? '依赖：' + ups.map(esc).join('、') : '不依赖别的功能') + '</p>'
+    + '<p class="snote">' + (downs.length ? '被依赖：' + downs.map(esc).join('、') : '还没有别的功能依赖它') + '</p>'
+    + (f.children && f.children.length ? '<p class="snote">子项：' + f.children.map(c => esc(c.name)).join('、') + '</p>' : '')
+    + '</div>'
+    + '<div class="sblock"><h4>证据在哪</h4>' + evHtml(f.evidence || []) + '</div>'
+    + '<div class="sblock"><h4>能做什么</h4>' + askBoxHtml(f) + '<div class="actions">'
+    + '<button class="btn" data-openfeat>在列表里看</button>'
+    + '</div></div>';
+}
+function selectNode(name, opts){
+  const o = opts || {};
+  pinnedName = name || null;
+  applyFocus(pinnedName, true);
+  const el = inspectorEl();
+  if (!el) return;
+  if (!pinnedName){ el.hidden = true; return; }
+  const mod = ((DATA.tech && DATA.tech.modules) || []).find(x => x.name === pinnedName);
+  const f = DATA.features.find(x => x.name === pinnedName);
+  qs('#insTitle').textContent = pinnedName;
+  const body = qs('#insBody');
+  body.innerHTML = inspectorBodyFor(pinnedName);
+  el.hidden = false;
+  if (f) bindFeatSheet(pinnedName, () => selectNode(pinnedName), true, body);
+  const ob = body.querySelector('[data-openfeat]');
+  if (ob && f) ob.onclick = () => { closeInspector(); gotoTab('features'); flashEl('feat-' + f.name); };
+  if (mod){ dismissChgMark(pinnedName); }
+  if (o.focusClose){ const cb = qs('#insClose'); if (cb) cb.focus(); }
+}
+/* 整链聚焦（hover/focus 只做**临时预览**，pin 才持久）；只改透明度，不动坐标 */
+function applyFocus(name, force){
+  const box = qs('.graphbox'); if (!box) return;
+  const svg = qs('#graph'); if (!svg) return;
+  if (!name){
+    box.classList.remove('focusing');
+    qsa('.lyr-nodes>g.on, .lyr-edges>g.on').forEach(g => g.classList.remove('on'));
+    return;
+  }
+  const nodes = (graphView === 'tech' && DATA.tech && DATA.tech.modules.length)
+    ? DATA.tech.modules.map(m => ({ name: m.name, deps: (m.links || []).map(l => l.name), children: [] }))
+    : ACT();
+  const chain = chainSet(nodes, name);
+  const on = new Set([name, ...chain.up, ...chain.down]);
+  box.classList.add('focusing');
+  qsa('.lyr-nodes>g').forEach(g => {
+    const n = g.getAttribute('data-fname');
+    g.classList.toggle('on', !!n && on.has(n));
+  });
+  qsa('.lyr-edges>g, .lyr-edges>path').forEach(p => {
+    const a = p.getAttribute('data-from'), b = p.getAttribute('data-to');
+    p.classList.toggle('on', !!a && !!b && on.has(a) && on.has(b));
+  });
+  void force;
+}
+
+/* ---------- 运行控制条 + 回执（v1.7，R1–R10） ----------
+   **只由宿主动力驱动**：env.run 不存在（离线页 / 宿主不支持）⇒ 整块不渲染。
+   状态标签取自**投影**（不是本地意图）；"停止中"必须等到投影 idle 才变"已停止"。 */
+let RUNTIME = { observed: false, state: 'unknown', reason: 'not-wired' };
+let STOPPING = false;
+let STOPPED = false;      // "这一轮是被我们停下来的" —— 只在下一轮开始时清掉
+let LAST_INTENT = null;      // {text, summary, requestId} —— 重试要新 requestId（R6）
+function renderRunBar(){
+  const bar = qs('#runbar');
+  if (!bar) return;
+  if (!env.run){ bar.hidden = true; return; }
+  bar.hidden = false;
+  const st = intent.stopState(RUNTIME, STOPPING, STOPPED);
+  const label = st === 'running' ? '运行中' : st === 'stopping' ? '停止中（等本轮结束）'
+    : st === 'stopped' ? '已停止' : st === 'idle' ? '空闲' : '运行状态观测不到';
+  const canStop = RUNTIME.observed === true && RUNTIME.running === true && !STOPPING;
+  const canRetry = !!LAST_INTENT && RUNTIME.observed === true && RUNTIME.running !== true;
+  bar.innerHTML = '<span class="scope">仅当前会话</span>'
+    + '<span class="rstate ' + st + '">' + esc(label) + '</span>'
+    + (RUNTIME.observed && RUNTIME.queued ? '<span>队列 ' + RUNTIME.queued + ' 条</span>' : '')
+    + (RUNTIME.observed && RUNTIME.state === 'error' ? '<span>上一轮失败：' + esc(RUNTIME.error) + '</span>' : '')
+    + '<span class="racts">'
+    + '<button class="btn mini" data-run="stop"' + (canStop ? '' : ' disabled') + ' title="停止当前轮次，队列里的消息保留">停止当前轮次（保留队列）</button>'
+    + '<button class="btn mini danger" data-run="stopclear"' + (canStop ? '' : ' disabled') + ' title="停止，并请求把队列与信箱一并清空（危险动作，会先确认）">停止并清空队列</button>'
+    + (canRetry ? '<button class="btn mini" data-run="retry" title="以新请求重跑上一句（不撤销已有副作用）">重试上一句</button>' : '')
+    + '</span>';
+  bar.querySelectorAll('[data-run]').forEach(b => b.onclick = () => runAction(b.dataset.run, b));
+}
+async function runAction(kind, btn){
+  if (!env.run) return;
+  if (kind === 'stop'){
+    STOPPING = true; renderRunBar();
+    try {
+      const r = await env.run.stop();
+      if (!r || r.ok !== true) throw new Error((r && r.error && (r.error.code || r.error.message)) || 'stop-failed');
+      showReceipt(intent.receipt('accepted', { text: '已请求停止当前轮次（队列保留）' }));
+    } catch (e){
+      STOPPING = false;
+      showReceipt(intent.receipt('failed', { reason: String((e && e.message) || e) }));
+    }
+    renderRunBar();
+    return;
+  }
+  if (kind === 'stopclear'){
+    /* R5：危险动作，必须**确认 + 权限复核**（宿主要能接受这个请求才继续） */
+    if (typeof env.run.confirm !== 'function' || !env.run.confirm()) { return; }
+    STOPPING = true; renderRunBar();
+    try {
+      const r = await env.run.stopClear();
+      if (!r || r.ok !== true) throw new Error((r && r.error && (r.error.code || r.error.message)) || 'stop-clear-failed');
+      showReceipt(intent.receipt('accepted', { text: '已请求停止并清空队列（等本轮结束）' }));
+    } catch (e){
+      STOPPING = false;
+      showReceipt(intent.receipt('failed', { reason: String((e && e.message) || e) }));
+    }
+    renderRunBar();
+    return;
+  }
+  if (kind === 'retry' && LAST_INTENT){
+    /* R6：同会话、**新 requestId**、新轮次；不撤销已有副作用、不从失败点恢复 */
+    try {
+      const rc = await env.run.retry(LAST_INTENT.text, LAST_INTENT.summary);
+      if (rc) LAST_INTENT = { text: LAST_INTENT.text, summary: LAST_INTENT.summary, requestId: rc.requestId };
+      showReceipt(rc);
+    } catch (e){
+      showReceipt(intent.receipt('failed', { reason: String((e && e.message) || e) }));
+    }
+    renderRunBar();
+  }
+}
+function showReceipt(rc){
+  const el = qs('#receipt');
+  if (!el || !rc) return;
+  el.hidden = false;
+  el.className = 'receipt ' + (rc.state === 'failed' ? 'failed' : '');
+  el.innerHTML = esc(intent.receiptText(rc))
+    + (rc.text ? ' · ' + esc(rc.text) : '')
+    + (rc.requestId ? ' <span class="rid">· 请求 ' + esc(String(rc.requestId).slice(0, 12)) + '…</span>' : '');
+}
+
+/* ---------- 底部抽屉（v1.7）：进展 + 待拍板摘要 ---------- */
+function renderDrawer(){
+  const D = drawerFacts(DATA);
+  const sum = qs('#drawerSum');
+  if (sum) sum.textContent = D.summary;
+  const body = qs('#drawerBody');
+  if (!body) return;
+  const tl = D.timeline;
+  const dec = D.pending;
+  body.innerHTML = '<div class="dcols">'
+    + '<div class="sblock"><h4>进展</h4>'
+    /* 时间线是用户手写 Markdown：先剥标记再显示（否则界面上会出现 ** 字面量，实拍抓到过） */
+    + (tl.length ? tl.map(t => '<p class="snote">· ' + esc(stripMd(t.text)) + '</p>').join('') : '<p class="snote">还没有时间线记录</p>')
+    + '<p class="snote"><button class="linkbtn" data-gonow>看全部时间线 →</button></p></div>'
+    + '<div class="sblock"><h4>等你拍板</h4>'
+    + (dec.length ? dec.map(x => '<p class="snote">· ' + esc(x.id) + ' ' + esc(stripMd(x.title)) + '</p>').join('')
+        : '<p class="snote">没有待拍板的事</p>')
+    + '<p class="snote"><button class="linkbtn" data-godec>去拍板 →</button></p></div>'
+    + '</div>';
+  const gn = body.querySelector('[data-gonow]'); if (gn) gn.onclick = () => gotoTab('now');
+  const gd = body.querySelector('[data-godec]'); if (gd) gd.onclick = () => openDecisionCenter();
+}
+
 /* ---------- 总渲染 ---------- */
 function renderAll(){
+  renderViewBar();
   /* 整页模式：只渲染关系图（其余板块不生成 DOM，避免白占版面与无谓重排） */
   if (IMMERSIVE){
     const sec = qs('#features'); if (sec) sec.classList.add('on');
@@ -3071,7 +2827,15 @@ function renderAll(){
     saveSeen();                      // V4 快照：渲染成功之后覆盖写入（写不进 → seenDisabled，此后不显示）
     return;
   }
-  renderStrip(); renderProject(); renderFeatures(); renderNow(); renderDecisions(); renderGlossary();
+  renderStrip(); renderRunBar(); renderProject(); renderFeatures(); renderNow(); renderDecisions(); renderGlossary();
+  renderDrawer();
+  /* 选择在刷新后按**稳定身份**恢复：节点还在就重开检查器，不在了就清掉（契约 §4.5） */
+  if (pinnedName){
+    const stillThere = DATA.features.some(x => x.name === pinnedName)
+      || ((DATA.tech && DATA.tech.modules) || []).some(m => m.name === pinnedName);
+    if (stillThere) selectNode(pinnedName);
+    else closeInspector();
+  }
   gotoTab(currentTab);
   saveSeen();
 }
@@ -3120,7 +2884,7 @@ rootEl.addEventListener('keydown', e => {
   const node = t.closest('g.node');
   if (node){
     e.preventDefault();
-    if (node.dataset && node.dataset.fname) openNodePanel(node.dataset.fname);   // 与鼠标单击一致
+    if (node.dataset && node.dataset.fname) selectNode(node.dataset.fname);   // 与鼠标单击一致
   }
 });
 // Esc 关闭弹层；全局只保留一个处理器（面板每次重挂都会 init，不能叠加）
@@ -3128,8 +2892,11 @@ if (docKeyHandler) document.removeEventListener('keydown', docKeyHandler);
 docKeyHandler = e => {
   if (!rootEl.isConnected) return;
   if (e.key === 'Escape'){
+    /* 优先级：气泡 → 检查器 → 弹层（**Esc 先收最内层**，别让"按一次全没了"） */
+    const pop = qs('.nodepop.on');
+    if (pop){ pop.classList.remove('on'); return; }
+    if (pinnedName){ closeInspector(); return; }
     closeSheet();
-    const pop = qs('.nodepop.on'); if (pop) pop.classList.remove('on');
   }
 };
 document.addEventListener('keydown', docKeyHandler);
@@ -3154,6 +2921,16 @@ qsa('nav.tabs button').forEach(b => b.onclick = () => {
     const nxt = root.dataset.theme === 'dark' ? 'light' : 'dark'; root.dataset.theme = nxt;
     try{ localStorage.setItem('cyd-theme', nxt); }catch(e){}
   };
+  /* 抽屉开合：状态只存内存（视图偏好，不写进读模型） */
+  const drawerBtn = qs('#drawerBtn');
+  if (drawerBtn) drawerBtn.onclick = () => {
+    const box = qs('#drawer');
+    const open = box.classList.toggle('open');
+    drawerBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  };
+  const insClose = qs('#insClose');
+  if (insClose) insClose.onclick = () => closeInspector();
+
   /* 版本快照/设置按钮只在宿主提供对应能力时出现（DSH 面板；离线网页没有） */
   const vb2 = qs('#verBtn');
   if (vb2 && env.versions){ vb2.style.display = ''; vb2.onclick = () => openVersions(); }
@@ -3164,8 +2941,36 @@ qsa('nav.tabs button').forEach(b => b.onclick = () => {
 
   window.__CYD_TOAST__ = toast;
   renderAll();
-  return { reload: doRefresh, reloadQuiet: doRefreshQuiet, notice: toast };
+  /* 宿主注入点（面板 watch / 断线重连都走这里）：只换状态与意图，不换"谁能写事实" */
+  function setViewStatus(s){
+    const next = viewGate.normalize(s);
+    const changed = next.state !== VIEW.state || next.mismatched.join('|') !== VIEW.mismatched.join('|');
+    VIEW = next;
+    if (changed) renderAll();
+  }
+  function setIntent(rawText){
+    INTENT = parseIntent(rawText === undefined ? null : rawText);
+    renderStrip();
+  }
+  /* 宿主已经拿到新 data 时用它（只换数据、不重读）：面板 watch 走这条，避免"再读一次" */
+  function reloadQuietData(d){ return applyData(d, true); }
+  /* 宿主把**会话快照**交进来（不是我们的本地猜测）；这里只做投影与重绘（R8/R9） */
+  function setRun(snapshot){
+    const next = intent.project(snapshot);
+    /* 状态迁移只在这里发生（单一处）：
+       运行中 ⇒ 清掉"已停止"记忆；停止请求 + 投影真的 idle ⇒ 记住"已停止"（R4，等 turn/end） */
+    if (next.observed && next.running === true) STOPPED = false;
+    if (STOPPING && next.observed && next.running !== true){ STOPPED = true; STOPPING = false; }
+    RUNTIME = next;
+    renderRunBar();
+  }
+  function showReceiptPublic(rc){ showReceipt(rc); }
+  return { reload: doRefresh, reloadQuiet: doRefreshQuiet, reloadQuietData: reloadQuietData,
+           notice: toast, setViewStatus: setViewStatus, setIntent: setIntent,
+           setRun: setRun, receipt: showReceiptPublic,
+           viewState: () => VIEW.state, readOnly: readOnly };
 }
-return { init: initDashboard, ensureCss, css: CSS, parseProduct, parseFeatures, parseNow, layoutGraph, assembleData, resolveGlossary, glossaryHeaderOk, resolveDeclared, declaredSniffOk, parseTech, parseChanges, globMatch, kindOf, norm, pad, fmtDate, fmtDT, parseGlossary, glossaryDrift, textWidth, wrapName, nodeDims, truncMid };
+return { init: initDashboard, ensureCss, css: CSS, parseIntent, viewGate, chainSet,
+           inspectorFacts, drawerFacts, intent, fmtDate, fmtDT };
 
 })();

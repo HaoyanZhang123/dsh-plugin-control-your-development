@@ -61,8 +61,13 @@
 .cyd-app .pill .v{font-size:16px;line-height:1.3;font-weight:650;color:var(--ink);margin-top:2px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .cyd-app .pill .v .btn.mini{font-size:12.5px;line-height:1.4}
 .cyd-app .pill.alert{border-color:color-mix(in srgb,var(--warn) 55%,var(--line));background:var(--warn-soft)}
-/* ⏳ 待生效 N 条（v1.5）：底色/边框同 .pill.alert；class 与 ok 无关，只表示"有待生效的条目" */
-.cyd-app .pill.pending{border-color:color-mix(in srgb,var(--warn) 55%,var(--line));background:var(--warn-soft)}
+/* ⏳ 待生效 N 条（v1.5）：底色/边框同 .pill.alert；class 与 ok 无关，只表示"有待生效的条目"
+   **v1.7 真机修正**：它是计数胶囊，不是状态大卡 —— .pill{flex:1} 会把它拉成整行、88px 高（截图实证），
+   且"读不到"时显示 — 也要保持紧凑。宽栏固定上限，窄栏仍按 grid 两列。 */
+.cyd-app .pill.pending{border-color:color-mix(in srgb,var(--warn) 55%,var(--line));background:var(--warn-soft);
+  /* align-self 必须显式给：.strip 是 align-items:stretch 的 flex，height:auto 会被"拉伸"回 88px（浏览器实测） */
+  flex:0 0 auto;align-self:center;min-width:132px;max-width:200px;height:auto;padding:8px 14px}
+.cyd-app.narrow .pill.pending{max-width:none}
 .cyd-app .pill.good{border-color:color-mix(in srgb,var(--ok) 45%,var(--line));background:var(--ok-soft)}
 .cyd-app .lk{color:var(--accent);cursor:pointer;border-bottom:1px dashed color-mix(in srgb,var(--accent) 45%,transparent)}
 .cyd-app .lk:hover{border-bottom-style:solid}
@@ -104,15 +109,6 @@
 .cyd-app .tagval{min-width:0;font-size:14px;line-height:1.7;color:var(--ink);overflow-wrap:anywhere}
 .cyd-app .empty{border:1px dashed var(--line);border-radius:var(--radius);padding:24px;text-align:center;color:var(--ink2);font-size:14px;line-height:1.7;margin-bottom:12px}
 .cyd-app .dhint{font-size:12.5px;color:var(--ink2);margin:8px 0 0}
-
-/* ---------- 使用指南 ---------- */
-/* 步骤紧凑化：单行步骤总高 = max(30,21) + 12 = 42px（圆点与首行文字垂直居中，连线跨过间隙） */
-.cyd-app .steps{margin:12px 0 0;padding:0;list-style:none}
-.cyd-app .steps li{position:relative;padding:0 0 12px 46px;min-height:30px}
-.cyd-app .steps li::before{content:attr(data-n);position:absolute;left:0;top:-4px;width:30px;height:30px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:700;border:1.5px solid color-mix(in srgb,var(--accent) 35%,transparent)}
-.cyd-app .steps li::after{content:"";position:absolute;left:14px;top:34px;bottom:-4px;width:2px;background:var(--line);border-radius:2px}
-.cyd-app .steps li:last-child::after{display:none}
-.cyd-app .steps b{font-size:14px}
 
 /* ---------- 证据 ---------- */
 .cyd-app .ev{margin-top:8px;display:flex;flex-wrap:wrap;gap:6px}
@@ -314,7 +310,8 @@
 .cyd-app.cyd-immersive{display:flex;flex-direction:column;height:100%;min-height:0;overflow:hidden}
 .cyd-app.cyd-immersive .wrap{display:flex;flex-direction:column;width:100%;max-width:none;height:100%;min-height:0;margin:0;padding:10px 12px 12px}
 .cyd-app.cyd-immersive header.top,.cyd-app.cyd-immersive .strip,.cyd-app.cyd-immersive nav.tabs,
-.cyd-app.cyd-immersive #project,.cyd-app.cyd-immersive #now,.cyd-app.cyd-immersive #guide,
+.cyd-app.cyd-immersive #project,.cyd-app.cyd-immersive #now,
+.cyd-app.cyd-immersive .inspector,.cyd-app.cyd-immersive .drawer,
 .cyd-app.cyd-immersive .filters,.cyd-app.cyd-immersive .progress,
 .cyd-app.cyd-immersive .plabel,.cyd-app.cyd-immersive .grid{display:none !important}
 .cyd-app.cyd-immersive section#features{display:flex;flex-direction:column;flex:1;min-height:0;margin:0}
@@ -435,7 +432,10 @@
 .cyd-app.narrow .pill .v .btn.mini{flex:none}
 .cyd-app.narrow .card{padding:14px 14px}
 .cyd-app.narrow .card h3,.cyd-app.narrow .sheethead h3,.cyd-app.narrow .ghead b{font-size:14px}
-.cyd-app.narrow nav.tabs{gap:6px}
+/* 窄栏：五个 tab 一行放不下 —— 让它**横向滚动**，而不是把整页撑宽（实拍：430px 时右侧被裁掉） */
+.cyd-app.narrow nav.tabs{gap:6px;overflow-x:auto;flex-wrap:nowrap;padding-bottom:2px;scrollbar-width:none}
+.cyd-app.narrow nav.tabs::-webkit-scrollbar{display:none}
+.cyd-app.narrow nav.tabs button{flex:0 0 auto;white-space:nowrap}
 .cyd-app.narrow nav.tabs button{padding:6px 12px;font-size:13px}
 .cyd-app.narrow .cols{grid-template-columns:1fr;gap:12px}
 .cyd-app.narrow .btn,.cyd-app.narrow .lede,.cyd-app.narrow .kv,.cyd-app.narrow .toast,.cyd-app.narrow .setrow,
@@ -467,3 +467,89 @@
 .cyd-app .evrow>button, .cyd-app .evrow>a{min-width:auto}
 .cyd-app .evtxt, .cyd-app .evrow>.evcp{white-space:normal;overflow:visible;text-overflow:clip;flex:none}
 }
+/* ---------- 读模型状态条（v1.7）：只在非 fresh 时出现，压在掌控条上方 ----------
+   颜色语义**不与功能状态共用**（契约「UI 标准 §6」）：这里表达"数据时效"，用中性警示底 + 左描边，
+   不借用 --ok / 功能五态色。reduced-motion 用户不加动画（本组件本来就没有动画）。 */
+.cyd-app .viewbar{
+  display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  margin:0 0 8px; padding:8px 12px;
+  background:var(--warn-soft); border:1px solid var(--line); border-left:3px solid var(--warn);
+  border-radius:10px; color:var(--ink); font-size:12.5px; line-height:1.5;
+}
+.cyd-app .viewbar b{font-weight:600; white-space:nowrap}
+.cyd-app .viewbar span{color:var(--ink2); min-width:0}
+.cyd-app .viewbar .btn.mini{margin-left:auto}
+.cyd-app .viewbar.unverified{background:var(--gray-soft); border-left-color:var(--gray)}
+.cyd-app .viewbar.missing, .cyd-app .viewbar.unsupported{background:var(--gray-soft); border-left-color:var(--gray)}
+.cyd-app.narrow .viewbar{align-items:flex-start; flex-direction:column; gap:6px}
+.cyd-app.narrow .viewbar .btn.mini{margin-left:0}
+/* ---------- 统一工作区（v1.7，D3）：主区 + 右侧检查器 ----------
+   宽栏两列（主区自适应 + 检查器 320px）；窄栏单列，检查器变成贴在底部的覆盖层。
+   断点按**容器宽度**（与 .narrow 同一判据），不按视口 —— 面板在 360px 侧栏里，视口仍是 1920px。 */
+.cyd-app .workspace{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;align-items:start}
+.cyd-app .workspace:has(.inspector:not([hidden])){grid-template-columns:minmax(0,1fr) 320px}
+.cyd-app .mainarea{min-width:0}
+.cyd-app .inspector{position:sticky;top:8px;align-self:start;max-height:calc(100vh - 180px);overflow:auto;
+  background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow-card)}
+.cyd-app .inspector[hidden]{display:none}
+.cyd-app .inshead{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel);z-index:1}
+.cyd-app .institle{flex:1;min-width:0;font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cyd-app .insbody{padding:10px 12px 12px;font-size:13.5px;line-height:1.7}
+.cyd-app .insbody h4{font-size:12.5px;color:var(--ink2);font-weight:600;margin:12px 0 4px;letter-spacing:.02em}
+.cyd-app .insbody h4:first-child{margin-top:0}
+.cyd-app .insbody .sblock{border:0;padding:0;margin:0 0 10px;background:none}
+/* 窄栏：主区单列，检查器改成底部覆盖层（不挤压图，且仍能关闭） */
+.cyd-app.stacked .workspace{grid-template-columns:minmax(0,1fr)}
+/* 单列时检查器变成底部抽屉式覆盖层：**限高**，别盖住上面的 tab 与本页标题（实拍：60vh 会把导航压住） */
+.cyd-app.stacked .inspector{position:fixed;left:8px;right:8px;bottom:8px;top:auto;max-height:min(58vh,420px);z-index:40;box-shadow:var(--shadow-pop)}
+
+/* ---------- 底部抽屉（v1.7）：进展 + 待拍板摘要，默认收起 ---------- */
+.cyd-app .drawer{position:sticky;bottom:8px;z-index:20;border:1px solid var(--line);border-radius:var(--radius);
+  background:var(--panel);box-shadow:var(--shadow-pop);margin-top:12px}
+.cyd-app .drawerhead{display:flex;align-items:center;gap:8px;width:100%;background:none;border:0;padding:10px 12px;cursor:pointer;text-align:left;color:var(--ink);font-size:13.5px}
+.cyd-app .dwtitle{font-weight:600}
+.cyd-app .dwsum{flex:1;min-width:0;color:var(--ink2);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cyd-app .dwcaret{color:var(--ink2);transition:transform .15s}
+.cyd-app .drawer.open .dwcaret{transform:rotate(180deg)}
+.cyd-app .drawerbody{display:none;padding:0 12px 12px;border-top:1px solid var(--line)}
+.cyd-app .drawer.open .drawerbody{display:block}
+.cyd-app .drawer .dcols{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:10px}
+
+/* ---------- hover/pin 整链聚焦（v1.7，契约 §4.2/§4.3） ----------
+   只调**不透明度**，不改几何（不改坐标是硬约束）；降噪只作用在图内，不影响卡片与列表。
+   reduced-motion 不加过渡。 */
+.cyd-app .graphbox.focusing .lyr-nodes>g:not(.on){opacity:.28}
+.cyd-app .graphbox.focusing .lyr-edges>g:not(.on),.cyd-app .graphbox.focusing .lyr-child>g:not(.on){opacity:.18}
+.cyd-app .graphbox.focusing .lyr-nodes>g.on,.cyd-app .graphbox.focusing .lyr-edges>g.on{opacity:1}
+.cyd-app .graphbox .lyr-nodes>g{transition:opacity .12s}
+@media (prefers-reduced-motion: reduce){.cyd-app .graphbox .lyr-nodes>g{transition:none}}
+/* 检查器里的动作区：按钮纵向排，避免 320px 宽里挤成一条 */
+.cyd-app .insbody .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.cyd-app .insbody .composer{margin-top:8px}
+/* 文字按钮（抽屉/检查器里的轻量跳转）：与 .sheetfoot 里同一形态，作用域放宽到全应用 */
+.cyd-app .linkbtn{border:0;background:none;color:var(--accent);font:inherit;font-size:12.5px;cursor:pointer;padding:0}
+.cyd-app .linkbtn:hover{text-decoration:underline}
+/* 极小宽度兜底：主区与抽屉内部不许把页面撑出横向滚动（内容自己收缩/折行） */
+.cyd-app .workspace,.cyd-app .mainarea,.cyd-app .drawer{min-width:0;max-width:100%}
+.cyd-app .insbody,.cyd-app .drawerbody{overflow-wrap:anywhere}
+/* 抽屉里的时间线是**摘要**：每条最多 3 行，完整内容去「现在」页看（否则一条长记录就吃掉整个抽屉） */
+.cyd-app .drawerbody .snote{-webkit-line-clamp:3;display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden}
+/* ---------- 运行控制条（v1.7，R1–R10） ----------
+   只在宿主提供运行能力时出现（离线页永不出现，R10）；作用对象写在左边，动作在右边。
+   停止中的状态**由投影决定**（不是由"点了按钮"决定）——按钮只是请求。 */
+.cyd-app .runbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:6px 0 0;padding:8px 12px;
+  border:1px solid var(--line);border-radius:12px;background:var(--panel);font-size:12.5px;color:var(--ink2)}
+.cyd-app .runbar[hidden]{display:none}
+.cyd-app .runbar .scope{color:var(--ink2)}
+.cyd-app .runbar .rstate{font-weight:600;color:var(--ink)}
+.cyd-app .runbar .rstate.running{color:var(--accent)}
+.cyd-app .runbar .rstate.stopping{color:var(--warn)}
+.cyd-app .runbar .rstate.unknown{color:var(--ink2)}
+.cyd-app .runbar .racts{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+.cyd-app .runbar .btn.mini{padding:4px 10px}
+.cyd-app .runbar .danger{border-color:color-mix(in srgb,var(--warn) 55%,var(--line));color:var(--warn)}
+.cyd-app .receipt{margin:6px 0 0;padding:6px 12px;border-radius:10px;font-size:12.5px;
+  border:1px solid var(--line);background:var(--gray-soft);color:var(--ink2)}
+.cyd-app .receipt[hidden]{display:none}
+.cyd-app .receipt.failed{background:var(--warn-soft);border-color:color-mix(in srgb,var(--warn) 45%,var(--line));color:var(--warn)}
+.cyd-app .receipt .rid{opacity:.75}

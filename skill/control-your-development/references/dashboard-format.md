@@ -2,6 +2,7 @@
 
 > 渲染器 `scripts/render_dashboard.py` 逐行解析本文件定义的三份 Markdown。改动任何字段名之前先改本契约并升版。
 > 所有路径一律相对**工作区根目录**；绝对路径、盘符路径、UNC 路径、含上跳段的路径一律按"证据不存在"处理，并且是 blocker（见「证据路径红线」）。
+> 版本：v1.7（2026-10-24）——**读模型换代**：新增 `dev-dashboard/.view.json`（`schemaVersion` / `producer` / `format` / `generatedAt` / `sourceHashes` / `data`），由渲染器**唯一**装配并原子写出；**JS 侧 Markdown 解析与「双解析器」路线整体删除**（含 `assembleData`、宿主候选名探测、`dual_parser_diff` 门禁）；`health.inbox_pending` / `health.inbox_items` **移出事实视图**，改由共享核 `parseIntent` 直接解析 `.inbox.jsonl`；离线 `index.html` 降为**只读快照**（删目录授权与写回）。详见「读模型 `.view.json`」与「契约变更的同步点」。
 > 版本：v1.6（2026-10-12）——**批 5 / 批 6 已实现（2026-10-13 收口；不得再当目标形态读）**：① 新增 **`CHANGES.md`（变更规则）**：文件名不写死（与术语表同构的识别链）、最小骨架、**默认随 init 建立**、从 FEATURES + 证据 + 依赖**推出**骨架的纪律、地图变了而规则没更新的**漂移 WARN**、并回答"**算已归置、但审计必须单列**"（防后门）；② 新增 **`TECH.md`（技术地图）**：固定七字段 `模块 / 层 / 职责 / 技术 / 状态 / 证据 / 连到`（含 `### 子项` 复用），`层` 为自由文本、**纵向位置按首次出现顺序**，**默认随 init 建立**，幽灵边复用 `graph-visuals.md` §B，**审计 WARN 只钉触发条件与"两端必须同文案"、逐字文案归 `references/copy-deck.md` §16.6（**契约不内联中文**）；③ **「功能 | 技术」视图切换**放功能地图 tab 工具栏，**不新增 tab**（六 tab 顺序与数量不变）；④ 两份**声明类文件**的证据**计入归置但审计单列**（`health.declared_refs`）；⑤ 二者**只做人话声明 + AI 采集归置，绝不做代码解析**（保真红线，理由见各节）。⑥（**v1.6 内补录**）`glossStatus` 加两个可选失败 flag **`meta_error` / `meta_missing`**：宿主三处必须把"`.cyd.json` 非法 JSON / 指定术语表不存在"作为 flag 传出（吞异常可以、静默吞事实不行），共享核据此产与 Python **同字**的 WARN（逐字文案归 `references/copy-deck.md` §16.6，契约不内联中文）；**缺 flag = 降级**（不产 WARN、不报错，且不得当成"已检查无问题"）。同时钉死 **`resolve_glossary` 只允许一处实现**（现状 3 份，违反单一执行路径，也是"面板比导出页少两条提示"的根因）；若选共享核暴露契约化入口，其输入/输出形状见「术语表」一节。
 > 版本：v1.5（2026-10-12）——① **决策三态**：`- 状态: 待拍板 | 已定 <选项> | 已废弃`（已废弃 = 不用再答了，可 `已废弃 → 待拍板` 恢复，废弃与恢复都要在时间线留痕；旧的两态文件照常解析）；② **默认多选**：`- 多选: 是` 从"前置开关"降级为**提示语**，界面一律允许多选，字段保留兼容；③ **新 tab「决策与待办」**（⚖），位于「现在」与「术语表」之间，「现在」只留时间线并改单列整宽；④ **待办勾选通道**：勾选 = 面板发一条 `command` 消息（不新增持久化、不新增信箱类型），离线进 `.inbox.jsonl`，界面显示待办行「已报 · 待生效」与掌控条 `⏳ 待生效 N 条`。（v1.4 只存在于内部计划、未发布，版本号直接落到 v1.5。）⑤（同一交付的补录，不另起版本）`health.facts_generated_at` 拆两层：**字段层原样透出**——`.facts.json` 顶层 `generated_at` 是字符串就逐字给（哪怕不是合法日期），只有文件不存在 / JSON 不可解析 / 缺键 / 值非字符串才取空串，不做日期校验、不参与 `ok`；**显示层降级**——掌控条 `⏱ 上次采集` 与审计弹层「上次采集：」在前端算相对时间（今天 / 昨天 / N 天前 / 超 7 天给日期时间），解析不出合法日期时间就当空串、整块不渲染。⑥（同一交付的补录）术语表三处**两端一致但反直觉**的行为入库，避免以后被当 bug 来回改：**三大事实源文件名大小写敏感**（`product.md` 会被当候选术语表）、**别名分隔符含 `/`**（`CI/CD` 会被切开，改用 `、` 或 `，`）、**别名解析先 strip 再滤空**（顺序反了会造假漂移）。⑦（同一交付的评审整改补录）三处：**同步点 #2 指名到位置**——`dc.multi ? '（可多选）' : ''` 共 3 处，只删卡片头部 `.did` 那一处（§11.11），两条 `dhint` 提示句保留（§11.9 用户定稿）；掌控条「数据健康」徽章改**三态**（`facts_error='missing'` → `⚠ 未采集`，而 `ok` 与退出码不变）；文档里描述"人类盖章"的用词全库统一为**「验证」**（评审稿 §14 用词表第 2 条），不再混用近义词。⑧（同一交付的收口补录）三处：**`inbox_pending` 三态收敛到 `0` / `null` / 整数**（读取失败取 `null`，不再是 `0`）；**`⏳ 待生效 N 条` 的可见性判据 = 有没有数据**（Python 导出的离线页带导出时刻真实值、照常渲染并注明时效；只有网页内刷新路径的 `undefined` 才不渲染）；**`.inbox.jsonl` 读取失败不写 `warnings[]`**（`warnings` 两端逐条比对，JS 看不到 OS 错误原文；要提示只走 stdout）。⑨（**批 4 已实现**，2026-10-12；同一交付的补录，不另起版本）「机器文件」一节新增「同步链路 5 项改进」：`.facts.json` 出列（停止单调增长，**合并起点 = 上一轮 `.facts.json`、不是空 dict**）、`.state.json` 去重（只留 `last_collect` + `files`）、`last_collect` 丢失限窗（30 天 / ≤500 条）+ WARN、prune（`.versions/` 留 20 版 + `.inbox.jsonl` 收取后截断）、写前快照 + `preflight` git 干净检查（脏 → 退 3）。每项都写了**为什么**；另记一条**已知限制**（游标只到微秒 vs NTFS mtime 100ns，同微秒内写+采集会每轮判 `modified`，要修即契约变更）。⑩（**v1.5 补录**，与 ⑤ 同类、不另起版本）新增 `health.inbox_items`：`.inbox.jsonl` 未收取行的**逐条内容** `[{type, text, ts}]`（`ts` = host 写入的原始时间戳，明细浮层的「时间」列取它；三字段非字符串一律归一为空串），供 `⏳` 徽章点开的明细浮层；文件不存在/空 → `[]`、**读取失败 → `null`（不是 `[]`，"读不到"与"没有"必须可区分）**、坏行跳过 + WARN（一行一条，不汇总）；**`type` 不在四值里时按原文显示、不归入任何已知类型（没有依据就不给语义）**；**不参与 `ok`**；与 `inbox_pending` **同源同一次读取**（禁止第二次读文件）。同时钉死两条口径：**待办勾选逐条发**（不合并成批量消息）、**「补充说明」textarea 只在待拍板卡上**（已定/已废弃是终态、无发送路径）。
 > 版本：v1.3（2026-10-08）——① FEATURES.md 功能块下可嵌套 `### 子项:`（五态，默认折叠）；② `GLOSSARY.md` 术语表与用词漂移检查（本轮起：默认随 init 一并建立、独立 tab、按表头识别不锁文件名）；③ `index.html` 降级为**可选导出**（`--html` 强制生成；不带参数时仅在该文件已存在时一并更新，不存在则不生成）；④ 新增机器文件 `.inbox.jsonl`（面板拍板兜底信箱）与 `.versions/`（版本快照）。
@@ -27,7 +28,8 @@
 - 命令行速查（可照抄）
 - 界面文案（掌控条 / 审计弹层，v1.5 起）
 - health 字段清单
-- 双解析器同步点（v1.5 起，v1.6 增补）
+- 读模型 `.view.json`（v1.7 起）——文件形态 / 指纹 / 原子写 / 消费方职责 / 意图
+- 契约变更的同步点（v1.7 起）
 
 ## 目录结构（目标项目内）
 
@@ -41,6 +43,7 @@ dev-dashboard/
 ├── TECH.md         # 技术地图（模块 / 层 / 职责 / 技术 / 状态 / 证据 / 连到），默认建，v1.6 起
 ├── NOW.md          # 动态：时间线 / 决策（三态） / 待办
 ├── index.html      # 可选导出产物（机器生成，禁止手改；--html 生成，已存在则随渲染更新）
+├── .view.json      # 读模型（渲染器每轮重写；面板与离线页的唯一事实视图输入，见「读模型」）
 ├── .state.json     # 机器状态（最近采集时间）
 ├── .facts.json     # 机器产物（待归置变更事实）
 ├── .inbox.jsonl    # 机器产物（面板拍板/指令的兜底信箱，skill 收取后清空）
@@ -50,20 +53,20 @@ dev-dashboard/
 ```
 （`CHANGES.md` / `TECH.md` 的文件名同样可自定义、按内容识别，见各自一节；下面的树只写惯用名。）
 
-## 界面结构（tab 顺序，v1.5 起）
+## 界面结构（tab 顺序，v1.7 起）
 
 导航顺序**只有这一处事实源**，其他小节只引用不重复：
 
 ```
-🏠 项目 → 🗺 功能地图 → ⚡ 现在 → ⚖ 决策与待办 → 📖 术语表 → ❓ 使用指南
+🏠 项目 → 🗺 功能地图 → ⚡ 现在 → ⚖ 决策与待办 → 📖 术语表
 ```
 
-- 共 6 个 tab（v1.5 起；v1.3 是 5 个）。新增的「⚖ 决策与待办」插在「现在」与「术语表」之间，其余四个位置不变。
+- 共 **5 个 tab**（v1.7 起）。v1.5 曾有 6 个；**「❓ 使用指南」已整块删除（D2：导航、section、固定文案、契约与断言一起删）**——必要的提示只留在空态、控件与动作旁边。
 - 「现在」只放**进展时间线**，单列整宽（不再用两栏 `.cols`）。
 - 「决策与待办」按四段排：**待拍板决策**（n 件）→ **已定决策**（折叠，summary 写「已定 n 件」）→ **待办**（未完成在上）→ **已完成**（折叠，summary 写「已完成 n 件」）。
   - 这四段任意一段为空时，空态文案一律是 **`暂无`**（评审稿 7.5 裁定）。**作用域仅限「决策与待办」这四段**：`#now` 的时间线空态（「还没有进展记录」）与其它既有空态**不动**。
-- 「❓ 使用指南」tab 含两张新指南卡，标题与正文以 `references/copy-deck.md` **§7** 为定稿（本契约不复制文案，只钉住"这两张卡属界面固定文案、按 §7 实施"）。
-- nav 按钮的 `data-tab` 与 section 的 `id` 一一对应，六个值固定为：`project` / `features` / `now` / `decisions` / `glossary` / `guide`。
+- nav 按钮的 `data-tab` 与 section 的 `id` 一一对应，五个值固定为：`project` / `features` / `now` / `decisions` / `glossary`。
+- **统一工作区（v1.7）**：主区（上面五个 tab 的内容）+ **右侧检查器**（`#inspector`，回答「是什么 / 为什么 / 证据在哪 / 能做什么」）+ **底部可折叠抽屉**（`#drawer`，进展与待拍板摘要）。宽栏两列、窄栏单列（检查器改底部覆盖层）。**检查器是唯一的选择面**：点图节点或功能卡都固定选择并联动它；动作按钮各是独立一步（选择 ≠ 执行）。
 - **「功能 | 技术」视图切换（v1.6 起）放「功能地图」tab 的工具栏**（`.ghead` 内、缩放控件左侧），**不新增 tab**：六 tab 的顺序与数量到此为止不再变。切到「技术」时只重建 `#features` 里的 `<svg id="graph">`；**图标题随视图切换**（**功能视图**用本来的图标题、不变；**技术视图**用与**空态标题同一个名称**的那个标题——空态标题形如「还没有」+ 该名称，**两者共用同一个名称，不是把空态整句拿去当图标题**；**两个标题的字面措辞以 `references/copy-deck.md` §3 的两行登记为定稿**，本节**只钉"标题必须跟着换"这条语义、不复制文案**），**图例与工具行保留**；视图状态存内存、不持久化（见「TECH.md」一节）。
   - **为什么标题要跟着换**（依据）：① 这一路的方向就是**人话**——用户切到技术视图必须**一眼知道自己在看哪张图**；② **自洽**——空态标题里点名的那个名称，**必须与视图标题是同一个名称**，否则用户看到的是两套叫法；③ 原来那句"标题保留"写在**"技术视图只是换个画法、仍是同一张图"**的假设下，**现在它是一个独立视图，假设已不成立**。
   - **单一事实源**：这条口径**只在本行走完整成句**；`graph-visuals.md` §F1（视觉侧头图结构）与本节「TECH.md · 界面」只**引用**它，不重复成句。
@@ -169,14 +172,14 @@ dev-dashboard/
   - **`meta_error: true`**：`.cyd.json` **存在、读得到，但内容不是合法 JSON 对象**（解析失败或顶层不是 object）。
   - **`meta_missing: "<文件名>"`**：`.cyd.json` **合法**、其中 `glossary` 是非空字符串，但**该文件在工作区里不存在**（渲染器退回自动识别）。值就是那个不存在的文件名，便于把名字带进提示。
   - 二者**互斥**（JSON 都读不出来时无从得知 `glossary` 指向谁，只会有 `meta_error`）；都缺省时表示"`.cyd.json` 这一环没出岔子或压根没有该文件"。
-  - **谁填**：**宿主**。三处都要填，且**不许再静默吞异常**——吞异常本身可以，但**失败事实必须作为 flag 传出去**：`projects/dsh-plugin-control-your-development/plugin/src/client.src.js:133`、`templates/dashboard.web.js:74`、`projects/dsh-plugin-control-your-development/smoke/js_assemble_driver.js:30`。Python 侧没有这一环（`resolve_glossary` 自己解析、自己判）。
-  - **共享核据此产一条 WARN**：`assembleData` 见到 `meta_error` / `meta_missing` 各产一条与 Python **逐字同文案**的 WARN。**逐字文案归 `references/copy-deck.md` §16.6（契约不内联中文）**（见「health 字段清单」文案归属总则）。
+  - **谁填**：**v1.7 起只有渲染器**（`resolve_glossary` 自己读 `.cyd.json`、自己判），两个 flag 随 `glossStatus` 进 `.view.json`，宿主与面板**不再各算一遍**。旧口径里的三处宿主填空（`client.src.js` / `dashboard.web.js` / `js_assemble_driver.js`）随 JS 解析一起删除。
+  - **WARN 由渲染器产**（各一条，进 `warnings[]`）。**逐字文案归 `references/copy-deck.md` §16.6（契约不内联中文）**（见「health 字段清单」文案归属总则）。共享核只显示 `warnings[]`，不再自己判。
   - **向前兼容（重要）**：flag **缺失 / `undefined`**（旧版宿主、或宿主环境拿不到 `.cyd.json`）→ **不产 WARN、不报错**。这是**降级**，不是"正常"：那种环境下面板就是**看不到**这两条提示，与导出页不一致是**已知代价**；升级宿主即可消除。**不得**把"缺 flag"当成"已检查且无问题"。
-- **`resolve_glossary` 只允许一处实现（补录、不升版）**：这条判定逻辑（读 `.cyd.json` → 显式指定 → 内容嗅探 → 歧义 / none，外加上面两个 flag）**在全仓只允许一份**。现状有 **3 份**（Python `render_dashboard.py:resolve_glossary`、JS driver `js_assemble_driver.js:27-41`、宿主各一份候选名 fallback），违反 `AGENTS.md`「单一执行路径」，也正是 #11/#12 差异的来源；收敛到哪一份由实现者定（Python 或共享核），其余必须改成它的**薄封装**（只做 IO 注入，不重复判定）。
+- **`resolve_glossary` 只允许一处实现**：这条判定逻辑（读 `.cyd.json` → 显式指定 → 内容嗅探 → 歧义 / none，外加上面两个 flag）**在全仓只允许一份**。**v1.7 起收敛在渲染器**（`render_dashboard.py:resolve_glossary`）：面板与离线的候选名探测、`metaRaw` 传参、JS 版判定全部删除，结论只从 `.view.json` 读。
   - 若选"**共享核暴露契约化入口**"，其形状照此实现（**输入全靠注入、函数本身不碰 IO**）：
     - 输入：`{ metaRaw: string | null, listMd: string[], readText: (name) => string | null }`（`metaRaw` = `.cyd.json` 原文或 `null`；`listMd` = `dev-dashboard/*.md` 的文件名列表，**大小写比较口径同契约**；`readText` 用于读候选文件的第一张表头）
     - 输出：`{ file, source, candidates, meta_error?, meta_missing? }` —— 与 `.cyd.json` 的三项同名，外加两个 flag；`source` 取值集合不变。
-    - **双向约束**：Python 与 JS 都必须能只靠这三个注入参数复现同一结论（差分门禁 `dual_parser_diff.py` 会拿它比对面）。
+    - ~~双向约束~~（v1.7 删除）：JS 侧不再有这一环，跨端已不存在「两处各判一次」的问题。
 - **表头契约**：第一张表的表头 ≥3 列，首列是 `标准用词`（也接受 `术语` / `用词` / `Term` / `Glossary Term`，大小写不限），其余照旧为 `指什么` / `别名/曾用名`（顺序固定，分隔行 `| --- |` 有无均可）。别名多个用 `、` / `，` / `,` / `/` 分隔（四种，两端正则 `[、，,/]` 一致）；别名列可空。
   - **别名本身含 `/` 时（如 `CI/CD`）会被切成两个别名**——请改用 `、` 或 `，` 分隔，或避开该写法。`/` 是契约已定的分隔符，为不破坏已有表格，行为不改。
 - **别名解析顺序：先 strip 再滤空**（两端同口径：`[a for a in (x.strip() for x in 分隔后) if a]`）。顺序不能反——"先滤空再 strip"会让**只剩空白**的项通过滤空、strip 后变成**空别名**，而空串能在正文任意位置匹配，直接造出**假漂移**（实测旧逻辑会假报 3 条）。两端另各兜一道 `if not alias or alias == 标准用词: 跳过`。
@@ -261,7 +264,7 @@ dev-dashboard/
   - `证据` 可选，工作区相对路径、逗号分隔，受「证据路径红线」约束；**计入归置**，并与 CHANGES.md 一起在审计里**单列**（防后门，规则同上一节）。
   - `连到` 可选，格式 `目标模块名（关系文字）`，逗号分隔；目标不存在或已废弃 → **幽灵边**，判定与样式**复用 `references/graph-visuals.md` §B（B1 判定 / B2 样式 / B3 标记）**，不另立一套。
   - `### 子项:` 复用功能地图的子项机制：同五态、必写证据、**不写 `连到`**；子项不计入顶部统计。
-- **审计与 WARN**（见下各条，**全部非阻断**）。**文案归属规则（先读）**：这些 WARN 都会进 `warnings[]`（`dual_parser_diff.py` **逐条比对**的字段）或审计弹层「其他提示」，因此**逐字文案一律归 `references/copy-deck.md` §16.6（契约不内联中文）**，**契约只钉两件事：① 触发条件（判据）② 两端必须逐字同文案**。**契约里不再写这些 WARN 的中文**——再写一遍就是第二份事实源，正是 `copy-deck.md` 刚抓到的那类错误（契约「`⏳` 明细浮层」一条曾把四个类型词内联进来，`AGENTS.md`「界面文案」一行：契约只钉语义、不复制文案）。
+- **审计与 WARN**（见下各条，**全部非阻断**）。**文案归属规则（先读）**：这些 WARN 都由**渲染器**产出、进 `warnings[]` 与审计弹层「其他提示」，因此**逐字文案一律归 `references/copy-deck.md` §16.6（契约不内联中文）**，**契约只钉两件事：① 触发条件（判据）② 文案只有渲染器这一处实现**。**契约里不再写这些 WARN 的中文**——再写一遍就是第二份事实源，正是 `copy-deck.md` 刚抓到的那类错误（契约「`⏳` 明细浮层」一条曾把四个类型词内联进来，`AGENTS.md`「界面文案」一行：契约只钉语义、不复制文案）。
   - `证据` 走同一套「证据路径红线」：越界 / 不存在 → 报警；**越界算 blocker**（触发条件本身就是判据，无需文案）。
   - **模块重名** → WARN（非阻断）：同一文件内两个模块同名时**按首个解析**并产出一条 WARN。逐字文案归 `references/copy-deck.md` §16.6（契约不内联中文）。
   - **缺 `层:` / 缺 `职责:` → 各一条 WARN，不降级为静默容错**：两条都保留为**用户可见提示**。**为什么**：缺 `层` 会让模块落到**错误位置**（纵向位置=层的首次出现顺序），用户看着图不对却**看不出为什么**；缺 `职责` 则模块在图里只剩一个名字。所以宁可烦一点，也不许静默补默认值。
@@ -274,7 +277,7 @@ dev-dashboard/
         - **降级（fail-closed）**：`.versions/` 里**没有 `TECH.md` 快照** → **不产这条 WARN**（不猜、不用近似代替）。旧项目第一次跑必然没有快照，这是**预期**，不是错误。
         - **明确禁止**：为了这条检查**新增状态文件**，或**往 `.cyd.json` 里写状态**——那都是第二事实源。
       - **出现新的顶层目录且没有任何模块覆盖它** → 一条 WARN。**这条不需要历史**：用**本轮** `.facts.json` 的路径 + **本轮** `TECH.md` 的模块证据即可算出。
-  - **为什么这一节不再保留任何 WARN 原文（包括「没有证据」那条）——不设例外**：这几条的**判据全在触发条件里**（"模块数 > 0 且证据全空"本身就是可机检的条件），那句中文只是**呈现**；把呈现写进契约只会让两端各抄一份、各自漂移。所以契约给"条件 + 必须同文案"，逐字文案归 `references/copy-deck.md` §16.6（契约不内联中文）。
+  - **为什么这一节不再保留任何 WARN 原文（包括「没有证据」那条）——不设例外**：这几条的**判据全在触发条件里**（"模块数 > 0 且证据全空"本身就是可机检的条件），那句中文只是**呈现**；把呈现写进契约只会多出一份要同步的副本。所以契约给"条件 + 文案归属"，逐字文案归 `references/copy-deck.md` §16.6（契约不内联中文）。
 - **数据形状（v1.6 收口：字段名由本节钉死；**两端逐字一致**——只靠差分互相约束不算"契约规定过"，两端同时改名它照样全绿）**：
 
   ```
@@ -309,7 +312,7 @@ dev-dashboard/
 - **要动的文件** = 该功能自己的证据路径 ∪ **其上游依赖链**（沿 `依赖` 正向走）的证据路径（传递闭包）。
 - **受影响的下游功能** = 沿 `依赖` **反向**可达的功能集合（"谁在用我"）。
 - **文件共用** = 每条证据路径在所有功能与子项的证据里出现的次数与归属（用于"点文件看它被哪些功能共用"，浮层形态见 §G3）。
-- **算法纪律**：① 依赖图要先做**环检测**（`warnings` 已有依赖环提示），闭包遍历带已访问集合截断，**环不许造成死循环或重复计数**；② `依赖` 指向不存在/已废弃功能的边**不进闭包**（它们由幽灵边表达，见 `graph-visuals.md` §B）；③ 该派生**纯前端**：不写进内嵌数据、不进 `dual_parser_diff.py` 的比对面，但**算法只能有一处实现**（共享核里一个函数），不许 Python 与 JS 各写一套。
+- **算法纪律**：① 依赖图要先做**环检测**（`warnings` 已有依赖环提示），闭包遍历带已访问集合截断，**环不许造成死循环或重复计数**；② `依赖` 指向不存在/已废弃功能的边**不进闭包**（它们由幽灵边表达，见 `graph-visuals.md` §B）；③ 该派生**纯前端**：不写进 `data`（也就不进 `.view.json`），**算法只能有一处实现**（共享核里一个函数），不许多写一套。
 - **为什么纯前端**：这是"用现有数据现场算出来的视图"，不是新的事实源；把它算进内嵌数据只会多一份要两端逐字对齐的字段，收益为零、漂移风险为正。
 
 ## NOW.md
@@ -376,16 +379,16 @@ dev-dashboard/
 | 环境 | 勾选后发生什么 | 界面表现 |
 |---|---|---|
 | DSH 面板、会话在线 | 走既有直发通道（`env.command`）把消息送进主对话 | 该行勾上 + 回执「✅ 已发送到主对话」 |
-| DSH 面板、会话离线 | 追加一行到 `dev-dashboard/.inbox.jsonl`（`type=command`），skill 下次 update 开头收取；投递成功后面板**重读该文件**再算 N | 该行挂「**已报 · 待生效**」标记；掌控条显示 `⏳ 待生效 N 条`（N 取自 `health.inbox_pending`，以文件为准）；回执按裁决⑤ 的**待办版**：`我现在不在线，已记下「X」做完。下次让我更新仪表盘时生效。`（`X` = 待办原文；不说"收件箱"、不露文件名） |
-| 离线网页（双击导出的 index.html） | 没有直发通道，也没有文件写入权限 → 退回复制指令 | 该行标「已复制指令 · 待粘贴」；**不显示**「已报 · 待生效」。`⏳` 计数**照常显示导出时刻的真实值**（判据见下：看数据在不在，不看是不是离线页），title = `导出时刻的待生效条数；网页版不会自动更新` |
+| DSH 面板、会话离线 | 追加一行到 `dev-dashboard/.inbox.jsonl`（`type=command`），skill 下次 update 开头收取；投递成功后面板**重读该文件**再算 N | 该行挂「**已报 · 待生效**」标记；掌控条显示 `⏳ 待生效 N 条`（N 由面板对 `.inbox.jsonl` 原文跑 `CYD.parseIntent` 得出，以文件为准）；回执按裁决⑤ 的**待办版**：`我现在不在线，已记下「X」做完。下次让我更新仪表盘时生效。`（`X` = 待办原文；不说"收件箱"、不露文件名） |
+| 离线网页（双击导出的 index.html） | 没有直发通道，也没有文件写入权限 → 退回复制指令 | 该行标「已复制指令 · 待粘贴」；**不显示**「已报 · 待生效」。`⏳` 计数**照常显示导出时刻的真实值**（判据见下：看数据在不在，不看是不是离线页），title = `导出时刻的待生效条数；网页版不会自动更新`。离线页无实时控制（v1.7：只读快照） |
 
 - 「已报 · 待生效」在 skill 收取并写回 `- [x]`、重新渲染后消失——它不是提前改文件，只是"这句话已经报上去了"。
 - **「已报 · 待生效」是本会话内存标记**（补录、不升版）：它只标"这次会话里我把哪几条报上去了"，**不持久化、不写文件**；N 与明细**始终以 `.inbox.jsonl` 为准**（刷新/重渲染后标记可能不再显示，但计数与明细说的是同一份文件）。所以**不存在"界面数字与文件不一致"的第二事实源**。
-- 计数与降级（`⏳ 待生效 N 条` 的 N）：**以 `.inbox.jsonl` 文件为准，不做本地持久化增量**。渲染器读文件算出，落在 `health.inbox_pending`；面板投递成功后**重新读一次** `.inbox.jsonl`（或等下一次 watch 刷新）再算 N——允许数字回落。界面数字与文件不一致就是第二份事实源，禁止。
+- 计数与降级（`⏳ 待生效 N 条` 的 N）：**以 `.inbox.jsonl` 文件为准，不做本地持久化增量**。v1.7 起由**共享核唯一的 `CYD.parseIntent(rawText)`** 算出（面板读文件原文、`view/read` 与 watch 触发重算；离线页用导出时冻结的原文）。界面数字与文件不一致就是第二份事实源，禁止。
   - 文件不存在或为空 → N = `0`（正常，不算不健康、不报警）。
-  - 某一行 JSON 解析失败 → 跳过该行、给 WARN、**不阻断**（与 `.facts.json` 损坏即 blocker 不同）。
-  - 读取失败（IO／权限）→ `inbox_pending` 取 `null`，掌控条显示 `⏳ 待生效 —`（不猜数字），**不进 `ok` 判定**。
-  - **`⏳` 徽章的可见性判据是"有没有数据"，不是"是不是离线页"**：`inbox_pending` 是数字（含 `0`）→ 按数字口径渲染（`0` 不显示徽章）；`null`（读取失败）→ 显示 `—`；`undefined`（宿主压根没提供这个数据源，现实里只有**网页内刷新**这一条路径）→ 不渲染徽章。**Python 导出的 index.html 属于第一种**：渲染器导出时已读过 `.inbox.jsonl`，内嵌的就是导出时刻的真实值，照常渲染并注明时效——导出时用户本来就该知道有没有未生效的条目。
+  - 某一行 JSON 解析失败 → 跳过该行、计入 `badLines` 并在明细浮层提示、**不阻断**（与 `.facts.json` 损坏即 blocker 不同；WARN 只由渲染器产，见「读模型」一节）。
+  - 读取失败（IO／权限）→ `pending` 取 `null`，掌控条显示 `⏳ 待生效 —`（不猜数字），**不进 `ok` 判定**。
+  - **`⏳` 徽章的可见性判据是"有没有数据"，不是"是不是离线页"**：`pending` 是数字（含 `0`）→ 按数字口径渲染（`0` 不显示徽章）；`null`（读取失败）→ 显示 `—`。**离线 index.html 属于第一种**：`__CYD_META__.intentRaw` 冻的是导出时刻的原文，照常渲染并注明时效。
 
 ## .dashboard-ignore
 
@@ -419,10 +422,10 @@ dev-dashboard/
     - `ask`：节点面板/快捷追问的一句提问（只问，不改状态）。
   - **"待生效"语义**：只要这一行还在 `.inbox.jsonl` 里没被 skill 收取，它就是"待生效"；被收取（逐条落进三份 Markdown）并清空文件后才算生效。界面上的 `⏳ 待生效 N 条` 与待办行的「已报 · 待生效」都指这个状态，**不是**"已写进产物"。
   - skill 的 update 模式**开头先收取**：逐条翻译成三份 Markdown 的改动（`decide` → 改决策状态；`verify` → 改功能状态 + 时间线；`command` / `ask` → 按内容执行），处理完清空该文件（写空或删除）。人手勿改。
-  - 取值三态（与「health 字段清单」的 `inbox_pending`、同步点 #6 同一口径）：文件不存在或为空 → `health.inbox_pending = 0`；**读取失败（IO／权限）→ `null`**（掌控条显示 `⏳ 待生效 —`）；读到就按未收取行数给整数。**这三种都"不算不健康"，都不进 `ok` 判定**（`0` 不是失败，`null` 也表示"读不到"而非"有问题"）。
-  - **逐条内容同源**：`health.inbox_items`（每条 `{type, text}`）必须从**同一次读取**的文本解析出来，不许为它再读一次文件——两次读取会造出"计数与明细不一致"的第二事实源（详见「health 字段清单」）。
-  - **读取失败不写 `warnings[]`（实现约束）**：`warnings` 是两端**逐条比对**的字段，而 JS 侧只拿得到 `inboxRaw = null`（看不见 OS 错误原文），写进去必然分叉；失败状态由 `inbox_pending = null` 本身表达。将来若要加 IO 失败提示，**只走 stdout**，不进 `warnings`。
-  - 整行无法解析成 JSON 对象 → 跳过该行并给 WARN，不阻断。
+  - 取值三态（v1.7 起由 `CYD.parseIntent` 给出，见「读模型」）：文件不存在或为空 → `pending = 0`；**读取失败（IO／权限）→ `null`**（掌控条显示 `⏳ 待生效 —`）；读到就按未收取行数给整数。**这三种都"不算不健康"，都不进 `ok` 判定**。
+  - **计数与明细同源**：`parseIntent` 一次解析出 `{pending, items, badLines}`，不许为明细再读一次文件——两次读取会造出"计数与明细不一致"的第二事实源。
+  - **坏行不写 `warnings[]`**：`warnings` 由渲染器独产（它不读 `.inbox.jsonl`）；坏行计入 `badLines`，提示只出现在明细浮层。
+  - 整行无法解析成 JSON 对象 → 跳过该行、计入 `badLines`，不阻断。
 - `.cyd.json`（v1.3 起；**v1.6 扩到三份声明类/对照文件**）：**渲染器拥有**的机器文件，记录"文件名不写死"那几份文件的解析结论——面板没有列目录能力，靠它才知道真实文件名。字段：
   `{"version": 1, "glossary": "<用户手写>", "glossary_file": "术语表.md" | null, "glossary_source": "explicit|sniff|ambiguous|none", "glossary_candidates": [...], "changes": "<用户手写>", "changes_file": "CHANGES.md" | null, "changes_source": "explicit|sniff|ambiguous|none", "changes_candidates": [...], "tech": "<用户手写>", "tech_file": "TECH.md" | null, "tech_source": "explicit|sniff|ambiguous|none", "tech_candidates": [...], "updated_at": "YYYY-MM-DD HH:MM"}`
   - 三组字段（`glossary*` / `changes*` / `tech*`）各自独立、结构完全同构；`glossary` 那一组是 v1.3 既有形态，后两组是 v1.6 起。
@@ -470,7 +473,7 @@ dev-dashboard/
 | 类 | 文件 | 谁写 | 升级时**允许** | 升级时**绝不允许** |
 |---|---|---|---|---|
 | **A 用户事实源** | `PRODUCT.md` / `FEATURES.md` / `NOW.md` / 术语表 / `CHANGES.md` / `TECH.md` | **AI 在对话里写**（脚本只读，见下） | 只换**读法**（解析器、界面、WARN）；**内容迁移**必须 AI 先提出 → 用户同意 → **写前快照** → 再改 | **覆盖 / 重写 / 删除**；静默补字段；因"版本不匹配"清空或重建 |
-| **B 机器产物** | `index.html` / `.cyd.json` / `.facts.json` / `.state.json` | 脚本 | 整份重生成；**schema 变更只新增字段、不改既有字段语义**；旧键兼容读后忽略（`pending_items` 即范例） | 当成第二事实源；重建时丢掉"累计未归置事实" |
+| **B 机器产物** | `index.html` / `.view.json` / `.cyd.json` / `.facts.json` / `.state.json` | 脚本 | 整份重生成；**schema 变更只新增字段、不改既有字段语义**；旧键兼容读后忽略（`pending_items` 即范例） | 当成第二事实源；重建时丢掉"累计未归置事实" |
 | **C 用户配置** | `.dashboard-ignore` | 用户手写 | **只能**在语义变更时给出**检测 + WARN + 改写建议**（见 §三·3） | 覆盖、追加、规范化用户条目 |
 | **D 用户资产（回退基点）** | `.versions/`（+`index.json`） | 脚本 | **只追加**；`prune` 只按**数量**删最旧 | 迁移 / 重排 / 改名 / 清空；改变目录命名（老快照必须**永远**可 `diff`） |
 
@@ -482,7 +485,7 @@ dev-dashboard/
 
 1. **升级只换读法与画法，不换内容**：插件升级 = 解析器 / 渲染 / 门禁的变更；**A 类内容零改动**。【已实现】（脚本只读 + 契约）
 2. **任何写前快照 + git 干净检查**【已实现，批 4】：`snapshot_version.py preflight`（脏 → **退 3** 并列出文件，问 commit / stash / 继续）+ `save --note "更新前自动快照"`；非 git 工作区**退 0 并打印"无 git，跳过检查"**（降级要说话）。
-3. **B 类必须可从 A 类重建**【已实现】：删掉 `index.html` / `.cyd.json` / `.facts.json` / `.state.json` 后重跑 `render` + `collect`，界面应回到同一状态（差异仅 `updated_at` / 采集窗口）。**这条是"机器产物"这个身份的定义**——做不到就不是机器产物。
+3. **B 类必须可从 A 类重建**【已实现】：删掉 `index.html` / `.view.json` / `.cyd.json` / `.facts.json` / `.state.json` 后重跑 `render` + `collect`，界面应回到同一状态（差异仅 `updated_at` / 采集窗口）。**这条是"机器产物"这个身份的定义**——做不到就不是机器产物。
 
 ### 三、跨版本兼容与信息丢失
 
@@ -491,14 +494,14 @@ dev-dashboard/
 | 位 | 含义 | 现状 |
 |---|---|---|
 | **机器文件 schema** | `.cyd.json.version`（`1`）、机器文件各自的字段布局 | **【已实现】**：`.cyd.json` 有 `version: 1` 且**每轮重写时保留未知键、不覆盖用户手写的 `glossary` / `changes` / `tech`** |
-| **事实源格式版本** | "这批 Markdown 按第几版契约写"（决定旧插件能不能安全回写） | **【目标形态】**：`.cyd.json` 增 `format: <int>`；A 类文件可选标记 `<!-- cyd-format: N -->`（**只加一行注释，不改正文**）。**判据两条（同族 fail-closed；**逐字文案归 `references/copy-deck.md` §16.6 的两行（契约不内联中文）**——A、B 各自一行）**：**A「超前」**= `format > 本插件支持` ⇒ **只读、不写回** + 产一条 WARN；**B「非法」**= `format` **存在但不是整数（含布尔）** ⇒ **只读、不写回** + 产**另一条** WARN；**缺失 ⇒ 视为 `1`**——那是**向后兼容的正常情况，不产 WARN**。**A 与 B 互斥**（"比插件新" vs "读不出来"）：**实现必须保证两者不会同时产**，并**有断言**（同一个 `format` 值不可能既超前又不可解析）。**fail-closed 只落在渲染器侧**（见下「写者唯一性」）。 |
-| **写入者版本** | "这个项目最后被哪个插件版本写过" | **【目标形态】**：`.cyd.json` 增 `writer: {skill: "<semver>", at: "<ISO8601>", copy: "<副本标识>"}`（版本号取 `manifest.yaml` 的 `version`）。**版本冲突的判据只看 `writer.skill`，不看 `at`**——`at` 每次真写都变，拿它进两端比对会**假红**；`at` 只供人看。 |
+| **事实源格式版本** | "这批 Markdown 按第几版契约写"（决定旧插件能不能安全回写） | **【已实现】**（`format` 同时透出到 `.view.json.format`）：`.cyd.json` 有 `format: <int>`；A 类文件可选标记 `<!-- cyd-format: N -->`（**只加一行注释，不改正文**）。**判据两条（同族 fail-closed；**逐字文案归 `references/copy-deck.md` §16.6 的两行（契约不内联中文）**——A、B 各自一行）**：**A「超前」**= `format > 本插件支持` ⇒ **只读、不写回** + 产一条 WARN；**B「非法」**= `format` **存在但不是整数（含布尔）** ⇒ **只读、不写回** + 产**另一条** WARN；**缺失 ⇒ 视为 `1`**——那是**向后兼容的正常情况，不产 WARN**。**A 与 B 互斥**（"比插件新" vs "读不出来"）：**实现必须保证两者不会同时产**，并**有断言**（同一个 `format` 值不可能既超前又不可解析）。**fail-closed 只落在渲染器侧**（见下「写者唯一性」）。 |
+| **写入者版本** | "这个项目最后被哪个插件版本写过" | **【已实现】**：`.cyd.json` 有 `writer: {skill: "<semver>", at: "<ISO8601>"}`（版本号取 `manifest.yaml` 的 `version`）。**版本冲突的判据只看 `writer.skill`，不看 `at`**——`at` 每次真写都变，拿它进两端比对会**假红**；`at` 只供人看。 |
 
 **结论**：**一个 `version` 不够**——它现在只描述机器文件自己的字段布局，既不表达"事实源能读到哪一版"，也不表达"谁写的"。**最小动作**是把上面三件补齐（都落在 `.cyd.json`，**不新增文件**）。
 
 **写者唯一性（v1.6 补录，先读这条再谈"只读"）**：
 - **本项目的机器文件（`.cyd.json` 等）只由渲染器写**（`render_dashboard.py:write_cyd_meta`，每轮重写）；**面板与共享核只读**——实证：`projects/dsh-plugin-control-your-development/plugin/src/client.src.js:136` 用 `readOpt` 读 `.cyd.json`、`:155` 把 `metaRaw` **只读**传给共享核、`:328` 写的是 `verifyWrite: null`（注释原文："写回走 notify（steer/信箱），面板不直接改文件"）；共享核 `dashboard.core.js` 全文**没有任何文件写入动作**（唯一 `write*` 是 `navigator.clipboard.writeText`，那是剪贴板）。
-- ⇒ **fail-closed（`format` 超前 ⇒ 只读、不写回）只落在渲染器这一侧**；**共享核的职责是产出同一条 WARN**（让用户看得见 + 供 `dual_parser_diff.py` 逐条比对），**不是执行"不写回"**——它**根本没有写回动作**，让它"别写"是给不存在的对象加保护。
+- ⇒ **fail-closed（`format` 超前 ⇒ 只读、不写回）只落在渲染器这一侧**（渲染器产那条 WARN 并跳过写 `.cyd.json`）；**面板与共享核不解析 `format` 的业务判定**，只把 `.view.json.format` 透出成「只读降级」的说明——它们**根本没有写回动作**，让它们"别写"是给不存在的对象加保护。
 - ⇒ **`notify`（steer / 信箱）不属于写回**：那是**面板把用户意图作为一条消息发给 AI**，改文件的是 AI，不是面板；因此"面板只读"与"用户能改看板"同时成立，不矛盾。
 - **理由（依据）**：**"只读"这个词必须先问"谁是写者"**——写者唯一时，**保护只落在写者那一端**，其它端只需要**说出同一件事**。否则会掉进两种坏结果之一：**去实现一个不存在对象的保护**（空转），或**在错误的端做拦截**（与写者打架）。
 
@@ -528,13 +531,13 @@ dev-dashboard/
   ③ **依赖通配符跨目录**（旧版 `*` / `?` 能吃掉 `/`）：`*.log` 旧版能命中 `dist/app.log`、新版**只命中根目录**；`build/*` 旧版命中 `build/a/b.js`、新版**只命中一层**；`a?b` 旧版可跨目录、新版只在段内。**契约举的例子 `*.log` 正属这一类**，最危险。
   - **不列入判据**：`!` 取反 —— 旧版 `fnmatch` **也不支持**，它从来就没生效过，不属于"升级后失效"（列进来会误报）。
 - **一条 WARN 覆盖全部失效条目**（不是一条一个）：`X` = **首个失效条目原文**（用户一眼认得出是哪一行），`N` = 失效条目总数；**可选加分**：工具的 `title` 里列**全部**失效条目（"正文给首个 + 总数、悬停给全部"，不占正文长度）。**只提醒、不改用户文件**。
-- **作用域 = 两端（不标 `共享核`）**：**为什么**——ignore 的解析与匹配**两端各有一份**（Python `collect_facts.py:_load_ignore` + `render_dashboard.py:glob_match`；共享核 `dashboard.core.js` 的 `globMatch` + `assembleData` 里的 ignore 分支），且这条 WARN 进 `warnings[]` 要**逐条比对**，所以判据必须在**两端**都实现、且逐字同文案。
+- **作用域 = 渲染器（v1.7 起单端）**：ignore 的解析与匹配只有渲染器这一侧（`collect_facts.py:_load_ignore` + `render_dashboard.py:glob_match`）；共享核的 `globMatch` 与 `assembleData` 的 ignore 分支已随 JS 解析删除。WARN 也只在渲染器产，进 `.view.json` 的 `warnings[]`。
 - **文案**：逐字文案归 `references/copy-deck.md` §16.6（契约不内联中文）。
 
 #### 3.5 凡"升级会让用户配置/数据语义改变"的地方，都必须有**用户可见 WARN**
 
 - **口径（v1.6 补录）**：任何会让**用户既有配置或数据的语义**发生变化的改动（ignore 写法、字段含义、机器文件布局、枚举取值…），**必须**配一条**用户可见的 WARN**，**不许只在契约/文档里写一句"升级后要改写"**。
-- **实现要求**：该 WARN 的**判据两端都要实现**（`warnings[]` 要逐条比对，单端实现会造成跨端漂移）；**判据归契约、逐字文案归 `references/copy-deck.md` §16.6**；**作用域按行内标记判**（两端都要产的，**不标 `共享核`**）。
+- **实现要求**：该 WARN 的**判据只有渲染器这一处实现**（v1.7 起）；**判据归契约、逐字文案归 `references/copy-deck.md` §16.6**；**作用域按行内标记判**（`作用域：渲染器` = 单端 Python；`作用域：共享核` = 单端 JS；不标 = 仍是两端，目前没有这种 WARN）。
 - **为什么**：文档只有"读契约的人"看得见，**用户看不见**；只写文档等于**把一次静默失效留给用户自己发现**。
 
 #### 4. `.state.json` / `.versions/` 的向前兼容
@@ -654,7 +657,7 @@ dev-dashboard/
 
 ## health 字段清单
 
-`index.html` 内嵌数据里的 `health` 是掌控条「数据健康」徽章与审计弹层的数据源（Python 渲染与网页内刷新两端字段一致）：
+`.view.json` 的 `data.health`（以及离线页内嵌的同名字段）是掌控条「数据健康」徽章与审计弹层的数据源。**唯一装配实现 = 渲染器**；面板与离线页只按字段消费，不再解析 Markdown、也不重算这些字段：
 
 - `ok`：本轮全绿（无失效/越界证据、无未归置事实、`.facts.json` 未损坏、无缺验证记录的「已验证」）。
 - `matrix`：证据矩阵，每条含 `path` / `owners`（归属功能或"使用流程"/"时间线"）/ `kind` / `exists`。
@@ -663,23 +666,23 @@ dev-dashboard/
 - `facts_pending`：未归置的变更事实条数。
 - `facts_error`：`""`（正常）/ `"missing"`（还没采集）/ `"corrupt"`（损坏，不可审计）。
 - `verify_missing`：标了「已验证」却没有验证记录的功能名列表。
-- `inbox_pending`（v1.5 起）：`.inbox.jsonl` 里**尚未收取**的行数，即掌控条 `⏳ 待生效 N 条` 的数据源，**以文件为准**（不做本地持久化增量）。三态：非负整数 = 读到（文件不存在或为空时为 `0`）；`null` = 读取失败（IO／权限），界面显示 `—`；`undefined` = 该宿主**没提供这个数据源**（只有网页内刷新路径如此），不渲染徽章——**别按"是不是离线页"判断**：Python 导出的 index.html 内嵌的是导出时刻的真实值，属第一种。**不参与 `ok` 计算**；单行 JSON 解析失败时跳过该行、给 WARN（**读取失败本身不写 `warnings[]`**，见「机器文件」一节）、不阻断。JS 侧同一口径见 `assembleData`（`templates/dashboard.core.js`），两端必须一致（dual_parser_diff 门禁）。
-- `inbox_items`（**v1.5 补录**，与 `facts_generated_at` 同类，不另起版本）：`.inbox.jsonl` 里未收取行的**逐条内容**，供 `⏳` 徽章点开的明细浮层用（用户要求"点开列出是哪几条"）。每条 **`{type, text, ts}`**（`ts` 就是 host 写进 `.inbox.jsonl` 的原始时间戳字段，见「机器文件」一节的三字段定义；明细浮层的「时间」列取它），`type` 取值集合沿用契约的四个（`decide` / `verify` / `command` / `ask`）。**三个字段都做同款守卫**：`type` / `text` / `ts` 不是字符串一律归一成**空串**（与 `facts_generated_at` 同款——不猜、不转换、不编造时间）。**降级与 `inbox_pending` 同口径、同一次读取**：文件不存在或为空 → `[]`；坏行跳过 + WARN（**一行一条 WARN，不汇总**，与 `inbox_pending` 同口径）；**读取失败 → `null`（不是 `[]`）——"读不到"与"没有"必须可区分**，界面据此显示"读不到待生效记录"而不是"0 条"。**不参与 `ok`**。**不得为它做第二次文件读取**：JS 侧从同一个 `parts.inboxRaw` 解析（同源），Python 侧复用同一段已读文本——两次读取会造出"计数与明细不一致"的第二事实源。
+- **~~`inbox_pending` / `inbox_items`~~（v1.7 起移出 `health`）**：待生效不是项目事实，**不进 `.view.json`**。计数与明细由消费方读 `.inbox.jsonl` 原始文本后交给共享核 `CYD.parseIntent(rawText)` 得出，形状与三态口径见「读模型 `.view.json` · 意图（待生效）不在读模型里」。
+- ~~`inbox_items`~~（v1.5 补录，**v1.7 起移出 `health`，见上一条**）：明细形状 `{type, text, ts}`、三字段非字符串归一空串、未知 `type` 按原文显示、`type` 只认 `decide` / `verify` / `command` / `ask` 这四个值——**这些口径全部保留**，只是搬到了 `parseIntent` 的产物里。
 - `facts`：`.facts.json` 里每条事实的 `path` / `kind` / `change` / `pending`。
 - `ignore`：`.dashboard-ignore` 生效的 glob（已剔除 `#` 注释行与空行）。
 - `source`：本轮变更事实的采集来源（`git` 或 mtime 说明，取自 `.facts.json` 的 `source`），网页据此显示"变更来自 git 还是文件时间"；旧 `.facts.json` 没有该字段时为空串。
 - `facts_generated_at`（v1.5 起）：**"上次采集是什么时候"的原始串**。口径拆两层，别混：
   - **字段层（原样透出，不做日期校验）**：`.facts.json` 存在且是合法 JSON、顶层有 `generated_at`、且它的值是**字符串** → 该字符串**逐字透出**（哪怕值不是合法日期，例如 `"not-a-date"`，也照原样给）。只有这三种情况取**空串 `""`**：文件不存在、JSON 不可解析、缺键或值不是字符串（含 `null` / 数字 / 对象）。旧 `.facts.json` 没有该键时同样空串。不许编造时间、不许用 `null` 代替空串。
-  - **口径说明**：字段层只负责"原样透出"，**日期合法性一律在显示层判断**——Python 侧只给串，JS 侧只在前端算相对时间，两端都不在字段层做日期校验（否则会把合法但格式少见的串误杀成空）。
-  - **不参与 `ok` 计算**（没采集过 ≠ 不健康）。与 JS `assembleData`（`templates/dashboard.core.js`）同口径，**且不在 `dual_parser_diff.py` 的归一化剔除列表里**——该脚本只剔 `workspace_uri` / `updated_at` / `health.matrix`，本字段要真比对（因此非法值也要两端一致地透出）。显示层消费见「界面文案」的 `⏱ 上次采集` 与审计弹层「上次采集：」。
+  - **口径说明**：字段层只负责"原样透出"，**日期合法性一律在显示层判断**——渲染器只给串，面板只在前端算相对时间，两侧都不在字段层做日期校验（否则会把合法但格式少见的串误杀成空）。
+  - **不参与 `ok` 计算**（没采集过 ≠ 不健康）。**非法值也照原样透出**（不猜、不转换）。显示层消费见「界面文案」的 `⏱ 上次采集` 与审计弹层「上次采集：」。
 - `warnings`：非致命提示（非法状态、缺简介、重名、依赖环、已定选项与选项对不上、子项写了依赖、术语表解析异常、术语表歧义、用词漂移、声明类文件漂移等）。
-  - **文案归属总则（补录、不升版）**：`warnings[]` 是 `dual_parser_diff.py` **逐条比对**的字段，因此**每一条 WARN 的逐字文案归 `references/copy-deck.md` §16.6（契约不内联中文）、且只允许存在这一处**；**契约只钉两件事：① 触发条件（判据）② 两端必须逐字同文案**。契约里再内联一遍中文 = 第二份事实源，两端各抄一份必然漂移（执行者按笼统契约改错位置、契约落后实现一个字段，这两次亏都出在这类重复上）。
+  - **文案归属总则（补录、不升版）**：`warnings[]` 由**渲染器独产**，因此**每一条 WARN 的逐字文案归 `references/copy-deck.md` §16.6（契约不内联中文）、且只允许存在这一处**；**契约只钉两件事：① 触发条件（判据）② 文案只有这一处实现**。契约里再内联一遍中文 = 第二份事实源。
   - **为什么没有例外**：WARN 的**判据都在触发条件里**（都是可机检的条件，例如"状态值不在五态内""模块数 > 0 且证据全空"），那句中文只是**呈现**。因此**不设"文案承担判定职责"的例外**——一开口子，后面每条 WARN 都能自称判据。
-  - **两道门禁互补，缺一不可**：**逐字文案归 `references/copy-deck.md` §16.6（契约不内联中文）**；每条 WARN 由**常驻门禁 `projects/dsh-plugin-control-your-development/smoke/warn_copy_check.py`** 逐条核对**两端实现里有没有这段话（静态，随冒烟一起跑）**；**运行时**两端 `warnings[]` 的**逐条比对**仍由 `dual_parser_diff.py` 负责。**分工**：静态门禁拦"根本没写／只写了一端"，运行时门禁拦"写歪了／触发条件不一致"。任一道红了都不许绕过。
+  - **两道门禁互补，缺一不可**：**逐字文案归 `references/copy-deck.md` §16.6（契约不内联中文）**；每条 WARN 由**常驻门禁 `projects/dsh-plugin-control-your-development/smoke/warn_copy_check.py`** 按行内作用域标记逐条核对**实现里有没有这段话（静态，随冒烟一起跑）**；**运行时**由 `smoke/view_model_test.py` 核对渲染器真跑出来的 `warnings[]`（触发条件与顺序）。**分工**：静态门禁拦"根本没写"，运行时门禁拦"写歪了／条件不一致"。任一道红了都不许绕过。
   - **§16.6 的登记格式（输入契约，写新 WARN 前必读）**：静态门禁**按「依据列含 `本节定稿`」挑行**、**按「汉字锚点 ≥2 连字」比对**；`<…>` 占位与 **≥3 项 `/` 枚举值表**视为占位。因此：**新增 WARN 必须照这个格式登记，否则门禁看不见它**；反过来，**把定稿的字面文本塞进 `<…>`、或写成 ≥3 项 `/` 列表，会让该段不再逐字受检**（等于自己把这段移出门禁覆盖）。这两句是"怎么写文档才受保护"的规则，不是建议。
-  - 逐条判据、两端内联位置与现文案见 `output/WARN文案清单.md`（一次性核对产物，不入库；**常驻依据是 §16.6 + `warn_copy_check.py`**）。
+  - 逐条判据、内联位置与现文案见 `output/WARN文案清单.md`（一次性核对产物，不入库；**常驻依据是 §16.6 + `warn_copy_check.py`**）。
 - `glossary_drift`（v1.3）：用词漂移明细，每条含 `alias` / `term`（标准用词）/ `file` / `count`。
-- `glossary_status`（v1.3 起）：术语表识别结论，`{file, source, candidates}`——`file` 是真实文件名（没有为 `null`），`source` 取 `explicit` / `sniff` / `ambiguous` / `none`，`candidates` 是歧义时的候选文件名列表（其余情况为 `[]`）。三项与 `.cyd.json` 同名三项同出一源；掌控条「数据健康」据此永远显示一行术语表状态（正常 / 未启用 / 歧义）。**v1.6 补录**：该对象**可带可选 `meta_error` / `meta_missing`**（失败 flag，见「术语表」一节）——它们只驱动两条 WARN，**不改变 `source` 取值、不进 `ok`**；旧版宿主不传时按"降级"处理（不产 WARN）。
+- `glossary_status`（v1.3 起）：术语表识别结论，`{file, source, candidates}`——`file` 是真实文件名（没有为 `null`），`source` 取 `explicit` / `sniff` / `ambiguous` / `none`，`candidates` 是歧义时的候选文件名列表（其余情况为 `[]`）。三项与 `.cyd.json` 同名三项同出一源；掌控条「数据健康」据此永远显示一行术语表状态（正常 / 未启用 / 歧义）。**v1.6 补录**：该对象**可带可选 `meta_error` / `meta_missing`**（失败 flag，见「术语表」一节）——它们只驱动两条 WARN，**不改变 `source` 取值、不进 `ok`**；渲染器自己读 `.cyd.json`，不依赖宿主传参。
 - `changes_status` / `tech_status`（v1.6 起）：变更规则与技术地图的识别结论，结构与 `glossary_status` **完全同构**（`{file, source, candidates}`），同源于 `.cyd.json` 的 `changes*` / `tech*` 两组；`source` 同为 `explicit` / `sniff` / `ambiguous` / `none`。
 - `declared_refs`（v1.6 起）：**仅由声明类文件引用的路径/条目**——`{changes_only: [声明条目], tech_only: [具体路径]}`。**两边单位不同，别混用**：`changes_only` 的元素是 CHANGES.md 的**声明条目**（可能是 glob，如 `src/pages/**`）；`tech_only` 的元素是 TECH.md 模块证据里的**具体路径**。判定口径：`changes_only` 用 **glob 匹配**（声明条目匹配不到任何"已被功能／使用流程／时间线引用"的路径 → 计入；匹配到 → 不计入），`tech_only` 用**路径成员判断**（该路径没有被上面三类引用 → 计入）。审计弹层固定分两行渲染：`仅由变更规则声明的路径：N 条`（单位=声明条目）与 `**仅由技术地图引用的文件：N 个**`（单位=具体路径）。**不计入 `ok`**；任一类超过 10 条时给一条 WARN（防后门的可见性防线，理由与两条标签的措辞见「CHANGES.md」一节）。
 - `changes_drift` / `tech_drift`（v1.6 起）：声明类文件的漂移明细，每条 `{file, ref, kind}`（`kind` 取 `missing_feature` / `missing_module` / `stale_path`），同时以人话进 `warnings`。
@@ -705,7 +708,7 @@ changes = { internal: [{ path, action }],            // 「内部工程」段：
             rules:    [{ path, action, owner }] }    // 「变更归属」表：路径/变更类型 + 归置方式 + 归属
 ```
 
-- **这份形状是契约规定的，不是"靠差分互相约束"**：`dual_parser_diff.py` 只能发现**当下**两端不一致；**两端同时改名照样全绿**——"门禁能约束"≠"契约规定过"。字段名以本段为准。
+- **这份形状是契约规定的，不是"靠实现自由发挥"**：字段名以本段为准；渲染器写、面板与离线读，改字段先改本契约。
 - `path` **允许 glob**（如 `tests/**`），语义与 `.dashboard-ignore` 同款（`*` 不跨目录、`**` 跨目录、`?` 单字符、大小写敏感）；`owner` 指向功能/模块名（对不上 → 走声明类文件的漂移 WARN）。
 - `action` 是**自由文本的归置方式**（如"忽略""记进时间线"），**机器只用"这条路径被声明过"这一事实，不解释 `action` 的语义**——给它定枚举就等于替用户猜语义（保真红线）。真要枚举化，另开契约变更。
 - **`evidence` 保持"路径字符串数组"，不重复一份 `exists`**：存在性判定统一走 `health.matrix`（每条证据都有 `path` / `owners` / `kind` / `exists`，模块证据同样进矩阵），**不在模块里造第二份真相**。
@@ -715,25 +718,89 @@ changes = { internal: [{ path, action }],            // 「内部工程」段：
 
 顶层 `decisions`（v1.5 起字段固定为六项）：每条 `{id, title, decided, options, multi, obsolete}`——`decided` 仍是空串或规格化后的选项串（如 `A、C`）；`multi` 只是**提示语**标志（见「NOW.md · 决策」）；`obsolete: true` = `已废弃`，旧的两态文件恒为 `false`。顶层 `todos`：`[{done, text}]`，结构 v1.5 未变。
 
-## 双解析器同步点（v1.5）
+## 读模型 `.view.json`（v1.7 起；取代旧的「双解析器」路线）
 
-本契约的每一项变更都必须**两端同步**，否则 `projects/dsh-plugin-control-your-development/smoke/dual_parser_diff.py` 门禁会打架。函数名是定位依据，行号是 v1.5 定稿时的位置（会随改动漂移）：
+> 定位：**唯一**的项目事实视图输入。Markdown 仍是唯一可编辑事实；`.view.json` 由渲染器生成、可删除重建，禁止手改，也不承载任何运行状态或视图偏好（hover / 布局 / 意图 / 运行态一律不进）。
 
-| # | 契约变更 | Python（`scripts/render_dashboard.py`） | JS（`templates/dashboard.core.js`） |
+### 文件形态（`schemaVersion: 1`）
+
+```json
+{ "schemaVersion": 1,
+  "producer": {"name": "control-your-development", "version": "<manifest 的 version>"},
+  "format": 1,
+  "generatedAt": "2026-10-24T14:30:00+08:00",
+  "sourceHashes": {"PRODUCT.md": "<sha256 hex>", "…": "…", "@evidence": "<sha256 hex>"},
+  "data": { "…": "见「health 字段清单」及其后各段" } }
+```
+
+- `schemaVersion`：读模型结构版本（整数，本版 = 1）。消费方**只认自己支持的那一版**；更高的版本 ⇒ `unsupported`，不得猜字段。
+- `producer`：写它的那份 skill 的 `manifest.yaml: version`（不参与兼容判定，只用于说明与排障）。
+- `format`：生成时 `.cyd.json` 声明的 **Markdown 事实格式**（见「升级与兼容 · 版本位分三件」）。面板按 `format > 1` **只读降级并说明**（页首状态条 + 禁用改事实的动作），不静默改数据。
+- `generatedAt`：生成时刻（ISO8601 带时区）。
+- `data`：顶层对象与「health 字段清单」同形，**唯一装配实现是 `render_dashboard.py`**。**不含 `health.inbox_pending` / `health.inbox_items`**——待生效是**意图状态**，由消费方直接读 `.inbox.jsonl` 得出（见下「意图（待生效）不在读模型里」）。
+- `sourceHashes`：新鲜度指纹（下节）。空对象不合法，至少含三份事实源。
+
+### 指纹（freshness）
+
+- **规范化**：UTF-8 解码 → 去 BOM → `\r\n` / `\r` 归一成 `\n` → 取 UTF-8 字节的 SHA-256 小写十六进制。**同一份字节在任何实现里必须得到同一串**（渲染器与宿主各一份实现，由跨语言门禁对账）。
+- **必须覆盖**（漏一个就是 stale 漏判）：`PRODUCT.md` / `FEATURES.md` / `NOW.md`、**选中的**术语表文件（实际文件名）、**选中的** `TECH.md` / `CHANGES.md`、`.facts.json`、`.dashboard-ignore`、参与漂移判定的最近一版 `.versions/<dir>/TECH.md`，外加伪键 `@evidence` 与 `@sources`。
+  - **两类缺席要分开处理**：① **可能存在的可选文件**（术语表 / TECH / CHANGES / 快照正文）——没有就**不产生那个键**（有无与改名由 `@sources` / `@prevtech` 兜住）；② **`.facts.json` / `.dashboard-ignore` 始终产键**，缺失时写**确定的缺席值**（`sha256` 的 `\u0000absent`）——否则"先渲染、后采集"这条时序永远判不出 stale。缺席值两端必须同一串。
+  - **`@cyd`**：`.cyd.json` 里**影响语义的那一小撮**（`format`、`glossary` / `glossary_file` / `glossary_source`、`tech*`、`changes*`；**不含** `updated_at` / `writer.*`）。理由：`{"glossary": "…"}` 是**用户照面板提示亲手写进去的选择**，不纳入就是"用户改完毫无反应"。
+  - **`@prevtech`**：**当前选中的**那一版 `.versions/<dir>/TECH.md` 相对路径（判据同 `read_prev_tech_path`：`index.json.versions` 从后往前、第一个真的有该文件的目录；没有则空串哨兵）。理由：`index.json` 改指另一份**已存在**的快照时文件一个没动，不纳入则"技术地图跟不上了"这条信号**整块静默滞后**。
+  - **必需键**（缺一即 `stale`，消费方**点名**）：`PRODUCT.md` / `FEATURES.md` / `NOW.md` / `.facts.json` / `.dashboard-ignore` / `@evidence` / `@sources` / `@cyd` / `@prevtech`。术语表 / `TECH.md` / `CHANGES.md` / 快照正文**不是必需键**（"没有技术地图"是合法状态）。
+- `@evidence` = 本轮 `data` 里出现的**全部证据路径**（功能 + 子项 + 使用流程 + 时间线 + 技术地图模块与子项）的存在性快照：取 `[归一化后的工作区相对路径, 是否存在]` 二元组，**按路径去重**后按路径**字节序**排序，序列化成紧凑 JSON（`ensure_ascii=False`, `separators=(",", ":")`），再按上面的规范化规则哈希。越界路径按「不存在」计入（与证据矩阵同口径）。
+- **刻意不纳入**：`.cyd.json`（渲染器自己的产物，纳入即自指）、`.inbox.jsonl`（意图，见下）、`.state.json`（采集游标）、`index.html` 与 `.view.json` 自身、`.versions/index.json`（只有 `created_at` / 说明；真正用到的快照正文已按文件纳入）。`.cyd.json` 的 `updated_at` / `writer.at`、`data.updated_at` 等易变时间字段**永不进指纹**。
+- **判据**：每个键对当前值重算一次，**全部相等且必需键齐全 ⇒ fresh**；任一不等、文件消失、**键缺失** ⇒ **stale**，并**点名**是哪个键。只遍历"记录里已有的键"永远发现不了缺键。两侧都**不得**用"文件在不在"代替内容比对。
+
+### 原子写
+
+先写同目录临时文件（`.view.json.tmp-<pid>`）→ flush + fsync → `os.replace` 覆盖正式文件；任何时刻读到的都是**完整的一份**。异常路径必须清理临时文件（门禁会检查目录里没有残留 `.tmp*`）。
+
+### 消费方职责
+
+| 角色 | 必须 | 禁止 |
+|---|---|---|
+| 渲染器 | 每次 render 都写 `.view.json`（**不管是否导出 HTML**）；只写不读；重建 = 整份替换 | 读 `.view.json` 当输入；写 hover / 布局 / 意图 / 运行态 |
+| 面板 | 只读 `data`；启动 / watch / 断线重连都校指纹；非 fresh 时**保留旧图 + 明确标注 + 禁用依赖旧上下文的对象动作**（拍板 / 待办勾选 / 节点面板发送 / 一句话提问） | 自行解析 Markdown；把读模型当事实源写回 |
+| 离线页 | 导出时冻结同一份 `data`，标出导出时间与 `producer.version`，只读浏览 | 目录授权 / 写文件 / 运行控制 / 把导出时刻的待生效装成实时队列 |
+
+- **状态词**（面板与宿主 RPC 共用一套）：`fresh` / `stale`（缺键也算）/ `missing` / `unsupported`（`schemaVersion` 更高）/ `unverified`（宿主校验能力不可用——**"没校验"不等于"新鲜"**，界面上必须说清）。
+- **重建**：`missing` / `stale` ⇒ **重建**，永不迁移 `.view.json`（它不在版本快照里，也不是回退资产）；重建失败要说明，**不许回退成 JS 解析 Markdown**。**`unsupported` 绝不重建**——那是更新版插件写的读模型，用旧渲染器覆盖它等于**降级写入**；只报状态并由界面说"先升级插件"。
+- **宿主能力**：`view/read` 由宿主侧实现（node，读固定文件名 + 重算指纹 + 可选重建）。重建依赖「渲染器脚本 + Python 解释器」两件事都可用；缺任一件 ⇒ 明确返回「重建不可用」，界面给「请求更新」意图，**不许假装已更新**。
+
+### 意图（待生效）不在读模型里
+
+- `.inbox.jsonl` 仍是面板拍板 / 指令的兜底信箱（见「机器文件与 `change` 取值」）。**它不进 `sourceHashes`，也不进 `data`**：面板 watch 到变化时单独重读原始文本，交给**共享核唯一一份** `CYD.parseIntent(rawText)` 解析。
+- 解析结果 `{pending: number|null, items: [{type, text, ts}], badLines: number}`：`rawText === ''` ⇒ `pending 0`；`rawText === null`（读不到）⇒ `pending null`（界面显示 `—`，**"读不到"≠"0 条"**）；坏行跳过并计入 `badLines`（明细浮层提示，一行一条不汇总），**不进 `warnings[]`**（WARN 只由渲染器产出）。
+- 离线页由渲染器把**原始文本**冻结进 HTML（`__CYD_META__.intentRaw`），由同一个 `parseIntent` 解析，界面标注"导出时"。
+
+## 意图与运行控制（v1.7，R1–R10）
+
+> **口径**：控制只作用于**当前会话**；关联键只有 `sessionId + requestId`（**不虚构 runId**）。
+> **状态纪律**：`accepted`（宿主收下）≠ `queued`（排在当前轮次之后）≠ 已执行 ≠ 已生效。界面上只允许说前三件里**确实观测到**的那一件。
+
+| 动作 | 实现 | 判定 / 限制 | 现状 |
 |---|---|---|---|
-| 1 | 决策三态 `已废弃` | `parse_now`（407-461）：`状态` 分支从只认 `已定`（442-445）扩成三态；新增 `cur_dec["obsolete"]`（初始化在 422-423）；`待拍板` 显式置 `obsolete=False`、`decided=""` | `parseNow`（216-259）：同理；`cur` 初始化（226）加 `obsolete: false`；状态分支（241-242）扩三态 |
-| 2 | `多选` 降级为提示语 | `parse_now`（446-449）：解析不变，注释与语义改为"提示标志"；`decisions` 输出不用改 | `parseNow`（243-244）：同上。**`decisionHtml` 里 `dc.multi ? '（可多选）' : ''` 一共有 3 处，只删卡片头部 `.did` 行的那一处**（`dashboard.core.js:1062`）——依据评审稿 §11.11「默认多选后『（可多选）』标签可以去掉」。两条 `<p class="dhint">` 提示句里的「（可多选）」**保留不动**（`dashboard.core.js:1074` 与 `:1077`），那是评审稿 §11.9 用户亲笔定稿的「勾选项（可多选），想补充就写一句 → …」。**契约在此必须指名到位置**：写"去掉 `decisionHtml` 里的（可多选）"会被执行者理解成 3 处全删，误伤定稿文案（批 1 评审 P0-1 就是这么来的） |
-| 3 | 新 tab「决策与待办」 | `self_test`（797-800）：断言里插入 `data-tab="decisions"` 与 `id="decisions"`，顺序断言改成 `now < decisions < glossary < guide` | `templates/dashboard.shell.html`（14-25）：nav 里 `now` 之后插 `data-tab="decisions"`，section 里插 `id="decisions"`；`renderAll`（1510）注册 `renderDecisions()`；`renderNow`（1105-1131）删掉 `right` 分支与 `.cols`（1124）改成单列整宽 |
-| 4 | 待办勾选通道 | `audit`（550-596）或 `render`（597-708）新增读 `.inbox.jsonl` 的行数 → `health` 里加 `inbox_pending`（702-707）；`self_test`（790-793）加 `"inbox_pending"` 标记断言 | `parseNow`（247-249）：`todos` 结构不变，无需改；待办渲染与勾选事件在「决策与待办」的 `renderDecisions()` 里（新函数，从 `renderNow` 1121-1123 搬过去）；勾选调 `env.command`（现有直发封装见 1378-1395 `dispatchSend`）；掌控条徽章在 `renderStrip`（482-496）按 `inbox_pending` 三态渲染（数字 / 不显示 / `—`） |
-| 5 | 页脚删除 + 审计弹层措辞 | 无（文案只在 JS/模板） | `openAudit`（1261-1297）：顶部逐行列表与表头措辞按「界面文案」一节；确认全库无页脚渲染（`dashboard.shell.html` 45 行，无 footer） |
-| 6 | `health.inbox_pending` 三态口径 | `render`（685-708）装配：读 `.inbox.jsonl`——不存在/空 → `0`、坏行 → `WARN` 跳过、IO 失败 → `null`；`ok` 公式（702 一带）不引入它 | `assembleData`（311-390）：`parts` 注释（310）加 `inboxRaw?`，按同一口径算出 `inbox_pending` 放进 `health`（384 起）；`ok` 公式（377）不引入它 |
-| 7 | `inbox` 数据源接线（宿主侧，不在本契约范围内但要改） | 无 | `templates/dashboard.web.js:reloadData`（62-92）**不传** `inboxRaw`（网页内刷新路径没有这个数据源 → 字段 `undefined` → 不渲染徽章；注意：**Python 导出的 index.html 首次打开时用的是内嵌真实值，照常渲染并注明时效**）；`projects/dsh-plugin-control-your-development/plugin/src/client.src.js:loadAll`（118-151）增读 `dev-dashboard/.inbox.jsonl` 传进 `parts.inboxRaw`；投递成功后靠 `loadAll` / `watchDash` 重读再算 N（不本地累加） |
-| 8 | `health.facts_generated_at`（**字段层：原样透出**） | `render`（662-675）装配：读 `.facts.json` 顶层 `generated_at` → 默认 `""`，只在这三种情况留空串：文件不存在 / JSON 不可解析 / 缺键或值不是字符串（`isinstance(_ga, str)`）；其余**逐字透出**，不做日期校验；落进 `health`（717 一带）；`ok` 公式不引入它 | `assembleData`（366-373）解析 `.facts.json` 那段顺手取 `typeof fmeta.generated_at === 'string' ? fmeta.generated_at : ''`，放进 `health`（411-419）；`ok` 公式不引入它。宿主接线同第 7 行（`.facts.json` 本来就已读） |
-| 9 | `⏱ 上次采集` 文案（**显示层：降级**） | 无（相对时间只在前端算，Python 只给原始串） | `fmtRel`（`dashboard.core.js` 13-26）：归一化成字符串并 trim → 空串返回 `''`；`YYYY-MM-DD` 补 `T00:00:00` 按本地零点解析；`NaN` 返回 `''`；否则 今天/昨天/2–7 天/日期时间。`renderStrip`（513-521）只在 `collected` 非空时渲染 pill；`openAudit`（1305-1306）同理，算不出时整行不渲染 |
-| **10** | **`CHANGES.md` / `TECH.md` 解析（v1.6 起）** | `scripts/render_dashboard.py` 新增 `parse_tech(text, warnings)` / `parse_changes(text, warnings)`（风格照 `parse_features`：逐行正则、**不读代码**）；`resolve_declared(dash, warnings)` 复用 `resolve_glossary` 那套四级链（`.cyd.json` → 嗅探 → 歧义 → none），并把 `tech*` / `changes*` 写回 `.cyd.json`；装配进顶层 `tech` / `changes`（含 `layers` 首次出现顺序） | `templates/dashboard.core.js` 新增同名的 `parseTech` / `parseChanges`（风格照 `parseFeatures`）；`assembleData`（311-419）的 `parts` 加 `techRaw` / `changesRaw` / `techName` / `changesName`；宿主两处各读一份并传名：`dashboard.web.js:reloadData`（62-92）、`projects/dsh-plugin-control-your-development/plugin/src/client.src.js:loadAll`（118-151） |
-| **11** | **`declared_refs` / `*_status` / 漂移（v1.6 起）** | `audit`（550-596）把证据集合分两档（功能/流程/时间线引用 vs **仅声明类文件引用**）→ `health.declared_refs`；`changes_only` 用 **glob 匹配**、`tech_only` 用**路径成员判断**（**单位不同**）；`render`（685-717）装配 `changes_status` / `tech_status` / `changes_drift` / `tech_drift`；**`ok` 公式不引入 `declared_refs`**（只给 >10 条的 WARN） | `assembleData`（366-419）同一口径算出 `declared_refs` 与两组 status/drift；审计弹层 `openAudit`（1305 一带）**固定**渲染两行：`仅由变更规则声明的路径：N 条`（单位=声明条目）与 `仅由技术地图引用的文件：N 个`（单位=具体路径），0 条也显示 |
-| **12** | **「功能 \| 技术」视图切换（v1.6 起，不新增 tab）** | `self_test`：断言加 `data-view="tech"`，并**继续断言六 tab 顺序不变** | `templates/dashboard.shell.html`：`.ghead` 内加 `.viewswitch` 两个按钮（`data-view="feature"` / `"tech"`，样式照 `references/graph-visuals.md` §F1）；`renderGraph`（672-1019）内按 `graphView` 分支；`graphView` 状态与 `gview`（432 一带）同级、仅内存不持久化 |
-| **13** | **`health.inbox_items`（v1.5 补录）** | `render`（685-717）装配：**复用读 `.inbox.jsonl` 的那一次文本**，逐行解析出 `{type, text, ts}`（非字符串归空串；坏行跳过 + WARN，一行一条）；文件不存在/空 → `[]`、IO 失败 → `null`；`ok` 公式不引入它 | `assembleData`（366-419）：从**同一个** `parts.inboxRaw` 解析（**禁止第二次读取**），口径与 Python 逐字一致；未知 `type` **按原文显示**（不猜语义）；消费方是 `⏳` 徽章的明细浮层（`renderStrip` 打开，用 `.stable` 列表）；受 `dual_parser_diff.py` 门禁 |
-| **14** | **`glossStatus.meta_error` / `meta_missing`（v1.6 补录）** | `resolve_glossary`（330-372）：`.cyd.json` **存在但非法 JSON** → 产 WARN 并继续按自动识别；`.cyd.json` 的 `glossary` **指定了不存在的文件** → 产 WARN 并退回嗅探。**Python 自己解析 `.cyd.json`，没有"宿主"这一环**，所以它不消费这两个 flag | `assembleData`：读 `parts.glossStatus.meta_error` / `.meta_missing`，各产一条**与 Python 逐字同文案**的 WARN（逐字文案归 `references/copy-deck.md` §16.6，契约不内联中文）。**宿主三处必须填**：`projects/dsh-plugin-control-your-development/plugin/src/client.src.js:133`、`templates/dashboard.web.js:74`、`projects/dsh-plugin-control-your-development/smoke/js_assemble_driver.js:30`——**吞异常可以，失败事实必须作为 flag 传出去**（禁止再 `catch → {}` 了事）。**缺 flag（旧宿主）→ 不产 WARN、不报错**，这是**降级**不是正常。两 flag 互斥，不改变 `source`、不进 `ok`；受 `dual_parser_diff.py` 门禁 |
+| 开始 / 排队 | `beginSubmission({mode,text})` → `prompt(content, mode, undefined, requestId)` | 空闲=新轮次；运行中=排队。`accepted` 只代表接受（R2） | **已实现**（走官方 Client Session API） |
+| 统一意图通道 | 面板所有「交给 agent 的请求」都走同一条总线 | 会话 API 优先、宿主 RPC（steer / 信箱）兜底；两条都不可用 ⇒ 失败并说明（R9） | **已实现** |
+| 停止当前 | `session.cancel()`，文案 `停止当前轮次（保留队列）` | 返回只代表**请求被接受**；必须等只读投影变 idle 才显示 `已停止`（R4） | **已实现；时序未真机验证** |
+| 停止并清空 | 确认框 → `cancel()` → **一条请求**清空队列与 `.inbox.jsonl` | 独立危险动作，`window.confirm` 前置；面板**不直接写文件**（R5/D4） | **已实现；未真机验证** |
+| 重试 | 同会话、**新 requestId**、新轮次 | 不撤销既有工具副作用、不从失败点恢复（R6） | **已实现** |
+| 暂停 / 继续 | —— | **不提供**（R7） | 明确不做 |
+| 运行投影 | 只读 `session.snapshot()`：`running` / `pendingSubmissions[].placement` / `promptError` | 缺字段 ⇒ `unknown`（**“观测不到”不许显示成“空闲”**）；不写进 `.view.json`（R8/R9/R10） | **已实现；turn/end 时序未真机验证** |
+| 离线页 | 无运行控制 | 离线引导段不注入 `run`（R10；门禁断言） | **已实现** |
 
-改完必跑：`<Python解释器> <skill目录>/scripts/render_dashboard.py --self-test`；面板侧还要跑 `projects/dsh-plugin-control-your-development/plugin/tools/build_panel.py`（它把 `dashboard.shell.html`（第 39 行）与 `dashboard.core.js` 注入 `lib/client.js`），否则面板看到的还是旧壳。
+**未验证（需真机 PoC，R10 要求）**：`cancel()` 的竞态（停止请求与 `turn/end` 相邻到达）、`turn/end` 投影延迟、清空队列请求的实际执行效果。**在这些验证完成前，界面允许显示 `运行状态观测不到`、`停止中（等本轮结束）`，不得显示“已停止/已清空”作为既成事实。**
+
+## 契约变更的同步点（v1.7 起）
+
+解析与装配**只有一处实现**，旧「双解析器同步点」表随之删除（JS 侧不再解析 Markdown）。改契约时按下表找同步面：
+
+| 谁 | 文件 | 何时必须改 |
+|---|---|---|
+| 解析 / 装配 / 指纹 | `.dsh/skills/control-your-development/scripts/render_dashboard.py` | 任何字段、判据、指纹覆盖变化 |
+| 读模型校验 / 校准 / 重建 | `projects/dsh-plugin-control-your-development/plugin/lib/view.js`（node） | `schemaVersion`、指纹规则、状态词、重建能力变化 |
+| 呈现（面板与离线共用） | `.dsh/skills/control-your-development/templates/dashboard.core.js` | `data` 字段的消费方式变化；`parseIntent` / 状态条 |
+| 宿主接线 | `plugin/src/client.src.js`（生成 `lib/client.js`）、`templates/dashboard.web.js` | 数据入口、watch、离线引导变化 |
+
+**门禁**：`smoke/view_model_test.py`（schema + 原子写 + 指纹正反 + 待生效三态）、`smoke/view_fingerprint_diff.py`（Python 与 node 对同一夹具必须算出同一串指纹）、`smoke/host_rpc_test.mjs`（`view/read` 与重建能力）。改完必跑：`<Python解释器> scripts/render_dashboard.py --self-test`、`plugin/tools/build_panel.py`。

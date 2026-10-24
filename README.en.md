@@ -3,7 +3,7 @@
 > Turn the development process into a product dashboard you can actually read and control.
 > Human-readable Markdown files are the single source of truth; the dashboard is pinned inside DSH (right sidebar + a full-page "Feature Map" tab on top of the conversation), and decisions you make on the panel go straight to the AI. Export a single-file offline web page only when you need to share.
 
-Versions: skill v1.6.2 · panel plugin v0.6.2 | License: [MIT](LICENSE) | 语言：[中文](README.md)
+Versions: skill v1.7.0 · panel plugin v0.7.0 | License: [MIT](LICENSE) | 语言：[中文](README.md)
 
 ---
 

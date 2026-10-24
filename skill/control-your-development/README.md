@@ -1,7 +1,7 @@
 # control-your-development
 
 > 一句话定位：把开发过程翻译成用户看得懂、能掌控的产品仪表盘（人话 Markdown → DSH 面板，可选导出单文件 HTML）。
-> 所属项目：control-your-development　版本：1.6.2　状态：分发级
+> 所属项目：control-your-development　版本：1.7.0　状态：分发级
 
 ## 何时用
 
@@ -25,7 +25,7 @@
 | `references/graph-visuals.md` | 关系图与技术地图视觉规范（SVG 几何、交互与降级） | 改关系图前 |
 | `templates/` | Markdown 模板（PRODUCT/FEATURES/NOW，术语表默认一并建立）+ HTML 渲染模板 | init 场景复制 |
 | `scripts/` | render_dashboard / collect_facts / watch_dashboard / snapshot_version | 按 fragment 调用 |
-| `tools/ready.py`（**仓库根，skill 目录之外**） | 一键跑全量门禁（快→慢：静态 → 冒烟 12 → 双解析器差分 → 边缘套件 → 构建）；`--quick` 跳过慢项、`--cdp` 才跑真机 40 项，**跳过一律显式写原因、不算通过** | 交付前 / 改完就跑 |
+| `tools/ready.py`（**仓库根，skill 目录之外**） | 一键跑全量门禁（快→慢：静态 → 冒烟 → 读模型门禁 → 边缘套件 → 构建）；`--quick` 跳过慢项、`--cdp` 才跑真机断言，**跳过一律显式写原因、不算通过**；项数随套件变化，别写死 | 交付前 / 改完就跑 |
 | `tools/verify_status.py`（**仓库根，skill 目录之外**） | 验证记录判定：`CURRENT` 退 0 / `STALE` 退 1（列出差异）/ `MISSING` 退 1；并比对三份 skill 副本指纹 | 想确认验证记录是否过期时 |
 | `AGENTS.md`（**仓库根，skill 目录之外**） | 全仓改动规则：Map / 「改 X 要同步哪些文件 + 跑哪些门禁」矩阵 / Tests / Done 判据 | 动手改仓库任何文件前 |
 | `output/_verify/verification.json`（**仓库根，机器产物，不入库**） | 验证记录（模板与脚本的 SHA-256 指纹 + 跑过的套件 + 三份 skill 副本指纹）；判定用 `tools/verify_status.py check`（CURRENT / STALE / MISSING，不全新退 1） | 由 `tools/verify_status.py` 读写 |
@@ -41,12 +41,20 @@
 - 每条变更事实必须被收录或显式忽略，不允许静默遗漏
 - 改动 Markdown 后必须立即重新渲染（渲染即审计）
 - index.html 是机器产物（可选导出），禁止手工修改
+- `.view.json` 由渲染器生成、可删除重建，禁止手改，也不承载任何运行状态或视图偏好
+
+## v1.7 变更（升级必读）
+
+- **读模型换代**：渲染器每轮写出 `dev-dashboard/.view.json`（`schemaVersion` / `producer` / `format` / `generatedAt` / `sourceHashes` / `data`），**面板与离线页只读它**；JS 侧的 Markdown 解析与「双解析器」套件整体删除（解析/装配只剩渲染器一处）。
+- **新鲜度门禁**：`sourceHashes` 覆盖三份事实源、选中的术语表 / TECH / CHANGES / `.facts.json` / `.dashboard-ignore` / 漂移用的上一版 TECH 快照，外加 `@evidence`（证据存在性快照）与 `@sources`（`*.md` 文件名快照）；任一不符即 `stale`，界面保留旧图但标明过期并禁用依赖旧上下文的动作。
+- **离线 `index.html` 降为只读快照**：删掉目录授权（File System Access）与页面内写回，冻结导出时间与来源版本。
+- **待生效（`⏳`）迁出事实视图**：改由共享核 `parseIntent` 直接解析 `.inbox.jsonl` 原文，坏行计入 `badLines` 而不再产 WARN。
 
 ## v1.5 变更（升级必读）
 
 - 新增核心层 `static/core/writing.md`：AI 写进产物的文字（正文 / 时间线 / 简介 / 决策题干与选项 / 术语释义）先按它自查；准确的标准专业术语照常使用，禁的是自造词与圈内黑话。
 - 新增三份规范：`references/copy-deck.md`（界面文案定稿）、`references/design-tokens.md`（设计令牌与组件规格）、`references/graph-visuals.md`（关系图视觉规范）。
-- 新增 tab「⚖ 决策与待办」，位于「现在」与「术语表」之间；「现在」只保留时间线（单列整宽）。导航顺序以 `references/dashboard-format.md` 的「界面结构」一节为准：🏠 项目 → 🗺 功能地图 → ⚡ 现在 → ⚖ 决策与待办 → 📖 术语表 → ❓ 使用指南。
+- 新增 tab「⚖ 决策与待办」，位于「现在」与「术语表」之间；「现在」只保留时间线（单列整宽）。导航顺序以 `references/dashboard-format.md` 的「界面结构」一节为准（v1.7 起**五个 tab**：🏠 项目 → 🗺 功能地图 → ⚡ 现在 → ⚖ 决策与待办 → 📖 术语表；**使用指南已删**）。
 - 决策三态：`待拍板` / `已定 <选项>` / `已废弃`（已废弃可恢复成待拍板，废弃与恢复都在时间线留痕；旧的两态文件照常解析）；`- 多选: 是` 从开关降级为提示语，界面一律允许多选。
 - 待办可在界面勾选：勾选 = 面板发一条 `command` 消息（不新增持久化、不新增信箱类型）；离线写 `.inbox.jsonl`，界面显示待办行「已报 · 待生效」与掌控条 `⏳ 待生效 N 条`。
 - 掌控条新增 `⏱ 上次采集`（数据源 `health.facts_generated_at`）；页脚已删除，数据健康只在掌控条徽章与审计弹层两处出现。
