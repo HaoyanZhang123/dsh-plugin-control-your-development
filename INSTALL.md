@@ -2,13 +2,13 @@
 
 > 本仓库包含两部分：**skill**（必装，仪表盘能力本体）和**面板插件**（可选，把仪表盘嵌进 DSH 窗口右侧边栏）。
 > 两者互相独立：只装 skill 就有完整功能；面板只是让体验更顺手。
-> [English quick reference](#english-quick-reference) · 返回 [README](README.md)
+> [English quick reference](#english-quick-reference) · 返回 [README.zh.md](README.zh.md) · [English README](README.md)
 
 ---
 
 ## 一、安装 skill
 
-> **打算用面板插件？直接跳到[第二节](#二安装面板插件推荐)**——插件激活时会自动把这份 skill 装到全局技能目录（`<dshHome>/skills/`），无需手动拷贝。本节是"不装插件"或"想指定装到某个项目"时的做法。
+> **打算用面板插件？直接跳到[第二节](#二安装面板插件可选)**——插件激活时会自动把这份 skill 装到全局技能目录（`<dshHome>/skills/`），无需手动拷贝。本节是"不装插件"或"想指定装到某个项目"时的做法。
 
 skill 就是一个目录：`skill/control-your-development/`。拷到对的位置即可，无需安装任何依赖。
 
@@ -89,7 +89,7 @@ cp -R dsh-plugin-control-your-development/skill/control-your-development ~/.dsh/
 dsh-plugin-control-your-development
 ```
 
-走 npm registry，**国内会自动命中镜像**（已发布 **0.6.2**，官方源与 npmmirror 均可查）。包已自带配套 skill，安装后插件会把它放进全局技能目录。
+走 npm registry，**国内会自动命中镜像**（当前版本 **0.7.0**，官方源与 npmmirror 均可查）。包已自带配套 skill，安装后插件会把它放进全局技能目录。
 
 ### 方式 2：仓库地址（能连 GitHub 时可用）
 
@@ -115,7 +115,7 @@ https://github.com/HaoyanZhang123/dsh-plugin-control-your-development
 
 ### 装好后
 
-右侧边栏会出现「开发仪表盘」标签页（四格仪表盘图标），标签上会带上**当前工作区项目名**。打开任意项目会话，面板读的就是**该项目**的 `dev-dashboard/`；还没建立仪表盘的项目会显示一个"复制指令"按钮，粘到聊天框发送即可建立。
+右侧边栏会出现「开发仪表盘」标签页，标签上会带上**当前工作区项目名**。打开任意项目会话，面板读的就是**该项目**的 `dev-dashboard/`；还没建立仪表盘的项目，面板里会给一个「发送」按钮，点一下就把建立请求发进当前会话。
 
 ---
 
@@ -149,7 +149,7 @@ https://github.com/HaoyanZhang123/dsh-plugin-control-your-development
 
 - **禁用 / 启用**：Plugins 页开关，即时生效，无需重启。
 - **卸载**：Plugins 页点卸载。插件卸载后，它装到全局技能目录的那份 skill **不会被自动删除**（那是你的环境，插件不越权删）；想一并清理就手动删掉 `<dshHome>/skills/control-your-development/`。
-- **升级**：已装插件不会自动更新——在 Plugins 页卸载后按方式 1 重新粘贴仓库地址即可；插件带的 skill 会在下次激活时自动更新到新版本。
+- **升级**：已装插件不会自动更新——在 Plugins 页卸载后按方式 1 重新填 npm 包名即可；插件带的 skill 会在下次激活时自动更新到新版本。
 - **本地路径安装的升级**：先 `git pull`，再卸载重装一次。
 
 ---
@@ -158,13 +158,7 @@ https://github.com/HaoyanZhang123/dsh-plugin-control-your-development
 
 按可能性从高到低：
 
-1. **macOS 没有 git**：从仓库地址安装需要 pnpm 调用 git；macOS 默认不带 git。用**归档压缩包地址**安装即可，这条路不需要 git（已实测）：
-
-   ```
-   https://github.com/HaoyanZhang123/dsh-plugin-control-your-development/archive/refs/tags/v0.4.2.tar.gz
-   ```
-
-   或者先装 git（`xcode-select --install`）再重试。
+1. **macOS / Windows 没有 git**：从仓库地址安装需要 pnpm 调用 git，而两套系统默认都不带 git。**改填 npm 包名 `dsh-plugin-control-your-development` 即可**，这条路不需要 git，也不碰 GitHub；确实要用仓库地址再先装 git（Windows：`winget install Git.Git`；macOS：`xcode-select --install`）。
 2. **DSH 版本过旧**：本插件用到右侧边栏的标签注册与文件变更订阅接口，需要带这套接口的 DSH（0.2.x 起）。在 设置 → 关于 里确认版本；过旧就先升级 DSH。
 3. **本地路径安装**：克隆仓库后，Add plugin 填**仓库根目录**的绝对路径（仓库根就是插件包）。
 4. **把报错原文发出来**：Add plugin 的失败信息（或 DSH 日志里 `plugin-manager`/`dev-dashboard` 相关行）能直接定位问题；只说"装不上"就得靠猜。
@@ -183,12 +177,12 @@ https://github.com/HaoyanZhang123/dsh-plugin-control-your-development
 "浏览器能打开 GitHub" ≠ "终端里的 git/pnpm 能连上"。三种不依赖 GitHub 的安装方式：
 
 **路 1：离线安装包（最稳，谁都能用）**
-拿到 `dsh-plugin-control-your-development-0.4.2.tgz`（本仓库 Releases 附件，或直接找作者要），然后：
+在能上网的机器上从 npm registry 下载当前版本 tarball（0.7.0）：`https://registry.npmjs.org/dsh-plugin-control-your-development/-/dsh-plugin-control-your-development-0.7.0.tgz`，拷到目标机器后：
 
-- Add plugin 里填**这个文件的绝对路径**，例如 `/Users/你/Downloads/dsh-plugin-control-your-development-0.4.2.tgz`
+- Add plugin 里填**这个文件的绝对路径**，例如 `/Users/你/Downloads/dsh-plugin-control-your-development-0.7.0.tgz`
 - 只想装 skill：把 tgz 解压（`tar -xzf ...`），把里面的 `package/skill/control-your-development` 拷到你的 skills 目录即可
 
-**路 2：npm 包名（发布到 npm 后可用）**
+**路 2：npm 包名（推荐）**
 Add plugin 里填 `dsh-plugin-control-your-development`。该方式走 npm registry，国内会自动命中镜像，完全不碰 GitHub。
 
 **路 3：GitHub 加速代理**
@@ -198,7 +192,7 @@ Add plugin 里填 `dsh-plugin-control-your-development`。该方式走 npm regis
 
 ## English quick reference
 
-**Plugin + skill (recommended, one step)** — DSH → Plugins → Add plugin → paste `https://github.com/HaoyanZhang123/dsh-plugin-control-your-development`; the plugin installs the bundled skill into `<dshHome>/skills/` for every workspace. Details in the sections above (Chinese).
+**Plugin + skill (recommended, one step)** — DSH → Plugins → Add plugin → paste `dsh-plugin-control-your-development` (npm package name; no git and no GitHub access needed); the plugin installs the bundled skill into `<dshHome>/skills/` for every workspace. Details in the sections above (Chinese).
 
 **Skill only (no panel)** — copy the folder, nothing to install:
 
@@ -216,8 +210,7 @@ When both exist, the project-level copy wins — handy for trying a new version 
 
 **Panel plugin (optional)** — DSH → Plugins in the sidebar → Add plugin, then one of:
 
-1. **Local absolute path** (works today, recommended): `<clone>/panel/dsh-plugin-control-your-development`
-2. **Package name** `dsh-plugin-control-your-development` (once published to npm)
-3. **Git URL** — requires the plugin to sit at the repo root; this repo bundles skill + panel, so use option 1 for now.
+1. **Package name** (recommended): `dsh-plugin-control-your-development`
+2. **Local absolute path** (offline / development): the repo root, e.g. `<clone>` (the repo root *is* the plugin package)
 
 **Uninstall / upgrade**: delete the skill folder (your project's `dev-dashboard/` is untouched); overwrite to upgrade. The panel is toggled/uninstalled from the Plugins page; installed plugins don't auto-update — to upgrade, uninstall and reinstall the new version.

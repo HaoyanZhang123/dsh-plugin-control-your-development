@@ -1,185 +1,141 @@
-# 这个版本不是很好用，大家先不用下这个插件，之后我会重构更好用的版本，感谢支持！
+<p align="center">
+  <img src="docs/images/cover.png" alt="Cover: a product map linking Product, Features, Tech Map and Now, under the headline Control Your Development" width="100%">
+</p>
 
-# dsh-plugin-control-your-development
+<h1 align="center">control-your-development</h1>
+<p align="center">Turn the development process into a product dashboard you can actually read and control.</p>
+<p align="center">A DSH plugin + skill · npm <code>dsh-plugin-control-your-development</code> · <a href="README.zh.md">中文</a></p>
+<p align="center">Plugin <code>0.7.0</code> · skill <code>1.7.0</code> · DSH <code>&gt;=0.2.0-0</code></p>
 
-> 把开发过程翻译成你看得懂、能掌控的产品仪表盘。
-> 人话 Markdown 是事实源；仪表盘钉在 DSH 里（右侧边栏 + 会话页顶部整页功能地图），面板上的拍板直接送达 AI；需要分享时才导出单文件离线网页。
+> **Note from the maintainer:** This version is not very usable yet — please hold off on installing the plugin for now. I will refactor a more usable version later. Thanks for your support!
 
-版本：skill v1.7.0 · 面板插件 v0.7.0　|　许可：[MIT](LICENSE)　|　语言：[English](README.en.md)
+<p align="center">
+  <a href="https://deepseek.com/harness/"><img alt="DSH · DeepSeek Harness" src="https://img.shields.io/badge/DSH-DeepSeek%20Harness-4B5563"></a>
+  <a href="https://www.npmjs.com/package/dsh-plugin-control-your-development"><img alt="npm version" src="https://img.shields.io/npm/v/dsh-plugin-control-your-development"></a>
+  <a href="https://github.com/HaoyanZhang123/dsh-plugin-control-your-development/releases"><img alt="GitHub release" src="https://img.shields.io/github/v/release/HaoyanZhang123/dsh-plugin-control-your-development"></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/github/license/HaoyanZhang123/dsh-plugin-control-your-development"></a>
+  <a href="https://www.python.org/"><img alt="Python 3 · standard library" src="https://img.shields.io/badge/Python%203-stdlib-3776AB?logo=python&logoColor=white"></a>
+  <a href="https://commonmark.org/"><img alt="Source of truth: Markdown" src="https://img.shields.io/badge/source%20of%20truth-Markdown-000000?logo=markdown&logoColor=white"></a>
+</p>
 
-<img width="1280" height="427" alt="f6d590dff9d8870500ca74dcd2fca2e6_720" src="https://github.com/user-attachments/assets/513debd0-7450-4c36-b89e-62f59b4f1d50" />
+<p align="center">
+  <a href="#overview">Overview</a> ·
+  <a href="#features">Features</a> ·
+  <a href="#installation">Installation</a> ·
+  <a href="#usage">Usage</a> ·
+  <a href="#repository-layout">Repository layout</a> ·
+  <a href="#releases">Releases</a> ·
+  <a href="#license">License</a>
+</p>
 
----
+## Overview
 
-## 使用视频预览
+You are building a product with AI, but code, commits and terminals are not the language you think in. **control-your-development** keeps the project's own story in human-readable Markdown — what the product does, where each feature stands, what changed and what is waiting for your call — and renders it as a dashboard that stays inside DSH. The AI maintains the Markdown; you read the dashboard and make decisions.
 
+It ships as a DSH **skill** plus an optional **panel plugin**. The skill teaches the AI to set up and maintain `dev-dashboard/`; the plugin pins the dashboard in the right sidebar and adds a full-page map view on top of the conversation. The same source files render the views, so the sidebar, the full-page map and the optional offline snapshot never disagree.
 
-https://github.com/user-attachments/assets/725f67f9-b18e-426e-9dab-52aeb6e30188
+## Features
 
+- **Markdown as the single source of truth.** `PRODUCT.md` (what it is, who it is for, where it is heading), `FEATURES.md` (state, evidence and dependencies per feature), `NOW.md` (timeline, decisions and to-dos), plus `GLOSSARY.md`, `TECH.md` and `CHANGES.md` created by default. `index.html` and `.view.json` are machine artifacts — never edited by hand.
+- **Progress you define.** Every feature moves through Idea → In Progress → Usable → Verified. The AI may mark a feature Usable at most; Verified only happens when you say so, and the progress bar counts verified features only. Revoking verification, rework and deprecation are recorded in the timeline.
+- **A unified workspace (v0.7.0).** Five tabs — Project, Feature Map, Now, Decisions & To-dos, Glossary — plus a right-side context inspector (what it is / why / where the evidence is / what you can do) and a collapsible progress-and-decisions drawer at the bottom.
+- **Feature map and tech map.** Five-state cards, dependency edges, collapsible sub-items, wheel zoom, drag-to-pan, fit-to-screen and a real fullscreen view. The toolbar switches to a Tech view that lays modules out by layer and draws dependencies; links to modules that do not exist yet are drawn as broken stubs.
+- **Whole-chain focus.** Hovering or keyboard-focusing a node previews its ancestors and descendants; clicking pins the focus. Only opacity changes — no node positions move.
+- **Decisions that reach the AI.** Select options (multi-select is allowed), add a note and press Send — the decision goes straight into the current session. If the session is offline it is queued in `dev-dashboard/.inbox.jsonl` and picked up at the next update, and every decision saves a version snapshot you can compare or restore from.
+- **Run controls scoped to the current session.** Stop the current turn (the queue is kept), stop and clear the queue (with a confirmation), or retry the last message. The run status is a read-only projection of the session; when it cannot be observed the UI says so instead of guessing.
+- **One fingerprinted read model.** The renderer writes `dev-dashboard/.view.json` atomically with `sourceHashes`; the panel and the offline page only consume it. If the model is stale, the old map stays visible and is labelled, and actions that depend on stale context are disabled. If the dashboard was written by a newer plugin, it is treated as read-only instead of being silently misread.
+- **Honest by construction.** Every code change must be included in the dashboard or explicitly ignored — silent omission is rejected. Missing evidence files and unfiled facts fail the render loudly, and the tech map announces modules whose evidence no longer exists.
+- **A single-file offline snapshot.** Say "export the web version" to get one `index.html`: zero dependencies, zero network, light/dark adaptive and print-friendly. Since v0.7.0 it is a **read-only snapshot** labelled with its export time and source version — there is no folder permission prompt and no write-back.
+- **No code changes to your project.** It reads change records and writes only inside `dev-dashboard/`. Git is optional — without git it falls back to file modification times and labels the source.
 
-https://github.com/user-attachments/assets/ffe674a0-6fc2-4ff4-9677-883313ace114
+## Installation
 
+**Prerequisite:** DSH desktop. DSH is in preview and its plugin APIs are still evolving.
 
-
-## 这是什么
-
-你在用 AI 做产品，但代码、提交记录、命令行都不是你的语言。**control-your-development** 把"开发做到哪了"翻译成一份产品视角的仪表盘：
-
-- 这个产品是干什么的、现在往哪个方向走——一页说清；
-- 每个功能做到哪一步，进度条只统计**你亲手验证过**的功能；功能多了还能拆成**子项**，地图上默认折叠、点击展开；
-- 最近发生了什么变更、有什么事在**等你拍板**——打开就知道，**点一下选项就直接发给 AI**，不用复制粘贴；
-- 长项目用词不漂移：可选的**术语表**统一叫法，别名写进正文会在数据健康里报警。
-- 同一张地图还能切到**技术**视角：这些功能是怎么搭起来的（模块 / 层 / 技术 / 证据 / 依赖），并主动说出**哪里已经跟不上了**——证据找不到、证据文件被删可能搬迁、看板比插件新。
-
-它是一个 DSH skill（教 AI 怎么替你维护仪表盘）+ 一个 DSH 内嵌面板（右侧边栏，另有会话页顶部的整页「功能地图」）。想要能发给别人看的离线网页，说一句"导出网页版"即可。
-
-## 30 秒上手
-
-前提：你已安装 DSH 桌面版。
-
-1. **装插件（一步搞定，配套 skill 会一起装好）**：DSH → 左侧 Plugins → Add plugin → 填 npm 包名：
+1. Open **DSH → Plugins → Add plugin**.
+2. Enter the npm package name:
 
    ```
    dsh-plugin-control-your-development
    ```
 
-   走 npm registry，**国内自动命中镜像、不碰 GitHub**。插件激活时会把自己带的 skill 装进**全局技能目录**（`<dshHome>/skills/`）——**所有工作区都能用**，不用你手动拷目录。
+3. The plugin activates and installs the bundled skill into the global skills directory (`<dshHome>/skills/`), so every workspace can use it.
 
-   > 已在 **macOS 与 Windows 实机验证可用**；连不上 npm 时可用 Release 里的离线 `.tgz`（Add plugin 填文件绝对路径）。
+Installing from npm needs neither git nor GitHub access; in mainland China the registry mirror is used automatically. Other paths:
 
-2. 用 DSH 打开你的项目，对 AI 说一句：**"control my development"**（或"帮我建立开发仪表盘"）。
-
-3. AI 会在项目里建好 `dev-dashboard/`；右侧边栏面板会自动显示**当前工作区**的看板——换个项目就换一份看板（没建过的项目，面板里会给你一个"发送"按钮，点一下就让 AI 建立）。
-
-> 不想装插件也行：把 `skill/control-your-development/` 整个目录拷到你项目的 `.dsh/skills/` 下（**先建好 `.dsh\skills` 目录**，否则 PowerShell 会把整条路径当成新目录名、把 skill 平铺到错位置）。
-
-更详细的安装方式（全局安装、面板插件、卸载与升级）见 [INSTALL.md](INSTALL.md)。
-
-## 看一看
-
-**仪表盘「项目」首页**：一句话定位、当前方向、掌控条。
-<img width="2270" height="1712" alt="image" src="https://github.com/user-attachments/assets/899b55c0-4689-414e-b399-1860044937ed" />
-**「功能地图」页**：功能卡片五态（设想 / 进行中 / 可用 / 已验证 / 已废弃）+ 依赖关系图。
-<img width="2208" height="1206" alt="image" src="https://github.com/user-attachments/assets/00f2b951-9461-4f64-bfd8-941939424f6a" />
-**「现在」页**：时间线与等你拍板的决策卡。
-<img width="2256" height="1340" alt="image" src="https://github.com/user-attachments/assets/cb178727-c988-4024-9fe0-812452a8be57" />
-<img width="2272" height="1290" alt="image" src="https://github.com/user-attachments/assets/d48a39d7-7a80-43d6-a55b-bf1e45b5e9bf" />
-**DSH 右侧边栏内嵌面板**（与 文件 / 终端 / 浏览器 同列，标签带当前项目名）。
-<img width="1290" height="1448" alt="image" src="https://github.com/user-attachments/assets/074cf2e8-e31d-40b6-b597-b911c733af1a" />
-**关系图「⛶ 全屏」**：功能一多，小栏里显示不下——点工具栏的全屏进**真·窗口全屏**看图，再点一次或按 Esc 退出；拿不到全屏能力时退回铺满视口的弹层。
-<img width="2284" height="1740" alt="image" src="https://github.com/user-attachments/assets/ec2310c1-ff2f-4e15-873f-35c0fda61cb1" />
-**「📖 术语表」页**：标准用词 / 指什么 / 别名·曾用名 一张表钉住用词；别名写进正文会在数据健康里报「用词漂移」，明细可逐条「让 AI 统一」。
-<img width="2272" height="1706" alt="image" src="https://github.com/user-attachments/assets/b6fb6aeb-1c36-4b39-9f4f-fb2fdeed5f50" />
-
-
-## 功能亮点
-
-**人话文件，各管一件事**
-- `PRODUCT.md`：门面——这是什么、给谁用、现在往哪走；
-- `FEATURES.md`：状态——每个功能做到哪一步，附证据与依赖；大功能可拆**子项**（地图上折叠成徽标，点击展开）；
-- `NOW.md`：动态——最近发生了什么、哪些事等你拍板；
-- `GLOSSARY.md`：术语表——全项目用词的唯一对照标准（**默认随 init 建立**，文件名可自定义，认表头不认名字）；有自己的「📖 术语表」tab，正文里写别名会在数据健康里报「用词漂移」并列出明细。
-- `TECH.md`：技术地图——这些功能由哪些模块搭起来、各在哪一层、依赖谁；**默认随 init 建立**，在「功能地图」里用「功能 | 技术」切换查看，模块的证据和功能证据走同一条红线；
-- `CHANGES.md`：变更规则——这个项目里改动该怎么归置（**默认随 init 建立**，从功能与证据路径推出来的初稿，推不出来的留「待确认」）；
-
-**进度由你定义（状态机）**
-每个功能的主路径是 设想 → 进行中 → 可用 → 已验证。AI 最多把功能标到「可用」；「已验证」三个字只有你亲口说过才算数，进度条也只统计已验证的功能。状态也能往回走：撤销验证退回「可用」（功能没坏，只是撤回盖章）、返工重做退回「进行中」、废弃归入「已废弃」、废弃的还能恢复为「设想」——每次回退都会在时间线留一笔。
-
-**双向闭环：面板上的拍板直接送达 AI**
-拍板中心里点选选项、写补充，点「📤 发送拍板」就直接送进当前会话；功能详情里的「开始做这个 / 返工重做 / 废弃」等按钮同理。AI 不在线时会先记进 `dev-dashboard/.inbox.jsonl`，下次更新自动收取——不会丢。你的每个拍板都会记进时间线，并自动存一份**版本快照**（🕓 按钮随时回看、对比当前）。
-
-**整页「功能地图」**
-会话页顶部、与「对话 / 轨迹」并列：整页宽度看功能关系图，滚轮缩放、拖拽平移、一键适应屏幕，工具栏「⛶ 全屏」还能铺满窗口看图（再点一次或 Esc 退出）；节点宽度自适应名字，长名称自动折行省略、悬浮看全文；文件路径中间省略、悬浮看完整路径。工具栏上还能切到「**技术**」视角：模块按层排开、依赖连成边，指向还不存在的模块会画成断头桩并标出缺的是哪个（还没有 `TECH.md` 时按钮照样在，空态里可一键建立）。**整页看地图时输入框不再占位**——有待审批 / 待提问 / 待复核计划时例外保留。
-
-**单文件离线网页（可选导出）**
-想发给合伙人或客户看，说一声"导出网页版"：单个 `index.html`，零依赖、零联网、深浅色自适应、打印友好。
-
-**诚实机制，漏了会报警**
-- 每条代码变更都必须被收录进仪表盘、或被显式忽略，**不允许静默遗漏**；
-- 证据文件被删、待办事实没归置时，生成过程会响亮报错，绝不放行一份"看起来没事"的仪表盘；
-- 所有功能描述必须引用真实存在的文件作证据，编不出来。
-
-**地图会主动说"这块过期了"**
-某个技术模块当时写下的证据现在一条都找不到，技术视图标题旁就会出现 ⚠（图例下与审计里是同一句话）：`技术地图里有 N 个模块的证据找不到了：X。` / `这份地图可能已经跟不上代码了。` / `去技术地图里把这几条证据改对。`。本轮被删掉的文件如果正好是某条证据，会提示"证据文件已被删除（可能搬迁）"，由你确认是搬走了还是真没了。两类信号都 **fail-closed**：没有上一份快照、或没有命中，一律不产——不做"永远在报"的假警告。只被技术地图或变更规则声明的文件会在审计里**单列**（超过 10 条提醒复核）。
-
-**看板比插件新时会说，而不是默默读错**
-若 `dev-dashboard/.cyd.json` 出自更新的插件或 skill（格式超前，或写入者版本比当前插件新），面板与离线网页给出同一条提示——`.cyd.json 是更新版插件写的，当前版本读不全。` / `所以这次不改它，免得把新内容写坏。` / `升级插件后再看就行。`，并且**只读、不写回**：旧版本不会拿自己去改新数据。
-
-## 安装
-
-| 装什么 | 最快路径 |
+| What | How |
 |---|---|
-| **插件 + skill（推荐，一步到位）** | DSH → Plugins → Add plugin → 填 `dsh-plugin-control-your-development`（npm 包名，国内走镜像；插件会把配套 skill 自动装到全局技能目录） |
-| 只装 skill（不用面板） | 把 `skill/control-your-development/` 拷到项目的 `.dsh/skills/` |
-| 离线安装（连不上 npm） | 下载 Release 附件里的 `.tgz`，Add plugin 里填它的**绝对路径** |
-| ⚠️ 不推荐：填 GitHub 地址 | 需要本机装 git 且能连 GitHub；国内常失败——请改填 npm 包名 |
+| Plugin + skill (recommended) | DSH → Plugins → Add plugin → `dsh-plugin-control-your-development` |
+| Skill only, no panel | Copy `skill/control-your-development/` into `.dsh/skills/` of your project (create the directory first) |
+| Offline / another machine | Get the tarball from the npm registry (`https://registry.npmjs.org/dsh-plugin-control-your-development/-/dsh-plugin-control-your-development-0.7.0.tgz`), move it over, then Add plugin with its **absolute path** |
 
-详解（全局安装、离线安装、卸载与升级）：[INSTALL.md](INSTALL.md)
+Compatibility: the plugin declares `>=0.2.0-0` for its DSH peers and has been verified by the maintainers on DSH `0.2.1-rc.2` (macOS and Windows; Linux is not verified on a real machine). DSH does not auto-update installed plugins: to upgrade, uninstall the old version, add the plugin again, then refresh the page or restart DSH.
 
-## 日常使用
+Full details — global skill install, offline install, uninstall and upgrade: [`INSTALL.md`](INSTALL.md).
 
-装好后，在 DSH 对话里用自然语言驱动：
+## Usage
 
-| 你说 | AI 做 |
+1. Open your project in DSH.
+2. Say **"control my development"** (or "set up a development dashboard for me"). The AI creates `dev-dashboard/` with the Markdown files, renders the first dashboard and starts a file watcher.
+3. The sidebar panel shows the dashboard of the **workspace you have open**; switch projects and it follows. For a workspace without a dashboard, the panel offers a button that asks the AI to set one up.
+
+Then drive everything in plain language:
+
+| You say | What happens |
 |---|---|
-| "control my development" / "帮我建立开发仪表盘" | 初始化 dev-dashboard |
-| "这个阶段做完了，更新一下仪表盘" | 采集变更、更新 Markdown、重新渲染（面板即时可见） |
-| 面板上点「发送拍板」，或说 "拍板 D1：选 A、C" | 记录你的决定、存一份版本快照、继续开发 |
-| "记账功能我验证过了"（或详情页「✅ 我已验证」） | 把该功能标为「已验证」，进度条前进 |
-| "存个版本" | 把当前 Markdown 存成一份版本快照，随时对比 |
-| "导出网页版" | 生成单文件 `index.html`，双击即开、可分享 |
+| "control my development" | The dashboard is initialized in the current project |
+| "This phase is done — update the dashboard" | Changes are collected, the Markdown is updated and re-rendered; the panel refreshes |
+| "Decision D1: A and C" (or send it from the panel) | Your call is recorded, a version snapshot is saved, and work continues |
+| "I have verified the expense logging feature" | The feature is marked Verified and the progress bar moves |
+| "Save a version" | The current Markdown is saved as a snapshot you can compare or restore |
+| "Export the web version" | A single-file `index.html` snapshot is written next to the dashboard |
 
-仪表盘本身不用你动手维护——它是机器产物，永远由 Markdown 事实源重新生成。
+### What it looks like
 
-## 仓库里有什么
+These are snapshots of the **offline dashboard** for a demo project; the sidebar panel renders the same core UI, with host-only additions such as the full-page map and current-session run controls. The dashboard's interface copy is currently Chinese; the panel's name and description follow the DSH app locale.
+
+**Project** — one-line positioning, direction and next step, the control strip, and the real usage flow.
+
+<img src="docs/images/home.png" alt="Project tab: positioning, direction, control strip and usage flow" width="100%">
+
+**Feature Map** — five-state cards, dependencies and collapsible sub-items.
+
+<img src="docs/images/features.png" alt="Feature map: five-state cards, dependency graph and sub-item badges" width="100%">
+
+**Now** — the timeline of what happened.
+
+<img src="docs/images/now.png" alt="Now tab: timeline of recent changes" width="100%">
+
+**Decisions & To-dos** — pending decisions, settled decisions and open to-dos.
+
+<img src="docs/images/decisions.png" alt="Decisions and to-dos tab: pending decisions and open to-dos" width="100%">
+
+**Glossary** — standard terms, and terminology drift found in the body text.
+
+<img src="docs/images/glossary.png" alt="Glossary tab: standard terms and terminology drift" width="100%">
+
+The dashboard is always regenerated from the Markdown source of truth. Hand edits to `index.html` or `.view.json` are overwritten; to change content, change the Markdown or tell the AI what should change.
+
+## Repository layout
 
 ```
 dsh-plugin-control-your-development/
-├─ package.json / cordis.patch.yml   ← 面板插件清单（仓库根就是插件包，所以能一键装）
-├─ lib/ src/ tools/                  ← 面板：浏览器端 bundle / 源码 / 构建脚本
-├─ PLUGIN.md                         ← 面板说明与开发须知
-└─ skill/
-   └─ control-your-development/      ← 仪表盘能力本体
-      ├─ SKILL.md / manifest.yaml    ← skill 定义
-      ├─ static/                     ← AI 的工作纪律与流程
-      ├─ templates/                  ← 六份人话文件模板（PRODUCT / FEATURES / NOW / 术语表 / 变更规则 / 技术地图）+ 网页模板
-      ├─ scripts/                    ← 生成网页 / 采集变更 / 自动看护（纯 Python 标准库）
-      └─ references/                 ← 数据格式约定
+├─ package.json / cordis.patch.yml   ← panel manifest (the repo root is the plugin package)
+├─ lib/ src/ tools/                  ← browser bundle / source / build script
+├─ skill/control-your-development/   ← the capability itself
+│  ├─ SKILL.md / manifest.yaml       ← skill definition
+│  ├─ static/                        ← the AI's working discipline and workflow
+│  ├─ templates/                     ← Markdown templates and the shared render core
+│  ├─ scripts/                       ← render / collect / watch (Python standard library)
+│  └─ references/                    ← data format, copy deck and design tokens
+├─ docs/images/                      ← cover and dashboard screenshots
+└─ INSTALL.md / CHANGELOG.md
 ```
 
-## FAQ
+## Releases
 
-**需要什么环境？**
-DSH 桌面版。生成网页只用 DSH 自带的 Python，纯标准库、零安装、零联网。
+The current release is **v0.7.0**; the changelog is in [`CHANGELOG.md`](CHANGELOG.md) and release notes for every version live on the [Releases page](https://github.com/HaoyanZhang123/dsh-plugin-control-your-development/releases). Upgrading requires uninstalling the old plugin and adding the new version, then refreshing the page or restarting DSH.
 
-**它会不会改我的代码？**
-不会。它只读取变更记录，写的东西全部限定在 `dev-dashboard/` 一个目录里。
+## License
 
-**项目没有 git 能用吗？**
-能。有 git 就用 git 采集变更；没有 git 自动按文件修改时间采集，并在网页上标明来源。
-
-**仪表盘会自己更新吗？**
-会，但有前提。AI 每次改完 Markdown 都会立刻重新渲染（"改完即渲染"），面板随即自动刷新，所以在对话里推进时你看到的永远是最新的。init 时 AI 还会启动一个后台看护进程（`watch_dashboard.py`）：只要它还在运行，Markdown 一变就自动重渲染。看护进程停了（会话结束、后台任务被系统回收、机器重启），仪表盘就不会自己变——那时对 AI 说一句"更新一下仪表盘"即可。
-
-**v1.3 有什么变化？**
-① 功能可拆 `### 子项:`（地图默认折叠、点击展开）；② 新增可选 `GLOSSARY.md` 术语表与用词漂移警告；③ 面板上的拍板/动作按钮从"复制指令"升级为"直接发送"（AI 不在线时记进 `.inbox.jsonl` 兜底）；④ 会话页顶部新增整页「功能地图」；⑤ 拍板落定自动存版本快照；⑥ `index.html` 从"每次必生成"降级为"可选导出"——已存在的会保持更新，不存在的不再生成，要分享时说"导出网页版"。
-
-**`index.html` 能直接改吗？**
-不能，它是机器产物（可选导出），手改会在下次生成时被覆盖。想改内容就改 Markdown——通常你只要在对话里说一句，AI 会替你改。
-
-**面板插件必须装吗？**
-不必须。skill 本体就能维护仪表盘（离线网页照样能导出）；面板让你不用切窗口、拍板不用复制粘贴。
-
-**网页端点「🔄 更新」报错、或点了没反应？**
-网页版要读写你项目里的 `dev-dashboard/`，需要你**授权文件夹访问**：浏览器会弹一次权限框，请选**包含 `dev-dashboard/` 的项目根目录**。授权后浏览器会记住它。右侧栏面板不需要授权——它走 DSH 自己的读接口。
-
-**怎么更新到新版本？**
-插件：DSH → Plugins → 卸载，再 Add plugin 填 `dsh-plugin-control-your-development`（也可指定版本 `dsh-plugin-control-your-development@0.6.2`）；更新后**刷新页面（Ctrl+R）或重启 DSH**。skill：跟随插件自动更新；手动装的那份重新拷一次即可。
-
-**macOS / Linux 能用吗？**
-能。**macOS 与 Windows 均已实机验证可用**（网页端 + 右侧栏面板）；Linux 未实机验证，但脚本只用跨平台 API、路径按可移植写法提供。
-
-## 许可与贡献
-
-[MIT](LICENSE) © 2026 dsh-plugin-control-your-development contributors。
-问题与建议请走 GitHub Issues；维护者发布流程见 [RELEASE-CHECKLIST.md](RELEASE-CHECKLIST.md)。
+[MIT](LICENSE) © 2026 dsh-plugin-control-your-development contributors. Questions and suggestions are welcome through GitHub Issues.

@@ -34,8 +34,7 @@ python tools/contract_check.py .dsh/skills/control-your-development
 - [ ] `.dsh/skills/control-your-development/manifest.yaml` 的 `version`
 - [ ] `.dsh/skills/control-your-development/README.md` 头部的版本行
 - [ ] `projects/dsh-plugin-control-your-development/plugin/package.json` 的 `version`
-- [ ] `release/dsh-plugin-control-your-development/README.md` 头部的版本行
-- [ ] `release/dsh-plugin-control-your-development/README.en.md` 头部的版本行
+- [ ] `release/dsh-plugin-control-your-development/README.md` 与 `README.zh.md` 里的版本叙述（插件版本 = `package.json`，skill 版本 = `manifest.yaml`）
 
 skill 与面板版本可以不同（本轮 skill 1.6.2 / panel 0.6.2），但每处自述必须等于实际。面板版本在 `package.json` 里、不属于 skill，改版时别漏；**面板版本号必须与 npm 包版本号、GitHub tag 三者一致**。
 
@@ -44,7 +43,7 @@ skill 与面板版本可以不同（本轮 skill 1.6.2 / panel 0.6.2），但每
 - [ ] 在冒烟项目 `projects/dsh-plugin-control-your-development/smoke/served-demo` 完整走一遍 init → update → decide → verify
 - [ ] `render_dashboard.py` 退出码为 0；掌控条"数据健康"为 ✅
 - [ ] 双采集分支都验：有 git 一次、无 git（mtime 退化）一次
-- [ ] 生成的 index.html 双击打开，四 Tab、关系图、拍板卡、深色模式、打印逐项肉眼过
+- [ ] 生成的 index.html 双击打开，五个 tab（项目 / 功能地图 / 现在 / 决策与待办 / 术语表）、关系图、拍板卡、深色模式、打印逐项肉眼过
 
 ## 4. 面板构建同步（D24 单一事实源）
 

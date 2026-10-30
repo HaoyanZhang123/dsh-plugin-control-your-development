@@ -1,18 +1,20 @@
-# 截图规范（7 张已就位）
+# 截图与封面（v0.7.0 现状）
 
-发布时 README 需要实拍截图，放在本目录，文件名固定：
+发布时 README 使用这些图，全部放在本目录，文件名固定。**除封面外都是 v0.7.0「统一工作区」的离线快照实拍**（五 tab：项目 / 功能地图 / 现在 / 决策与待办 / 术语表）。
 
-| 文件 | 内容 | 要求 |
+| 文件 | 内容 | 尺寸 |
 |---|---|---|
-| home.png ✅ | 「项目」首页：一句话定位 + 当前方向 + 五徽章掌控条 | 浅色主题，宽度 ≥1600px |
-| features.png ✅ | 「功能地图」页：功能卡五态（设想/进行中/可用/已验证/已废弃）+ 依赖关系图 | 同上 |
-| now.png ✅ | 「现在」页：时间线 + 拍板卡 | 同上 |
-| panel.png ✅ | DSH 右侧边栏内嵌面板实拍（与 文件/终端 同列） | 同上 |
-| fullscreen-button.png ✅ | 关系图工具栏「⛶ 全屏」按钮位置（带标注，#3 贡献） | 1621×865 |
-| fullscreen-effect.png ✅ | 点全屏之后：真·窗口全屏看图（带标注，#3 贡献） | 1920×1080 |
-| glossary-tab.png ✅ | 「📖 术语表」tab：词表 + 用词漂移明细（v0.5.4） | 2968×2000 |
+| `cover.png` | README 顶部封面（用户提供的设计图，非实拍） | 1800×600 |
+| `home.png` | 「项目」tab：掌控条（离线快照 / 当前阶段 / 数据更新于 / 上次采集 / 功能验证 / 等你拍板 / 数据健康）+ 项目简介 + 使用流程 | 2968×1764 |
+| `features.png` | 「功能地图」tab：功能关系图（五态图例、缩放/适应/全屏）、子项徽标、功能卡与证据 | 2968×2334 |
+| `now.png` | 「现在」tab：进展时间线 | 2968×1704 |
+| `decisions.png` | 「决策与待办」tab：待拍板决策、已定决策、待办 | 2968×2224 |
+| `glossary.png` | 「术语表」tab：标准用词与用词漂移明细 | 2968×1534 |
 
-> **现状（2026-10-10）**：7 张实拍图随仓库提供（`home.png` / `features.png` / `now.png` / `panel.png` / `fullscreen-button.png` / `fullscreen-effect.png` / `glossary-tab.png`）。除 `fullscreen-button.png` 外均为仓库内相对路径（不依赖 GitHub attachments 的长期可用性）；该按钮图目前在 README 里用的是 GitHub 附件 URL。注意 `docs/` 不在 `package.json.files` 里，所以这些图在 **npm 包内是断链**（GitHub 仓库页正常）。
-
-拍法：任一真实项目的 dev-dashboard/index.html 用 Edge 打开（或 DSH 面板截图），
-勿露隐私路径与个人信息；截前把演示数据整理干净。
+> **拍摄口径（2026-10-30）**：用仓库内 `skill/control-your-development/scripts/render_dashboard.py`（skill v1.7.0）渲染一个干净的演示夹具（记账本 mini：3 个证据文件 + 五份 Markdown），先跑 `collect_facts.py` 再 `--html` 导出（render 退出码 0、数据健康 ✅ 完整），然后在无头 Edge 里以 1484×1240 逻辑像素 / deviceScaleFactor 2 截五张图，按内容底部裁掉空白。脚本见 `output/_probe/cyd_v7_clean.mjs`（一次性探针，不在仓库内）。
+>
+> 图里是**离线快照**（首屏标「离线快照 · 导出于 … · v1.7.0」）；右侧边栏面板渲染同一套核心界面，README 已如实标注。没有面板实拍图：插件需要真实 DSH 实例，本轮未安装、不伪造。
+>
+> `docs/` 不在 `package.json.files` 里，这些图在 **npm 包内是断链**（GitHub 仓库页正常）；封面同理。
+>
+> 更新截图时：先改代码/渲染器，再重拍；**截图必须晚于最后一次代码改动**，且不得露真实用户路径与个人信息。
