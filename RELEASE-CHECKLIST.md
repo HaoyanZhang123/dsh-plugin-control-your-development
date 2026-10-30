@@ -6,10 +6,10 @@
 
 ## 0. 发布前阻塞待办（未清不许发）
 
-> **当前版本**：GitHub tag `v0.6.2` = npm `dsh-plugin-control-your-development@0.6.2`（版本号从此保持一致；更早的 v1.2.x / v1.3.x 是改名前的历史 tag，保留不动）
+> **当前版本**：GitHub tag `v0.7.0` = npm `dsh-plugin-control-your-development@0.7.0`（版本号从此保持一致；更早的 v1.2.x / v1.3.x 是改名前的历史 tag，保留不动）
 > 发布前已脱敏：去除本机路径示例、补全账号占位、提交身份使用 `HaoyanZhang123@users.noreply.github.com`。
 
-- [x] README 已放 **4 张实拍截图**（项目首页 / 功能地图 / 现在 / 面板），以 GitHub attachments 形式引用；`docs/images/` 保留为自有托管方案的规范
+- [x] README 已放 **封面 + 5 张实拍截图**（项目 / 功能地图 / 现在 / 决策与待办 / 术语表），以仓库内 `docs/images/` 相对路径引用
 - [x] 截图占位文案已换成正式图注
 - [x] 账号/仓库占位已全部替换为真实值（用户侧 `<你的项目路径>` 这类占位属设计保留）
 
@@ -34,9 +34,10 @@ python tools/contract_check.py .dsh/skills/control-your-development
 - [ ] `.dsh/skills/control-your-development/manifest.yaml` 的 `version`
 - [ ] `.dsh/skills/control-your-development/README.md` 头部的版本行
 - [ ] `projects/dsh-plugin-control-your-development/plugin/package.json` 的 `version`
-- [ ] `release/dsh-plugin-control-your-development/README.md` 与 `README.zh.md` 里的版本叙述（插件版本 = `package.json`，skill 版本 = `manifest.yaml`）
+- [ ] `release/dsh-plugin-control-your-development/README.md` 里的版本叙述（插件版本 = `package.json`，skill 版本 = `manifest.yaml`）
+- [ ] `release/dsh-plugin-control-your-development/README.zh.md` 里的版本叙述（同上）
 
-skill 与面板版本可以不同（本轮 skill 1.6.2 / panel 0.6.2），但每处自述必须等于实际。面板版本在 `package.json` 里、不属于 skill，改版时别漏；**面板版本号必须与 npm 包版本号、GitHub tag 三者一致**。
+skill 与面板版本可以不同（本轮 skill 1.7.0 / panel 0.7.0），但每处自述必须等于实际。面板版本在 `package.json` 里、不属于 skill，改版时别漏；**面板版本号必须与 npm 包版本号、GitHub tag 三者一致**。
 
 ## 3. 冒烟重跑
 
@@ -70,13 +71,13 @@ skill 与面板版本可以不同（本轮 skill 1.6.2 / panel 0.6.2），但每
 - [ ] **仓库根就是插件包**：根目录存在 `package.json`（含 `dsh.bundle`）、`cordis.patch.yml`、`lib/index.js`、`lib/client.js`；插件**不再**放在子目录（子目录会让 pnpm 生成 `_pnpmPlaceholder` 占位清单，DSH 读不到 `dsh.bundle` → 装不上）
 - [ ] **`files` 字段包含 `skill`**：否则安装时不会打包配套 skill，"插件自动装 skill"就失效
 - [ ] **实装验证**：`pnpm add <本仓库路径或 URL>` 后，装出来的包内必须有 `package.json`（含 `dsh.bundle`）、`cordis.patch.yml`、`lib/client.js`、`skill/control-your-development/SKILL.md` 四项
-- [ ] **行为验证**：DSH → Plugins → Add plugin → 粘贴仓库 URL → 右侧栏出现「开发仪表盘 · <项目名>」；换一个工作区会话，看板跟着换
+- [ ] **行为验证**：DSH → Plugins → Add plugin → 填 npm 包名（或仓库 URL）→ 右侧栏出现「开发仪表盘 · <项目名>」；换一个工作区会话，看板跟着换
 - [ ] 面板路径守门测试通过：`node smoke/panel_paths_test.js`（sessionId 传递 + dev-dashboard/ 前缀 + 无写死路径 + 标签带项目名）
 - [ ] CSS 作用域断言通过：`render_dashboard.py --self-test`（未作用域选择器会让自检失败）
 
 ## 6. 文档与链接
 
-- [ ] 仓内相对链接全部有效（README / README.en / INSTALL / docs 互链）
+- [ ] 仓内相对链接全部有效（README.md / README.zh.md / INSTALL / docs 互链）
 - [ ] README 与 INSTALL 里的命令在干净临时目录真实跑过一遍（拷目录 → self-test → 模板渲染）
 - [ ] 截图已补齐到 `docs/images/` 并替换 README 的占位说明
 - [ ] `HaoyanZhang123` 等占位全部替换为真实 GitHub 组织/用户名
@@ -87,9 +88,9 @@ skill 与面板版本可以不同（本轮 skill 1.6.2 / panel 0.6.2），但每
 - [ ] 描述：把开发过程翻译成你看得懂、能掌控的产品仪表盘（DSH skill + 面板插件）
 - [ ] topics：`dsh` `dsh-skill` `dsh-plugin` `dashboard` `ai-productivity`
 - [ ] 默认分支 `main`；首次推送 `git status` 干净、`.gitignore` 生效
-- [ ] Releases 建与 npm 同号的 tag（本轮 `v0.6.2`），附本轮变更摘要；确认它成为 Latest，旧 tag 不动
+- [ ] Releases 建与 npm 同号的 tag（本轮 `v0.7.0`），附本轮变更摘要；确认它成为 Latest，旧 tag 不动
 
 ## 8. 发布后立即做
 
 - [ ] 从 GitHub 地址重新克隆到临时目录，按 INSTALL.md 全流程复验一次（证明仓内内容自足）
-- [ ] 面板 npm 发布排期评估（方式 2 解锁后更新 INSTALL.md 状态）
+- [x] 面板 npm 发布已就绪（0.7.0 已发布；Trusted Publishing / OIDC 见 `.github/workflows/release.yml`）

@@ -32,7 +32,7 @@
 
 You are building a product with AI, but code, commits and terminals are not the language you think in. **control-your-development** keeps the project's own story in human-readable Markdown — what the product does, where each feature stands, what changed and what is waiting for your call — and renders it as a dashboard that stays inside DSH. The AI maintains the Markdown; you read the dashboard and make decisions.
 
-It ships as a DSH **skill** plus an optional **panel plugin**. The skill teaches the AI to set up and maintain `dev-dashboard/`; the plugin pins the dashboard in the right sidebar and adds a full-page map view on top of the conversation. The same source files render the views, so the sidebar, the full-page map and the optional offline snapshot never disagree.
+It ships as a DSH **skill** plus an optional **panel plugin**. The skill teaches the AI to set up and maintain `dev-dashboard/`; the plugin pins the dashboard in the right sidebar and adds a full-page map view on top of the conversation. All views render from one fingerprinted read model (`.view.json`), so they show the same data for the same source state; an exported snapshot is frozen at its export time.
 
 ## Features
 
@@ -69,7 +69,7 @@ Installing from npm needs neither git nor GitHub access; in mainland China the r
 | Skill only, no panel | Copy `skill/control-your-development/` into `.dsh/skills/` of your project (create the directory first) |
 | Offline / another machine | Get the tarball from the npm registry (`https://registry.npmjs.org/dsh-plugin-control-your-development/-/dsh-plugin-control-your-development-0.7.0.tgz`), move it over, then Add plugin with its **absolute path** |
 
-Compatibility: the plugin declares `>=0.2.0-0` for its DSH peers and has been verified by the maintainers on DSH `0.2.1-rc.2` (macOS and Windows; Linux is not verified on a real machine). DSH does not auto-update installed plugins: to upgrade, uninstall the old version, add the plugin again, then refresh the page or restart DSH.
+Compatibility: the plugin declares `>=0.2.0-0` for its DSH peers and has been installed on DSH `0.2.1-rc.2` on Windows; macOS and Linux use the same code paths, but no real-machine run for v0.7.0 is recorded. DSH does not auto-update installed plugins: to upgrade, uninstall the old version, add the plugin again, then refresh the page or restart DSH.
 
 Full details — global skill install, offline install, uninstall and upgrade: [`INSTALL.md`](INSTALL.md).
 

@@ -32,7 +32,7 @@
 
 你在用 AI 做产品，但代码、提交记录和命令行不是你的语言。**control-your-development** 把项目自己的故事留在人话 Markdown 里——产品是干什么的、每个功能做到哪一步、最近变了什么、哪件事在等你拍板——再渲染成一张钉在 DSH 里的仪表盘。Markdown 由 AI 维护，你负责看仪表盘、做决定。
 
-它由两件东西组成：一个 DSH **skill**（教 AI 建立并维护 `dev-dashboard/`）和一个可选的**面板插件**（把仪表盘嵌进右侧边栏，并在会话页顶部加一页整页功能地图）。面板、整页地图和可选的离线快照消费同一份事实源，所以它们不会各说各话。
+它由两件东西组成：一个 DSH **skill**（教 AI 建立并维护 `dev-dashboard/`）和一个可选的**面板插件**（把仪表盘嵌进右侧边栏，并在会话页顶部加一页整页功能地图）。面板、整页地图和可选的离线快照消费同一份带指纹的读模型（`.view.json`），同一份源数据下它们看到的是同一份内容；导出的快照冻结在导出时刻。
 
 ## 核心特性
 
@@ -69,7 +69,7 @@
 | 只装 skill，不要面板 | 把 `skill/control-your-development/` 拷到你项目的 `.dsh/skills/`（先建好目录） |
 | 离线 / 另一台机器 | 从 npm registry 取 tarball（`https://registry.npmjs.org/dsh-plugin-control-your-development/-/dsh-plugin-control-your-development-0.7.0.tgz`），拷过去后在 Add plugin 里填它的**绝对路径** |
 
-兼容性：插件的 DSH peer 依赖声明为 `>=0.2.0-0`，维护者已在 DSH `0.2.1-rc.2` 上实机验证（macOS 与 Windows；Linux 未实机验证）。DSH 不会自动更新已装插件：升级 = 卸载旧版 → 重新 Add plugin → 刷新页面或重启 DSH。
+兼容性：插件的 DSH peer 依赖声明为 `>=0.2.0-0`，维护者已在 Windows + DSH `0.2.1-rc.2` 上实机安装过；macOS 与 Linux 走同一套代码路径，但 v0.7.0 没有留下实机运行记录。DSH 不会自动更新已装插件：升级 = 卸载旧版 → 重新 Add plugin → 刷新页面或重启 DSH。
 
 完整说明（全局安装、离线安装、卸载与升级）见 [`INSTALL.md`](INSTALL.md)。
 
