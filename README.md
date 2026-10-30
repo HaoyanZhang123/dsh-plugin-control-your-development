@@ -69,7 +69,7 @@ Installing from npm needs neither git nor GitHub access; in mainland China the r
 | Skill only, no panel | Copy `skill/control-your-development/` into `.dsh/skills/` of your project (create the directory first) |
 | Offline / another machine | Get the tarball from the npm registry (`https://registry.npmjs.org/dsh-plugin-control-your-development/-/dsh-plugin-control-your-development-0.7.0.tgz`), move it over, then Add plugin with its **absolute path** |
 
-Compatibility: the plugin declares `>=0.2.0-0` for its DSH peers and has been installed on DSH `0.2.1-rc.2` on Windows; macOS and Linux use the same code paths, but no real-machine run for v0.7.0 is recorded. DSH does not auto-update installed plugins: to upgrade, uninstall the old version, add the plugin again, then refresh the page or restart DSH.
+Compatibility: the plugin declares `>=0.2.0-0` for its DSH peers and has been installed on Windows with DSH `0.2.1-rc.2`; macOS and Linux use the same code paths, but no real-machine run for v0.7.0 is recorded. DSH does not auto-update installed plugins: to upgrade, uninstall the old version, add the plugin again, then refresh the page or restart DSH.
 
 Full details — global skill install, offline install, uninstall and upgrade: [`INSTALL.md`](INSTALL.md).
 
