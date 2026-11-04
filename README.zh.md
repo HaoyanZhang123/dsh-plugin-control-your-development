@@ -96,6 +96,8 @@ plugin/
 
 ## 发布
 
+当前版本：**面板插件 v1.0.0-alpha.1**（alpha 预览版）。
+
 每个版本改了什么见 [CHANGELOG.md](CHANGELOG.md)，可安装的版本见 [Releases](https://github.com/HaoyanZhang123/dsh-plugin-control-your-development/releases)。`1.0.0-alpha.1` 是 alpha 预览版：界面与数据模型仍可能调整。
 
 ## 许可证

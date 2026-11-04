@@ -96,6 +96,8 @@ plugin/
 
 ## Releases
 
+Current release: **panel plugin v1.0.0-alpha.1** (alpha preview).
+
 See [CHANGELOG.md](CHANGELOG.md) for what changed in each version, and the [Releases](https://github.com/HaoyanZhang123/dsh-plugin-control-your-development/releases) page for installable versions. `1.0.0-alpha.1` is an alpha preview: the interface and the data model may still change.
 
 ## License
