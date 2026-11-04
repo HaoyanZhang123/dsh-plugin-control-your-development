@@ -30,6 +30,11 @@ jobs:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
 
+      # pnpm 不在 runner 默认镜像里：必须显式装（本轮实测漏了这步 → `pnpm: command not found`，exit 127）
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
       - name: 装开发依赖（构建/测试用；不进包）
         run: pnpm install
 
