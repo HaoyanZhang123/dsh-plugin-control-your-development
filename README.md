@@ -1,141 +1,103 @@
 <p align="center">
-  <img src="docs/images/cover.png" alt="Cover: a product map linking Product, Features, Tech Map and Now, under the headline Control Your Development" width="100%">
+  <img src="assets/images/threadline-cover.png" alt="Threadline star map: workspace files grouped by directory with structural, co-occurrence, reference and sequence edges" width="100%">
 </p>
 
-<h1 align="center">control-your-development</h1>
-<p align="center">Turn the development process into a product dashboard you can actually read and control.</p>
-<p align="center">A DSH plugin + skill · npm <code>dsh-plugin-control-your-development</code> · <a href="README.zh.md">中文</a></p>
-<p align="center">Plugin <code>0.7.0</code> · skill <code>1.7.0</code> · DSH <code>&gt;=0.2.0-0</code></p>
-
-> **Note from the maintainer:** This version is not very usable yet — please hold off on installing the plugin for now. I will refactor a more usable version later. Thanks for your support!
-
+<h1 align="center">Threadline · 脉络</h1>
+<p align="center">A permanent read-only visual map of how a DeepSeek Harness workspace actually developed.</p>
+<p align="center"><a href="README.zh.md">中文</a></p>
 <p align="center">
-  <a href="https://deepseek.com/harness/"><img alt="DSH · DeepSeek Harness" src="https://img.shields.io/badge/DSH-DeepSeek%20Harness-4B5563"></a>
-  <a href="https://www.npmjs.com/package/dsh-plugin-control-your-development"><img alt="npm version" src="https://img.shields.io/npm/v/dsh-plugin-control-your-development"></a>
-  <a href="https://github.com/HaoyanZhang123/dsh-plugin-control-your-development/releases"><img alt="GitHub release" src="https://img.shields.io/github/v/release/HaoyanZhang123/dsh-plugin-control-your-development"></a>
-  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/github/license/HaoyanZhang123/dsh-plugin-control-your-development"></a>
-  <a href="https://www.python.org/"><img alt="Python 3 · standard library" src="https://img.shields.io/badge/Python%203-stdlib-3776AB?logo=python&logoColor=white"></a>
-  <a href="https://commonmark.org/"><img alt="Source of truth: Markdown" src="https://img.shields.io/badge/source%20of%20truth-Markdown-000000?logo=markdown&logoColor=white"></a>
-</p>
-
-<p align="center">
-  <a href="#overview">Overview</a> ·
-  <a href="#features">Features</a> ·
-  <a href="#installation">Installation</a> ·
-  <a href="#usage">Usage</a> ·
-  <a href="#repository-layout">Repository layout</a> ·
-  <a href="#releases">Releases</a> ·
-  <a href="#license">License</a>
+  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white" alt="TypeScript"></a>
+  <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white" alt="React 18"></a>
+  <a href="https://github.com/deepseek-ai/deepseek-harness"><img src="https://img.shields.io/badge/DeepSeek%20Harness-plugin-4B6BFB" alt="DeepSeek Harness plugin"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green" alt="License MIT"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.0.0--alpha.1-orange" alt="Version 1.0.0-alpha.1"></a>
 </p>
 
 ## Overview
 
-You are building a product with AI, but code, commits and terminals are not the language you think in. **control-your-development** keeps the project's own story in human-readable Markdown — what the product does, where each feature stands, what changed and what is waiting for your call — and renders it as a dashboard that stays inside DSH. The AI maintains the Markdown; you read the dashboard and make decisions.
+Threadline answers a question that chat logs do not: **what did this workspace actually go through, and what did each turn change?**
 
-It ships as a DSH **skill** plus an optional **panel plugin**. The skill teaches the AI to set up and maintain `dev-dashboard/`; the plugin pins the dashboard in the right sidebar and adds a full-page map view on top of the conversation. All views render from one fingerprinted read model (`.view.json`), so they show the same data for the same source state; an exported snapshot is frozen at its export time.
+It reads what DeepSeek Harness has already recorded — sessions, subagents, tool calls, file operations, commands, background jobs — and turns it into a growing relationship map of the current workspace. Files that DSH touched become nodes, grouped by directory; turns become a strip at the bottom; every number can be traced back to a recorded event.
+
+It is **permanently read-only**. It never writes to your workspace, your session logs or your settings, never calls a model, and never makes an outbound request. It cannot start, stop or retry anything — there is deliberately no control surface at all.
+
+Typical use: you come back to a long session, or hand a workspace to someone else, and want to see where the work went.
 
 ## Features
 
-- **Markdown as the single source of truth.** `PRODUCT.md` (what it is, who it is for, where it is heading), `FEATURES.md` (state, evidence and dependencies per feature), `NOW.md` (timeline, decisions and to-dos), plus `GLOSSARY.md`, `TECH.md` and `CHANGES.md` created by default. `index.html` and `.view.json` are machine artifacts — never edited by hand.
-- **Progress you define.** Every feature moves through Idea → In Progress → Usable → Verified. The AI may mark a feature Usable at most; Verified only happens when you say so, and the progress bar counts verified features only. Revoking verification, rework and deprecation are recorded in the timeline.
-- **A unified workspace (v0.7.0).** Five tabs — Project, Feature Map, Now, Decisions & To-dos, Glossary — plus a right-side context inspector (what it is / why / where the evidence is / what you can do) and a collapsible progress-and-decisions drawer at the bottom.
-- **Feature map and tech map.** Five-state cards, dependency edges, collapsible sub-items, wheel zoom, drag-to-pan, fit-to-screen and a real fullscreen view. The toolbar switches to a Tech view that lays modules out by layer and draws dependencies; links to modules that do not exist yet are drawn as broken stubs.
-- **Whole-chain focus.** Hovering or keyboard-focusing a node previews its ancestors and descendants; clicking pins the focus. Only opacity changes — no node positions move.
-- **Decisions that reach the AI.** Select options (multi-select is allowed), add a note and press Send — the decision goes straight into the current session. If the session is offline it is queued in `dev-dashboard/.inbox.jsonl` and picked up at the next update, and every decision saves a version snapshot you can compare or restore from.
-- **Run controls scoped to the current session.** Stop the current turn (the queue is kept), stop and clear the queue (with a confirmation), or retry the last message. The run status is a read-only projection of the session; when it cannot be observed the UI says so instead of guessing.
-- **One fingerprinted read model.** The renderer writes `dev-dashboard/.view.json` atomically with `sourceHashes`; the panel and the offline page only consume it. If the model is stale, the old map stays visible and is labelled, and actions that depend on stale context are disabled. If the dashboard was written by a newer plugin, it is treated as read-only instead of being silently misread.
-- **Honest by construction.** Every code change must be included in the dashboard or explicitly ignored — silent omission is rejected. Missing evidence files and unfiled facts fail the render loudly, and the tech map announces modules whose evidence no longer exists.
-- **A single-file offline snapshot.** Say "export the web version" to get one `index.html`: zero dependencies, zero network, light/dark adaptive and print-friendly. Since v0.7.0 it is a **read-only snapshot** labelled with its export time and source version — there is no folder permission prompt and no write-back.
-- **No code changes to your project.** It reads change records and writes only inside `dev-dashboard/`. Git is optional — without git it falls back to file modification times and labels the source.
+- **Workspace star map** — files DSH actually touched, clustered by directory; node size follows operation count, colour follows file family. Up to 600 active files are rendered, and the UI says so when it collapses the rest.
+- **Four relation layers** — structure, co-occurrence (same turn / same conversation), reference (parsed from file text) and sequence (order inside one turn). Co-occurrence is never presented as a dependency, and unconfirmed references are listed instead of drawn.
+- **Turn strip** — every turn of a session with status, duration, file / command / error / subagent markers. The turn that is still recording is labelled as such.
+- **Three inspectors** — file, turn and session, each showing the recorded evidence behind the number, plus later touches and a comparison with the previous turn.
+- **`/threadline` command** — rebuilds one conversation as structure: start, end, turn trail, the files it touched, and what is still open.
+- **Per-turn impact** — a single icon next to each finished assistant message; it opens the impact of that turn and can jump into the full map.
+- **Privacy mode** — metadata first, content folded by default; privacy mode masks paths to basenames, commands to program names and titles to session numbers.
+- **List view** — the same data as keyboard-navigable file and turn tables, for accessibility and for reading instead of scanning.
+- **Progressive load** — the plugin starts scanning the current workspace as soon as it loads and keeps updating incrementally, so the tab is already populated when you open it.
+- **Honest by design** — not loaded, failed to read, not observed and estimated are all shown as such; nothing is replaced by `0` or an empty state.
 
 ## Installation
 
-**Prerequisite:** DSH desktop. DSH is in preview and its plugin APIs are still evolving.
+Requirements: DeepSeek Harness **0.2.2-rc.1** or newer, on a desktop or web profile.
 
-1. Open **DSH → Plugins → Add plugin**.
-2. Enter the npm package name:
+Install it as a DSH plugin from npm:
 
-   ```
-   dsh-plugin-control-your-development
-   ```
+```text
+Plugin manager → Add plugin → dsh-plugin-control-your-development@1.0.0-alpha.1
+```
 
-3. The plugin activates and installs the bundled skill into the global skills directory (`<dshHome>/skills/`), so every workspace can use it.
+Or install into a profile directly:
 
-Installing from npm needs neither git nor GitHub access; in mainland China the registry mirror is used automatically. Other paths:
+```bash
+dsh plugin add dsh-plugin-control-your-development@1.0.0-alpha.1 --profile desktop
+```
 
-| What | How |
-|---|---|
-| Plugin + skill (recommended) | DSH → Plugins → Add plugin → `dsh-plugin-control-your-development` |
-| Skill only, no panel | Copy `skill/control-your-development/` into `.dsh/skills/` of your project (create the directory first) |
-| Offline / another machine | Get the tarball from the npm registry (`https://registry.npmjs.org/dsh-plugin-control-your-development/-/dsh-plugin-control-your-development-0.7.0.tgz`), move it over, then Add plugin with its **absolute path** |
+Then reload the page (client code) or restart DSH (host code).
 
-Compatibility: the plugin declares `>=0.2.0-0` for its DSH peers and has been installed on Windows with DSH `0.2.1-rc.2`; macOS and Linux use the same code paths, but no real-machine run for v0.7.0 is recorded. DSH does not auto-update installed plugins: to upgrade, uninstall the old version, add the plugin again, then refresh the page or restart DSH.
-
-Full details — global skill install, offline install, uninstall and upgrade: [`INSTALL.md`](INSTALL.md).
+> Installed DSH plugins do not update automatically. Upgrading means uninstalling and installing the new version — this is a DSH behaviour, not a Threadline one.
 
 ## Usage
 
-1. Open your project in DSH.
-2. Say **"control my development"** (or "set up a development dashboard for me"). The AI creates `dev-dashboard/` with the Markdown files, renders the first dashboard and starts a file watcher.
-3. The sidebar panel shows the dashboard of the **workspace you have open**; switch projects and it follows. For a workspace without a dashboard, the panel offers a button that asks the AI to set one up.
+Open any conversation and pick the **脉络 / Threadline** tab next to 对话 / 轨迹. The tab fills the conversation area and scrolls on its own; the composer is hidden while you are in it, and comes back when you leave.
 
-Then drive everything in plain language:
+<p align="center">
+  <img src="assets/images/threadline-map.png" alt="Threadline tab: workspace star map with directory clusters and the four relation legends" width="100%">
+</p>
 
-| You say | What happens |
-|---|---|
-| "control my development" | The dashboard is initialized in the current project |
-| "This phase is done — update the dashboard" | Changes are collected, the Markdown is updated and re-rendered; the panel refreshes |
-| "Decision D1: A and C" (or send it from the panel) | Your call is recorded, a version snapshot is saved, and work continues |
-| "I have verified the expense logging feature" | The feature is marked Verified and the progress bar moves |
-| "Save a version" | The current Markdown is saved as a snapshot you can compare or restore |
-| "Export the web version" | A single-file `index.html` snapshot is written next to the dashboard |
+- Click a node to fix the selection: its neighbours stay lit, everything else fades, the inspector shows that file. `Esc` steps back out.
+- Pick a turn in the strip to highlight the files that turn touched; the inspector switches to that turn.
+- The timeline plays the workspace back in time; ranges are **today / 7 days / 30 days / all**.
 
-### What it looks like
+Two smaller entries use the same data:
 
-These are snapshots of the **offline dashboard** for a demo project; the sidebar panel renders the same core UI, with host-only additions such as the full-page map and current-session run controls. The dashboard's interface copy is currently Chinese; the panel's name and description follow the DSH app locale.
+- **`/threadline`** in the composer opens **本次对话的脉络** — the same conversation rebuilt as start → turn trail → end, with the files it produced and what is still open.
+- The **impact icon** under a finished assistant message opens that single turn's impact.
 
-**Project** — one-line positioning, direction and next step, the control strip, and the real usage flow.
+<p align="center">
+  <img src="assets/images/threadline-modal.png" alt="The /threadline dialog: conversation summary, turn trail and the files touched in this conversation" width="70%">
+</p>
 
-<img src="docs/images/home.png" alt="Project tab: positioning, direction, control strip and usage flow" width="100%">
+Threadline only reads the workspace the current session belongs to. Sessions from other workspaces, other profiles and other machines are not aggregated.
 
-**Feature Map** — five-state cards, dependencies and collapsible sub-items.
+## Configuration
 
-<img src="docs/images/features.png" alt="Feature map: five-state cards, dependency graph and sub-item badges" width="100%">
+None. There is no configuration file, no setting, no stored preference and no cached artefact — all filters, selections and time ranges live in memory and reset when you reload. The only thing it needs is the workspace it is already in.
 
-**Now** — the timeline of what happened.
+## Project structure
 
-<img src="docs/images/now.png" alt="Now tab: timeline of recent changes" width="100%">
-
-**Decisions & To-dos** — pending decisions, settled decisions and open to-dos.
-
-<img src="docs/images/decisions.png" alt="Decisions and to-dos tab: pending decisions and open to-dos" width="100%">
-
-**Glossary** — standard terms, and terminology drift found in the body text.
-
-<img src="docs/images/glossary.png" alt="Glossary tab: standard terms and terminology drift" width="100%">
-
-The dashboard is always regenerated from the Markdown source of truth. Hand edits to `index.html` or `.view.json` are overwritten; to change content, change the Markdown or tell the AI what should change.
-
-## Repository layout
-
-```
-dsh-plugin-control-your-development/
-├─ package.json / cordis.patch.yml   ← panel manifest (the repo root is the plugin package)
-├─ lib/ src/ tools/                  ← browser bundle / source / build script
-├─ skill/control-your-development/   ← the capability itself
-│  ├─ SKILL.md / manifest.yaml       ← skill definition
-│  ├─ static/                        ← the AI's working discipline and workflow
-│  ├─ templates/                     ← Markdown templates and the shared render core
-│  ├─ scripts/                       ← render / collect / watch (Python standard library)
-│  └─ references/                    ← data format, copy deck and design tokens
-├─ docs/images/                      ← cover and dashboard screenshots
-└─ INSTALL.md / CHANGELOG.md
+```text
+plugin/
+  src/shared/      event reducer, relation engine, reference parsers
+  src/host/        read-only scan, in-memory index, local read-only routes
+  src/client/      data layer, UI, three entries
+  lib/             build output loaded by DSH (do not edit)
+  tests/           unit, integration and screenshot harness
 ```
 
 ## Releases
 
-The current release is **v0.7.0**; the changelog is in [`CHANGELOG.md`](CHANGELOG.md) and release notes for every version live on the [Releases page](https://github.com/HaoyanZhang123/dsh-plugin-control-your-development/releases). Upgrading requires uninstalling the old plugin and adding the new version, then refreshing the page or restarting DSH.
+See [CHANGELOG.md](CHANGELOG.md) for what changed in each version, and the [Releases](https://github.com/HaoyanZhang123/dsh-plugin-control-your-development/releases) page for installable versions. `1.0.0-alpha.1` is an alpha preview: the interface and the data model may still change.
 
 ## License
 
-[MIT](LICENSE) © 2026 dsh-plugin-control-your-development contributors. Questions and suggestions are welcome through GitHub Issues.
+[MIT](LICENSE)

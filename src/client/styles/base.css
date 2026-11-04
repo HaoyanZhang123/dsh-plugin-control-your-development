@@ -1,0 +1,1152 @@
+/*
+ * base.css —— 脉络（Threadline）外壳与通用组件样式。
+ *
+ * 纪律（03 §3 / §13 / §14 / §15；06 A40-1/A40-2）：
+ * - 全部选择器挂 .threadline-app 前缀；卸载 = 移除注入的 <style>，宿主零残留；
+ * - 颜色只来自 tokens.css 的 --tl-*（本文件不出现任何颜色字面量）；
+ * - 布局全部用 .threadline-app 的容器查询（container-type: inline-size），
+ *   除 prefers-reduced-motion 外不使用任何 viewport media query；
+ * - 断点 1100 / 900 / 600 / 420；<1100 检查器变右侧覆盖层，<600 变底部 sheet；
+ * - 8px 网格；所有可伸缩盒子 min-width: 0，禁止页面级横向滚动。
+ */
+
+/* ========== 0. 根与重置（只作用于自己的容器） ========== */
+
+.threadline-app {
+  display: block;
+  block-size: 100%;
+  min-block-size: 360px;
+  overflow: hidden;
+  background: var(--tl-bg);
+  color: var(--tl-fg);
+  font-family: var(--tl-font);
+  font-size: var(--tl-fs-body);
+  line-height: var(--tl-lh-body);
+  text-align: start;
+}
+
+.threadline-app,
+.threadline-app *,
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) *::before,
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) *::after {
+  box-sizing: border-box;
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) :where(h1, h2, h3, h4, p, ul, ol, li, figure) {
+  margin: 0;
+  padding: 0;
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) :where(ul, ol) {
+  list-style: none;
+}
+
+/* 骨架屏 / 读屏专用文本 */
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-ellipsis {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-mono {
+  font-family: var(--tl-mono);
+}
+
+/* 右推：把一组控件贴到行尾（替代内联 style） */
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-push-end {
+  margin-inline-start: auto;
+}
+
+/* 一行紧凑组（标题行右侧的按钮组） */
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-inline-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-inline-size: 0;
+}
+
+/* 焦点环：2px 可见，沿用宿主环宽令牌 + 强调色令牌（03 §15） */
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) :where(button, [role='button'], a[href], summary, [tabindex]:not([tabindex='-1'])):focus-visible,
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-focus-ring:focus-visible {
+  outline: var(--dsw-focus-ring-width, 2px) solid var(--tl-accent);
+  outline-offset: 2px;
+}
+
+/* ========== 1. 外壳骨架（03 §3.1） ========== */
+
+/* D-30：宿主区域标记的容器（不吃空间，只做几何透传） */
+.threadline-app .threadline-surface-host {
+  display: flex;
+  flex-direction: column;
+  block-size: 100%;
+  min-block-size: 0;
+  min-inline-size: 0;
+}
+
+.threadline-app .threadline-shell {
+  display: flex;
+  flex-direction: column;
+  block-size: 100%;
+  min-inline-size: 0;
+  overflow: hidden;
+  background: var(--tl-bg);
+}
+
+/* —— header：56px —— */
+.threadline-app .threadline-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+  block-size: var(--tl-header-h);
+  min-block-size: var(--tl-header-h);
+  padding: 0 12px;
+  min-inline-size: 0;
+  border-block-end: 1px solid var(--tl-border);
+  background: var(--tl-surface);
+}
+
+.threadline-app .threadline-header-start {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-inline-size: 0;
+  flex: 0 1 auto;
+}
+
+.threadline-app .threadline-brand {
+  font-size: var(--tl-fs-title);
+  font-weight: 600;
+  line-height: var(--tl-lh-tight);
+  color: var(--tl-fg);
+  white-space: nowrap;
+}
+
+.threadline-app .threadline-workspace {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--tl-fg-secondary);
+  font-size: var(--tl-fs-meta);
+}
+
+.threadline-app .threadline-range {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 1 auto;
+  min-inline-size: 0;
+}
+
+.threadline-app .threadline-header-end {
+  margin-inline-start: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-inline-size: 0;
+  flex: 0 0 auto;
+}
+
+/* —— Now strip：36px，仅当有 running 会话时渲染（03 §3.1 / 06 N-16） —— */
+.threadline-app .threadline-now {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  block-size: var(--tl-now-h);
+  min-block-size: var(--tl-now-h);
+  padding: 0 12px;
+  min-inline-size: 0;
+  border-block-end: 1px solid var(--tl-border-weak);
+  background: var(--tl-surface-raised);
+  font-size: var(--tl-fs-meta);
+  color: var(--tl-fg-secondary);
+}
+
+.threadline-app .threadline-now-dot {
+  inline-size: 6px;
+  block-size: 6px;
+  flex: 0 0 auto;
+  border-radius: var(--tl-radius-pill);
+  background: var(--tl-accent);
+}
+
+.threadline-app .threadline-now[data-running='true'] .threadline-now-dot {
+  animation: threadline-pulse var(--tl-dur-slow) var(--tl-ease) 0s infinite alternate;
+}
+
+.threadline-app .threadline-now-text {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--tl-fg);
+}
+
+.threadline-app .threadline-now-sep {
+  color: var(--tl-fg-tertiary);
+}
+
+/* —— 主区：星图槽 + 检查器槽 —— */
+.threadline-app .threadline-main {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--tl-inspector-w);
+  flex: 1 1 auto;
+  min-block-size: 0;
+  min-inline-size: 0;
+  overflow: hidden;
+}
+
+.threadline-app .threadline-main[data-inspector-open='false'] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.threadline-app .threadline-map-area {
+  position: relative;
+  min-inline-size: 0;
+  min-block-size: 0;
+  overflow: hidden;
+  background: var(--tl-bg);
+}
+
+.threadline-app .threadline-map-slot {
+  position: absolute;
+  inset: 0;
+  min-inline-size: 0;
+  min-block-size: 0;
+  overflow: hidden;
+}
+
+.threadline-app .threadline-legend-wrap {
+  position: absolute;
+  inset-inline-start: 8px;
+  inset-block-end: 8px;
+  z-index: 10;
+  max-inline-size: calc(100% - 16px);
+}
+
+/* —— 检查器（内联 / 覆盖层 / sheet 三态，见文末容器查询） —— */
+.threadline-app .threadline-inspector {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+  min-block-size: 0;
+  overflow: hidden;
+  border-inline-start: 1px solid var(--tl-border);
+  background: var(--tl-surface);
+}
+
+.threadline-app .threadline-inspector-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-block-size: 40px;
+  padding: 0 8px 0 12px;
+  border-block-end: 1px solid var(--tl-border-weak);
+}
+
+.threadline-app .threadline-inspector-title {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--tl-fs-subtitle);
+  font-weight: 600;
+  line-height: var(--tl-lh-tight);
+}
+
+.threadline-app .threadline-inspector-body {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  min-inline-size: 0;
+  overflow: auto;
+  padding: 8px 12px;
+}
+
+.threadline-app .threadline-inspector-mask {
+  display: none;
+}
+
+/* —— 时间轴槽：48px —— */
+.threadline-app .threadline-timeline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  block-size: var(--tl-timeline-h);
+  min-block-size: var(--tl-timeline-h);
+  padding: 0 12px;
+  min-inline-size: 0;
+  overflow: hidden;
+  border-block-start: 1px solid var(--tl-border);
+  background: var(--tl-surface);
+  font-size: var(--tl-fs-meta);
+  color: var(--tl-fg-secondary);
+}
+
+/* —— 轮次带槽：92px（可折叠 40px） —— */
+.threadline-app .threadline-turns {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  block-size: var(--tl-turns-h);
+  min-block-size: var(--tl-turns-h);
+  min-inline-size: 0;
+  overflow: hidden;
+  border-block-start: 1px solid var(--tl-border);
+  background: var(--tl-surface);
+}
+
+.threadline-app .threadline-turns[data-collapsed='true'] {
+  block-size: var(--tl-turns-h-collapsed);
+  min-block-size: var(--tl-turns-h-collapsed);
+}
+
+.threadline-app .threadline-turns[data-collapsed='true'] .threadline-turns-list {
+  display: none;
+}
+
+.threadline-app .threadline-turns-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  block-size: 32px;
+  min-block-size: 32px;
+  padding: 0 8px 0 12px;
+  min-inline-size: 0;
+}
+
+.threadline-app .threadline-turns-title {
+  font-size: var(--tl-fs-meta);
+  color: var(--tl-fg-secondary);
+  white-space: nowrap;
+}
+
+.threadline-app .threadline-turns-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 8px;
+  align-content: flex-start;
+  flex: 1 1 auto;
+  min-block-size: 0;
+  min-inline-size: 0;
+  overflow: hidden;
+  padding: 0 12px 8px;
+}
+
+/* ========== 2. 通用组件 ========== */
+
+/* —— Button —— */
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  max-inline-size: 100%;
+  block-size: 24px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--tl-radius-sm);
+  background: transparent;
+  color: var(--tl-fg-secondary);
+  font-family: inherit;
+  font-size: var(--tl-fs-meta);
+  line-height: var(--tl-lh-tight);
+  cursor: pointer;
+  transition: background-color var(--tl-dur-fast) var(--tl-ease), color var(--tl-dur-fast) var(--tl-ease),
+    border-color var(--tl-dur-fast) var(--tl-ease);
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-btn:hover:not([disabled]) {
+  background: var(--tl-hover);
+  color: var(--tl-fg);
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-btn:active:not([disabled]) {
+  background: var(--tl-active);
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-btn[disabled] {
+  cursor: default;
+  color: var(--tl-fg-tertiary);
+  opacity: 0.6;
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-btn[aria-pressed='true'],
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-btn[data-selected='true'] {
+  background: var(--tl-active);
+  color: var(--tl-fg);
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-btn--outline {
+  border-color: var(--tl-border);
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-btn--outline:hover:not([disabled]) {
+  border-color: var(--tl-border-strong);
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-btn--danger {
+  color: var(--tl-danger);
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-btn--danger:hover:not([disabled]) {
+  background: var(--tl-hover-danger);
+  color: var(--tl-danger);
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-btn--md {
+  block-size: 32px;
+  padding: 0 12px;
+  font-size: var(--tl-fs-body);
+}
+
+/* icon-only：正方形 24px，必须有 aria-label */
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-btn--icon {
+  inline-size: 24px;
+  padding: 0;
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-btn--icon.threadline-btn--md {
+  inline-size: 32px;
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-btn-label {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* —— Chip（可带计数） —— */
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  max-inline-size: 100%;
+  min-inline-size: 0;
+  block-size: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--tl-border);
+  border-radius: var(--tl-radius-pill);
+  background: transparent;
+  color: var(--tl-fg-secondary);
+  font-family: inherit;
+  font-size: var(--tl-fs-meta);
+  line-height: var(--tl-lh-tight);
+  white-space: nowrap;
+  cursor: default;
+  transition: background-color var(--tl-dur-fast) var(--tl-ease), border-color var(--tl-dur-fast) var(--tl-ease),
+    color var(--tl-dur-fast) var(--tl-ease);
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) button.threadline-chip {
+  cursor: pointer;
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) button.threadline-chip:hover {
+  background: var(--tl-hover);
+  color: var(--tl-fg);
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-chip[aria-pressed='true'],
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-chip[data-active='true'] {
+  border-color: var(--tl-accent);
+  background: var(--tl-active);
+  color: var(--tl-fg);
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-chip-count {
+  font-variant-numeric: tabular-nums;
+  color: var(--tl-fg-secondary);
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-chip[aria-pressed='true'] .threadline-chip-count {
+  color: var(--tl-fg-secondary);
+}
+
+/* —— Tooltip（键盘 / 读屏可获取，aria-describedby） —— */
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-tip-trigger {
+  position: relative;
+  display: inline-flex;
+  min-inline-size: 0;
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-tip {
+  position: absolute;
+  inset-block-start: calc(100% + 6px);
+  inset-inline-start: 0;
+  z-index: 60;
+  max-inline-size: 280px;
+  padding: 4px 8px;
+  border: 1px solid var(--tl-border-strong);
+  border-radius: var(--tl-radius-sm);
+  background: var(--tl-tooltip-bg);
+  color: var(--tl-fg-inverse);
+  font-size: var(--tl-fs-meta-sm);
+  line-height: var(--tl-lh-body);
+  white-space: normal;
+  text-align: start;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--tl-dur-fast) var(--tl-ease);
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-tip-trigger:hover .threadline-tip,
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-tip-trigger:focus-within .threadline-tip,
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-tip-trigger[data-open='true'] .threadline-tip {
+  opacity: 1;
+}
+
+/* —— 空态 —— */
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px 16px;
+  min-inline-size: 0;
+  text-align: center;
+  color: var(--tl-fg-secondary);
+  font-size: var(--tl-fs-meta);
+  line-height: var(--tl-lh-body);
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-empty-title {
+  font-size: var(--tl-fs-body);
+  font-weight: 500;
+  color: var(--tl-fg);
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-empty-detail {
+  max-inline-size: 42ch;
+  color: var(--tl-fg-secondary);
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+/* —— 加载态（骨架 + role=status + aria-busy） —— */
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  min-inline-size: 0;
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-skeleton {
+  block-size: 8px;
+  border-radius: var(--tl-radius-xs);
+  background: var(--tl-skeleton);
+  animation: threadline-pulse var(--tl-dur-slow) var(--tl-ease) 0s infinite alternate;
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-skeleton--w60 {
+  inline-size: 60%;
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-skeleton--w40 {
+  inline-size: 40%;
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-skeleton--w80 {
+  inline-size: 80%;
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-skeleton--block {
+  block-size: 72px;
+}
+
+/* —— 错误态（明确原因 + 只读「重新读取」，不白屏、不当 0） —— */
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-error {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  min-inline-size: 0;
+  border: 1px solid var(--tl-danger);
+  border-radius: var(--tl-radius-sm);
+  background: var(--tl-surface-raised);
+  color: var(--tl-fg);
+  font-size: var(--tl-fs-meta);
+  line-height: var(--tl-lh-body);
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-error-title {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--tl-fs-body);
+  font-weight: 500;
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-error-mark {
+  color: var(--tl-danger);
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-error-detail {
+  color: var(--tl-fg-secondary);
+  word-break: break-word;
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* —— 覆盖层 / 弹窗（遮罩 + 焦点陷阱 + Esc） —— */
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-overlay-mask {
+  position: absolute;
+  inset: 0;
+  background: var(--tl-mask);
+  border: 0;
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-overlay-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  inline-size: min(1040px, 92vw);
+  max-block-size: min(760px, 88vh);
+  min-inline-size: 0;
+  padding: 16px;
+  overflow: hidden;
+  border: 1px solid var(--tl-border);
+  border-radius: var(--tl-radius-md);
+  background: var(--tl-surface-raised);
+  box-shadow: var(--tl-shadow-panel);
+  color: var(--tl-fg);
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-overlay-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-inline-size: 0;
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-overlay-title {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--tl-fs-title);
+  font-weight: 600;
+  line-height: var(--tl-lh-tight);
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-overlay-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-inline-start: auto;
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-overlay-body {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  min-inline-size: 0;
+  overflow: auto;
+}
+
+/* —— 覆盖率胶囊（ProgressPill） —— */
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-inline-size: 100%;
+  min-inline-size: 0;
+  block-size: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--tl-border);
+  border-radius: var(--tl-radius-pill);
+  background: var(--tl-surface-raised);
+  color: var(--tl-fg-secondary);
+  font-size: var(--tl-fs-meta);
+  line-height: var(--tl-lh-tight);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-pill[data-state='failed'] {
+  border-color: var(--tl-danger);
+  color: var(--tl-fg);
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-pill[data-state='complete'] {
+  border-color: var(--tl-border-weak);
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-pill-text {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-pill-bar {
+  position: relative;
+  inline-size: 48px;
+  block-size: 4px;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border-radius: var(--tl-radius-pill);
+  background: var(--tl-hover);
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-pill-fill {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  border-radius: inherit;
+  background: var(--tl-accent);
+  transition: inline-size var(--tl-dur-base) var(--tl-ease);
+}
+
+/* —— 图例（宽容器常驻；窄容器折叠为「图例」按钮） —— */
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  max-inline-size: 100%;
+  min-inline-size: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--tl-border-weak);
+  border-radius: var(--tl-radius-sm);
+  background: var(--tl-surface-raised);
+  font-size: var(--tl-fs-meta);
+  color: var(--tl-fg-secondary);
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-legend-toggle {
+  display: none;
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-legend-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-inline-size: 0;
+  white-space: nowrap;
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-swatch {
+  inline-size: 8px;
+  block-size: 8px;
+  flex: 0 0 auto;
+  border-radius: var(--tl-radius-pill);
+  background: var(--tl-idle);
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-swatch[data-kind='doc'] {
+  background: var(--tl-fg-tertiary);
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-swatch[data-kind='code'] {
+  background: var(--tl-accent);
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-swatch[data-kind='data'] {
+  background: var(--tl-warn);
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-swatch[data-kind='image'] {
+  background: var(--tl-success);
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-swatch[data-kind='config'] {
+  background: var(--tl-fg-caption);
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-swatch[data-kind='other'] {
+  background: var(--tl-idle);
+}
+
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .threadline-swatch[data-kind='new'] {
+  border-radius: 0;
+  background: var(--tl-accent);
+}
+
+/* ========== 3. 容器查询（唯一响应式手段；断点 1100 / 900 / 600 / 420） ========== */
+
+/* 宽容器：≥1280px 检查器 360px */
+@container threadline (min-width: 1280px) {
+  .threadline-app .threadline-main {
+    grid-template-columns: minmax(0, 1fr) var(--tl-inspector-w-wide);
+  }
+}
+
+/* 中窄容器：600–1099px —— 检查器变右侧覆盖层，不挤压星图 */
+@container threadline (max-width: 1099.98px) {
+  .threadline-app .threadline-header {
+    block-size: auto;
+    padding: 8px 12px;
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+
+  .threadline-app .threadline-range {
+    order: 3;
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+
+  .threadline-app .threadline-main,
+  .threadline-app .threadline-main[data-inspector-open='false'] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .threadline-app .threadline-inspector {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: 0;
+    z-index: 20;
+    inline-size: min(360px, 44%);
+    border-inline-start: 1px solid var(--tl-border);
+    border-radius: var(--tl-radius-md) 0 0 var(--tl-radius-md);
+    background: var(--tl-surface-raised);
+    box-shadow: var(--tl-shadow-panel);
+  }
+
+  .threadline-app .threadline-inspector[data-inspector-open='false'] {
+    display: none;
+  }
+
+  .threadline-app .threadline-inspector-mask {
+    position: absolute;
+    inset: 0;
+    z-index: 15;
+    display: block;
+    padding: 0;
+    border: 0;
+    background: var(--tl-mask);
+  }
+
+  .threadline-app .threadline-inspector-mask[data-inspector-open='false'] {
+    display: none;
+  }
+
+  .threadline-app .threadline-legend-toggle {
+    display: inline-flex;
+  }
+
+  /* 图例折叠：600–1099px 只显示「图例」按钮，展开才显示列表（03 §3.2） */
+  .threadline-app .threadline-legend-list {
+    display: none;
+  }
+
+  .threadline-app .threadline-legend[data-open='true'] .threadline-legend-list {
+    display: flex;
+  }
+}
+
+/* 窄容器：< 900px —— 轮次带纵向；时间轴标签减少 */
+@container threadline (max-width: 899.98px) {
+  .threadline-app .threadline-turns {
+    block-size: auto;
+    min-block-size: 0;
+    max-block-size: 168px;
+  }
+
+  .threadline-app .threadline-turns-list {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    overflow-y: auto;
+  }
+
+  .threadline-app .threadline-timeline {
+    gap: 4px;
+    padding: 0 8px;
+  }
+
+  /* 时间轴刻度：T07 的内容用 data-priority 标记，窄容器只留首/中/尾 + 当前 */
+  .threadline-app .threadline-timeline [data-tick-priority='low'] {
+    display: none;
+  }
+}
+
+/* 小容器：< 600px —— 单列，检查器退化到底部 sheet（03 §3.3） */
+@container threadline (max-width: 599.98px) {
+  .threadline-app .threadline-shell {
+    overflow-y: auto;
+  }
+
+  .threadline-app .threadline-header {
+    order: 0;
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .threadline-app .threadline-now {
+    order: 0;
+    padding: 0 8px;
+  }
+
+  /* 单列流：map 内容器的三个孩子提升为 .threadline-shell 的 flex 子项，
+     这样"检查器排在最后一项"可以靠 order 实现，而不必改 DOM。 */
+  .threadline-app .threadline-main {
+    display: contents;
+  }
+
+  .threadline-app .threadline-map-area {
+    order: 1;
+    flex: 0 0 auto;
+    block-size: var(--tl-map-min-h);
+    min-block-size: var(--tl-map-min-h);
+  }
+
+  .threadline-app .threadline-timeline {
+    order: 2;
+    flex: 0 0 auto;
+  }
+
+  .threadline-app .threadline-turns {
+    order: 3;
+    max-block-size: none;
+  }
+
+  /* 底部 sheet：单列里最后一块，通栏、上圆角、内部滚动（不是叠在星图上的浮层）。 */
+  .threadline-app .threadline-inspector {
+    order: 4;
+    position: static;
+    inset: auto;
+    inline-size: auto;
+    max-block-size: 416px;
+    border: 0;
+    border-block-start: 1px solid var(--tl-border);
+    border-radius: var(--tl-radius-lg) var(--tl-radius-lg) 0 0;
+    background: var(--tl-surface-raised);
+    box-shadow: var(--tl-shadow-1);
+  }
+
+  .threadline-app .threadline-inspector-mask {
+    display: none;
+  }
+
+  .threadline-app .threadline-inspector-body {
+    padding: 8px;
+  }
+}
+
+/* 最小容器：< 420px —— 再收紧间距，仍不横向滚动 */
+@container threadline (max-width: 419.98px) {
+  .threadline-app .threadline-header {
+    padding: 8px;
+    gap: 4px;
+  }
+
+  .threadline-app .threadline-brand {
+    font-size: var(--tl-fs-subtitle);
+  }
+
+  .threadline-app .threadline-workspace {
+    display: none;
+  }
+
+  .threadline-app .threadline-btn {
+    padding: 0 6px;
+  }
+
+  .threadline-app .threadline-pill-bar {
+    inline-size: 32px;
+  }
+}
+
+/* ========== 4. 动效关键帧（reduced-motion 下由 tokens.css 归零） ========== */
+
+@keyframes threadline-pulse {
+  from {
+    opacity: 0.45;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+/* ========== 5. 页面流布局（D-28 修订版：占满宿主区域 + 自己内部滚动） ========== */
+
+/*
+ * 口径（2026-11-05 真机修正，D-29）：
+ * 上一版把高度交给"页面滚动"，实测**把宿主的输入框一起推到了内容末尾**（用户反馈「输入框滑到最底下就出现了」），
+ * 因为 conversation.view 的内容与 composer 在同一个滚动流里。
+ * 正确形态（与 dsh-context 的 lc-ov-page / lc-ov-pagescroll 一致，它有 0.78.1 的实跑验证）：
+ *   根 = 占满宿主给出的高度（block-size:100% + overflow:hidden）
+ *   壳 = 自己当滚动容器（flex column + overflow-y:auto），星图给首屏，时间轴/轮次带/检查器依次往下滚
+ * ⇒ 输入框永远停在它该在的位置，我们的内容在**自己的盒子里**滚动。
+ * 内嵌根（impact / modal）不继承这套几何（它们在自己的 root 类里局部化）。
+ */
+
+.threadline-app {
+  display: block;
+  block-size: 100%;
+  min-block-size: 0;
+  overflow: hidden;
+}
+
+.threadline-app .threadline-shell {
+  display: flex;
+  flex-direction: column;
+  block-size: 100%;
+  min-block-size: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  /* 底部留一档，最后一行内容不贴边 */
+  padding-block-end: 8px;
+}
+
+/* header：吸顶（滚动时仍能看到工作区/时间范围/工具条） */
+.threadline-app .threadline-header {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 20;
+}
+
+.threadline-app .threadline-now {
+  position: sticky;
+  inset-block-start: var(--tl-header-h);
+  z-index: 19;
+}
+
+/* 主区：星图与检查器同一行；宽屏检查器吸顶，窄屏自然下移 */
+.threadline-app .threadline-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--tl-inspector-w);
+  align-items: start;
+  flex: none;
+  min-block-size: 0;
+  overflow: visible;
+}
+
+.threadline-app .threadline-main[data-inspector-open='false'] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.threadline-app .threadline-map-area {
+  block-size: 520px;
+  min-block-size: 520px;
+  overflow: hidden;
+}
+
+.threadline-app .threadline-map-slot {
+  position: absolute;
+  inset: 0;
+  min-block-size: 0;
+}
+
+.threadline-app .threadline-inspector {
+  position: sticky;
+  inset-block-start: calc(var(--tl-header-h) + 8px);
+  align-self: start;
+  /* 滚动容器变成了 .threadline-shell，检查器吸顶时不能比宿主可视区更高 */
+  max-block-size: calc(100dvh - var(--tl-header-h) - 24px);
+  overflow: hidden;
+}
+
+/* 时间轴：flex column 里保持自然高度 */
+.threadline-app .threadline-timeline {
+  flex: none;
+}
+
+/* 轮次带：自然高度（不再 92px 内滚） */
+.threadline-app .threadline-turns {
+  block-size: auto;
+  min-block-size: auto;
+  overflow: visible;
+}
+
+.threadline-app .threadline-turns-list {
+  overflow: visible;
+}
+
+.threadline-app .threadline-turns-list .threadline-turn-strip {
+  overflow: visible;
+}
+
+/* 宽屏：星图更高 */
+@container threadline (min-width: 1280px) {
+  .threadline-app .threadline-map-area {
+    block-size: 640px;
+    min-block-size: 640px;
+  }
+}
+
+/* 中窄容器：检查器自然下移（不再是覆盖层 / sheet） */
+@container threadline (max-width: 1099.98px) {
+  .threadline-app .threadline-main {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .threadline-app .threadline-inspector {
+    position: static;
+    inset: auto;
+    max-block-size: none;
+    inline-size: auto;
+    border-inline-start: 0;
+    border-block-start: 1px solid var(--tl-border);
+  }
+
+  .threadline-app .threadline-inspector-mask {
+    display: none;
+  }
+}
+
+@container threadline (max-width: 599.98px) {
+  .threadline-app .threadline-map-area {
+    block-size: 520px;
+    min-block-size: 520px;
+  }
+}

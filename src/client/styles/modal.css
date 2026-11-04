@@ -1,0 +1,645 @@
+/*
+ * modal.css —— 「影响 N」弹层 + /threadline 弹窗（03 §7.2 / §9；06 A43-2 / A43-3）。
+ *
+ * 纪律（T13b 起：两个宿主内嵌根）：
+ * - .threadline-impact-root / .threadline-modal-root 是"嵌在宿主里的根"，**不在 .threadline-app 之内**，
+ *   因此这里的规则分别挂这两个根（不再挂 .threadline-app 前缀）；两个根同时带 .threadline-app
+ *   以继承令牌与通用组件（btn/chip/overlay/focus ring）的样式，用 .threadline-embedded 关掉外壳几何；
+ * - 颜色只用 tokens.css 的 --tl-*；圆角只用 --tl-radius-*；
+ * - 只用 .threadline-app 的容器查询（无 viewport media query、无 !important）；
+ * - 弹窗本体（尺寸 / 遮罩 / 焦点陷阱）由 T06 的 Overlay + base.css 负责，这里只排内部内容。
+ */
+
+/* ========== 1. 「影响 N」按钮 ========== */
+
+/* 灰态：数据未到 / 读取失败（不可点，也不显示假数字） */
+
+/* ========== 2. 「影响 N」弹层（宽 360 / 最大 70vh / 内部滚动） ========== */
+
+.threadline-impact-root .threadline-impact-popover {
+  /* D-27：由 JS 计算 position: fixed 的 top/left（portal 到 body）；这里只管尺寸/层级/外观 */
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  inline-size: 100%;
+  max-inline-size: 360px;
+  max-block-size: 70vh;
+  overflow: hidden;
+  border: 1px solid var(--tl-border);
+  border-radius: var(--tl-radius-sm);
+  background: var(--tl-surface-raised);
+  box-shadow: var(--tl-shadow-panel);
+  color: var(--tl-fg);
+  font-size: var(--tl-fs-meta);
+}
+
+.threadline-impact-root .threadline-impact-popover-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  border-block-end: 1px solid var(--tl-border-weak);
+}
+
+.threadline-impact-root .threadline-impact-popover-title {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--tl-fs-body);
+  font-weight: 600;
+}
+
+.threadline-impact-root .threadline-impact-popover-summary {
+  flex: 1 1 100%;
+  order: 3;
+  color: var(--tl-fg-secondary);
+  font-size: var(--tl-fs-meta-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.threadline-impact-root .threadline-impact-popover-head .threadline-btn {
+  margin-inline-start: auto;
+}
+
+.threadline-impact-root .threadline-impact-popover-body {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  overflow-y: auto;
+  padding: 6px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.threadline-impact-root .threadline-impact-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
+}
+
+.threadline-impact-root .threadline-impact-group-title {
+  color: var(--tl-fg-secondary);
+  font-size: var(--tl-fs-meta-sm);
+  line-height: var(--tl-lh-tight);
+}
+
+.threadline-impact-root .threadline-impact-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-inline-size: 0;
+}
+
+.threadline-impact-root .threadline-impact-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-inline-size: 0;
+}
+
+.threadline-impact-root .threadline-impact-row-main {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--tl-fg);
+  font-size: var(--tl-fs-meta-sm);
+}
+
+.threadline-impact-root .threadline-impact-row-meta {
+  flex: 0 0 auto;
+  color: var(--tl-fg-secondary);
+  font-size: var(--tl-fs-meta-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.threadline-impact-root .threadline-impact-row-meta[data-tone='danger'] {
+  color: var(--tl-danger);
+}
+
+.threadline-impact-root .threadline-impact-empty {
+  color: var(--tl-fg-tertiary);
+  font-size: var(--tl-fs-meta-sm);
+}
+
+.threadline-impact-root .threadline-impact-empty[data-tone='danger'] {
+  color: var(--tl-danger);
+}
+
+.threadline-impact-root .threadline-impact-popover-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 10px 8px;
+  border-block-start: 1px solid var(--tl-border-weak);
+}
+
+/* ========== 3. /threadline 弹窗内容（外壳由 Overlay 提供） ========== */
+
+.threadline-modal-root .threadline-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-inline-size: 0;
+  min-block-size: 0;
+  flex: 1 1 auto;
+}
+
+.threadline-modal-root .threadline-modal-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-inline-size: 0;
+}
+
+.threadline-modal-root .threadline-modal-session {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--tl-fg);
+  font-size: var(--tl-fs-body);
+  font-weight: 600;
+}
+
+.threadline-modal-root .threadline-modal-status {
+  flex: 0 0 auto;
+  color: var(--tl-fg-secondary);
+  font-size: var(--tl-fs-meta-sm);
+}
+
+.threadline-modal-root .threadline-modal-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--tl-fg-secondary);
+  font-size: var(--tl-fs-meta);
+  font-variant-numeric: tabular-nums;
+}
+
+.threadline-modal-root .threadline-modal-badge {
+  padding: 0 6px;
+  border: 1px solid var(--tl-border-weak);
+  border-radius: var(--tl-radius-pill);
+  color: var(--tl-fg-tertiary);
+  font-size: var(--tl-fs-meta-sm);
+  white-space: nowrap;
+}
+
+.threadline-modal-root .threadline-modal-banner {
+  padding: 4px 8px;
+  border: 1px solid var(--tl-accent);
+  border-radius: var(--tl-radius-sm);
+  color: var(--tl-accent);
+  font-size: var(--tl-fs-meta-sm);
+}
+
+.threadline-modal-root .threadline-modal-edges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-inline-size: 0;
+}
+
+.threadline-modal-root .threadline-modal-kv {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-inline-size: 0;
+  flex: 1 1 auto;
+}
+
+.threadline-modal-root .threadline-modal-kv-label {
+  flex: 0 0 auto;
+  color: var(--tl-fg-tertiary);
+  font-size: var(--tl-fs-meta-sm);
+  white-space: nowrap;
+}
+
+.threadline-modal-root .threadline-modal-kv-value {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--tl-fg-secondary);
+  font-size: var(--tl-fs-meta-sm);
+}
+
+.threadline-modal-root .threadline-modal-muted {
+  color: var(--tl-fg-tertiary);
+  font-size: var(--tl-fs-meta-sm);
+}
+
+.threadline-modal-root .threadline-modal-disclosure {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--tl-link);
+  font-family: inherit;
+  font-size: var(--tl-fs-meta-sm);
+  cursor: pointer;
+}
+
+.threadline-modal-root .threadline-modal-body-text {
+  flex: 1 1 100%;
+  max-block-size: 96px;
+  overflow: auto;
+  margin: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--tl-border-weak);
+  border-radius: var(--tl-radius-xs);
+  background: var(--tl-surface-sunken);
+  color: var(--tl-fg);
+  font-family: var(--tl-mono);
+  font-size: var(--tl-fs-meta-sm);
+  line-height: var(--tl-lh-body);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+/* 主体：左轮次轨迹 / 右文件缩略星图（窄容器自动单列，由容器查询控制） */
+.threadline-modal-root .threadline-modal-body {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 10px;
+  flex: 1 1 auto;
+  min-block-size: 0;
+  min-inline-size: 0;
+}
+
+.threadline-modal-root .threadline-modal-turns {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
+  min-block-size: 0;
+  overflow-y: auto;
+}
+
+.threadline-modal-root .threadline-modal-map {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-inline-size: 0;
+  min-block-size: 160px;
+  border: 1px solid var(--tl-border-weak);
+  border-radius: var(--tl-radius-sm);
+  overflow: hidden;
+}
+
+.threadline-modal-root .threadline-modal-sectitle {
+  flex: 0 0 auto;
+  color: var(--tl-fg-secondary);
+  font-size: var(--tl-fs-meta-sm);
+  line-height: var(--tl-lh-tight);
+}
+
+.threadline-modal-root .threadline-modal-turn {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
+  border-block-end: 1px solid var(--tl-border-weak);
+}
+
+.threadline-modal-root .threadline-modal-turn-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  inline-size: 100%;
+  min-inline-size: 0;
+  padding: 3px 2px;
+  border: 0;
+  border-radius: var(--tl-radius-xs);
+  background: transparent;
+  color: var(--tl-fg);
+  font-family: inherit;
+  font-size: var(--tl-fs-meta);
+  text-align: start;
+  cursor: pointer;
+}
+
+.threadline-modal-root .threadline-modal-turn-head:hover {
+  background: var(--tl-hover);
+}
+
+.threadline-modal-root .threadline-modal-turn-n {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.threadline-modal-root .threadline-modal-turn-status {
+  flex: 0 1 auto;
+  color: var(--tl-fg-secondary);
+  font-size: var(--tl-fs-meta-sm);
+}
+
+.threadline-modal-root .threadline-modal-turn[data-status='aborted'] .threadline-modal-turn-status {
+  color: var(--tl-danger);
+}
+
+.threadline-modal-root .threadline-modal-turn[data-status='running'] .threadline-modal-turn-status {
+  color: var(--tl-accent);
+}
+
+.threadline-modal-root .threadline-modal-turn-meta {
+  flex: 0 0 auto;
+  color: var(--tl-fg-tertiary);
+  font-size: var(--tl-fs-meta-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.threadline-modal-root .threadline-modal-turn-counts {
+  margin-inline-start: auto;
+  color: var(--tl-fg-secondary);
+  font-size: var(--tl-fs-meta-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.threadline-modal-root .threadline-modal-turn-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  padding: 2px 2px 6px;
+  min-inline-size: 0;
+}
+
+.threadline-modal-root .threadline-modal-turn-path {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--tl-fg-secondary);
+  font-family: var(--tl-mono);
+  font-size: var(--tl-fs-meta-sm);
+}
+
+.threadline-modal-root .threadline-modal-loops {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  flex: 0 0 auto;
+  padding-block-start: 6px;
+  border-block-start: 1px solid var(--tl-border-weak);
+  color: var(--tl-fg-secondary);
+  font-size: var(--tl-fs-meta-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ========== 4. 容器查询：窄容器下单列（弹窗自身宽度由 Overlay 定） ========== */
+
+/* ========== 5. 列表视图（T09b 接线；T10 的 ListTable 类名在这里落地） ========== */
+
+.threadline-app .threadline-listview {
+  scrollbar-gutter: stable;
+}
+
+.threadline-app .threadline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  inline-size: 100%;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+.threadline-app .threadline-table {
+  inline-size: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  color: var(--tl-fg);
+  font-size: var(--tl-fs-meta);
+  line-height: var(--tl-lh-tight);
+}
+
+.threadline-app .threadline-table th:last-child,
+.threadline-app .threadline-table td:last-child {
+  inline-size: 72px;
+  text-align: end;
+}
+
+.threadline-app .threadline-table th,
+.threadline-app .threadline-table td {
+  padding: 2px 6px;
+  border-block-end: 1px solid var(--tl-border-weak);
+  text-align: start;
+  vertical-align: top;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.threadline-app .threadline-table th {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 1;
+  background: var(--tl-surface);
+  color: var(--tl-fg-secondary);
+  font-weight: 500;
+}
+
+.threadline-app .threadline-table-row {
+  block-size: 26px;
+}
+
+.threadline-app .threadline-table-row[aria-selected='true'] {
+  background: var(--tl-active);
+}
+
+.threadline-app .threadline-table-row:hover {
+  background: var(--tl-hover);
+}
+
+.threadline-app .threadline-table-sort {
+  color: var(--tl-fg-secondary);
+}
+
+/* ========== 6. 宿主内嵌根（T13b）：共享 reset + 关掉外壳几何 ========== */
+
+/*
+ * impact / modal 渲染在宿主的 action row / 输入框容器里，**不**在 tab 的 .threadline-app 之内。
+ * 它们仍带 .threadline-app 以继承 --tl-* 令牌与通用组件样式，但必须去掉外壳几何
+ * （100% 高、overflow hidden、以及 inline-size 容器查询造成的 size containment）。
+ */
+.threadline-impact-root {
+  display: inline-flex;
+  align-items: center;
+  inline-size: auto;
+  block-size: auto;
+  min-block-size: 0;
+  overflow: visible;
+  background: transparent;
+  position: relative;
+}
+
+.threadline-modal-root {
+  display: contents;
+  position: static;
+  overflow: visible;
+}
+
+.threadline-impact-root,
+.threadline-modal-root {
+  box-sizing: border-box;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  text-align: start;
+}
+
+.threadline-impact-root *,
+.threadline-impact-root *::before,
+.threadline-impact-root *::after,
+.threadline-modal-root *,
+.threadline-modal-root *::before,
+.threadline-modal-root *::after {
+  box-sizing: border-box;
+}
+
+/* 影响图标按钮（D-25：与宿主 action row 一致的图标按钮；无文字、无徽章） */
+.threadline-impact-root .threadline-impact-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 24px;
+  block-size: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--tl-radius-sm);
+  background: transparent;
+  /* 与宿主 action row 的图标同色深：默认 label-secondary，hover label-primary。
+     图标本体是描边（stroke=currentColor），因此这里只控 color，不改 fill。 */
+  /* 2026-11-05 真机反馈「颜色明显太深」：宿主 action row 图标用的是 tertiary 档，比 secondary 浅；
+     hover 才升到 secondary。 */
+  color: var(--dsw-alias-label-tertiary, #808080);
+  font: inherit;
+  cursor: pointer;
+}
+
+.threadline-impact-root .threadline-impact-icon-btn:hover {
+  background: var(--dsw-alias-interactive-bg-hover, #80808014);
+  color: var(--dsw-alias-label-secondary, #666666);
+}
+
+.threadline-impact-root .threadline-impact-icon-btn[aria-disabled='true'] {
+  color: var(--tl-fg-tertiary);
+  cursor: default;
+  opacity: 0.6;
+}
+
+.threadline-impact-root .threadline-impact-icon {
+  display: block;
+  inline-size: 16px;
+  block-size: 16px;
+  flex: 0 0 auto;
+}
+
+/* 错误兜底（ErrorBoundary）：必须可见，不能白屏 */
+.threadline-app .threadline-error-boundary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  inline-size: 100%;
+  min-inline-size: 0;
+  padding: 12px;
+  color: var(--tl-fg);
+  font-size: var(--tl-fs-body);
+  line-height: var(--tl-lh-body);
+}
+
+.threadline-app .threadline-error-boundary-title {
+  margin: 0;
+  color: var(--tl-danger);
+  overflow-wrap: anywhere;
+}
+
+.threadline-app .threadline-error-boundary-toggle {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--tl-link);
+  font: inherit;
+  font-size: var(--tl-fs-meta);
+  cursor: pointer;
+}
+
+.threadline-app .threadline-error-boundary-stack {
+  max-block-size: 160px;
+  overflow: auto;
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--tl-border-weak);
+  border-radius: var(--tl-radius-sm);
+  background: var(--tl-surface-sunken);
+  color: var(--tl-fg-secondary);
+  font-family: var(--tl-mono);
+  font-size: var(--tl-fs-meta-sm);
+  line-height: var(--tl-lh-body);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+/* tab 诊断条（仅 failed / degrade 时出现；一行 key=value，不含正文/路径） */
+.threadline-app .threadline-diag-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border-block-end: 1px solid var(--tl-danger);
+  background: var(--tl-surface-raised);
+  color: var(--tl-danger);
+  font-family: var(--tl-mono);
+  font-size: var(--tl-fs-meta-sm);
+  line-height: var(--tl-lh-tight);
+}
+
+.threadline-app .threadline-tab-main {
+  display: flex;
+  flex-direction: column;
+  position: absolute;
+  inset: 0;
+  min-inline-size: 0;
+  min-block-size: 0;
+}
+
+.threadline-app .threadline-tab-main-body {
+  position: relative;
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  min-block-size: 0;
+}
+
+/* 弹窗里的迷你星图：固定高度 + 工具条落到图下方（D-27 之后内嵌根不再参与 tab 的容器查询） */
+.threadline-modal-root .threadline-modal-map .tl-map {
+  block-size: 240px;
+  min-block-size: 240px;
+}
+
+.threadline-modal-root .threadline-modal-map .tl-map-toolbar {
+  position: absolute;
+  inset-block-start: auto;
+  inset-block-end: 4px;
+  inset-inline-end: 4px;
+}

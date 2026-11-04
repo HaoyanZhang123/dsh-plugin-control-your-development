@@ -1,4 +1,8 @@
-# Add only our plugin row. Does not replace any official DSH component.
+# 只插入本插件自己的行；不替换任何官方组件。
+# 行 id 与 name 必须等于 package.json 的 name，也必须等于 lib/client.js 的模块 id（三处一致）。
 - insert:
-    - id: dev-dashboard
+    - id: dsh-plugin-control-your-development
       name: dsh-plugin-control-your-development
+      # 用户在自己的 patch 层覆盖本行时，config 是「整块替换」而不是深合并：
+      # 只改一个字段也要把全部字段写全。
+      # config: {}

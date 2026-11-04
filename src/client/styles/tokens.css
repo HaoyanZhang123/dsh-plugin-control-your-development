@@ -1,0 +1,122 @@
+/*
+ * tokens.css —— 脉络（Threadline）令牌层。唯一允许出现颜色值的地方。
+ *
+ * 纪律（03 §13.1 / 06 A40-1）：
+ * - 组件与布局只允许引用本文件的 --tl-* 变量；组件里出现任何颜色字面量 = 违规；
+ * - 每个颜色变量都是 var(--dsw-alias-*, <中性 fallback>) 的形状：
+ *   宿主令牌名取自 DSH 主题（dsh-client-ui-theme 的 tokens 定义），fallback 一律中性灰阶，
+ *   这样即使宿主令牌缺失（异常路径）也不会引入一套独立色板；
+ * - 主题跟随宿主：DSH 通过 body[data-ds-dark-theme] 切换同名令牌的明暗值，
+ *   本文件不做任何自己的明暗分支；
+ * - 容器查询的根：.threadline-app 自己是 inline-size 容器，断点见 base.css；
+ * - 动效 120/180/240ms ease-out；prefers-reduced-motion 下全部 0ms。
+ *
+ * 全部选择器挂 .threadline-app 前缀（卸载时移除注入的 <style> 即完全干净）。
+ */
+
+/* 容器查询根只给 tab 场景（内嵌根不参与容器查询，避免 inline-size containment 影响宿主布局） */
+.threadline-app {
+  container: threadline / inline-size;
+}
+
+/* 令牌层：tab 根 + 两个宿主内嵌根共享（D-27/D-28） */
+:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) {
+
+  /* —— 表面 —— */
+  --tl-bg: var(--dsw-alias-bg-base, #808080);
+  --tl-surface: var(--dsw-alias-bg-layer-1, #808080);
+  --tl-surface-raised: var(--dsw-alias-bg-layer-2, #808080);
+  --tl-surface-sunken: var(--dsw-alias-bg-module-platform, #808080);
+  --tl-mask: var(--dsw-alias-bg-mask-1, #80808080);
+  --tl-skeleton: var(--dsw-alias-bg-skeleton, #80808014);
+
+  /* —— 文字 —— */
+  --tl-fg: var(--dsw-alias-label-primary, #808080);
+  --tl-fg-secondary: var(--dsw-alias-label-secondary, #808080);
+  --tl-fg-tertiary: var(--dsw-alias-label-tertiary, #808080);
+  --tl-fg-caption: var(--dsw-alias-label-caption, #808080);
+  --tl-fg-on-accent: var(--dsw-alias-label-primary-foreground, #808080);
+  /* tooltip 底色在明暗两套主题下都偏深，文字用 toast 前景（两主题都接近白） */
+  --tl-fg-inverse: var(--dsw-alias-toast-label, #ffffff);
+  --tl-tooltip-bg: var(--dsw-alias-tooltip-bg, #808080);
+
+  /* —— 边框 —— */
+  --tl-border-weak: var(--dsw-alias-border-l1, #808080);
+  --tl-border: var(--dsw-alias-border-l2, #808080);
+  --tl-border-strong: var(--dsw-alias-border-l3, #808080);
+
+  /* —— 语义色（03 §13.2：颜色不得单独承载信息） —— */
+  --tl-accent: var(--dsw-alias-state-business-primary, #808080);
+  --tl-accent-fill: var(--dsw-alias-button-primary-fill, #808080);
+  --tl-link: var(--dsw-alias-link, #808080);
+  --tl-danger: var(--dsw-alias-state-error-primary, #808080);
+  --tl-warn: var(--dsw-alias-state-warn-primary, #808080);
+  --tl-warn-label: var(--dsw-alias-state-warn-label, #808080);
+  --tl-success: var(--dsw-alias-state-success-primary, #808080);
+  --tl-idle: var(--dsw-alias-state-idle-primary, #808080);
+
+  /* —— 交互态 —— */
+  --tl-hover: var(--dsw-alias-interactive-bg-hover, #80808014);
+  --tl-active: var(--dsw-alias-interactive-bg-active, #80808024);
+  --tl-hover-danger: var(--dsw-alias-interactive-bg-hover-danger, #80808014);
+
+  /* —— 圆角（沿用宿主刻度） —— */
+  --tl-radius-xs: var(--dsw-radius-xs, 4px);
+  --tl-radius-sm: var(--dsw-radius-sm, 8px);
+  --tl-radius-md: var(--dsw-radius-md, 12px);
+  --tl-radius-lg: var(--dsw-radius-lg, 16px);
+  /* 药丸形：几何常量（不是主题圆角刻度），只用于 chip / 胶囊 / 圆点 */
+  --tl-radius-pill: 999px;
+
+  /* —— 阴影（沿用宿主层级，不用大阴影） —— */
+  --tl-shadow-1: var(--dsw-shadow-lv1, 0 2px 4px 0 #8080800d);
+  --tl-shadow-2: var(--dsw-shadow-lv2, 0 4px 12px 0 #8080800d);
+  --tl-shadow-panel: var(--dsw-elevation-panel, 0 3px 8px 0 #8080800d);
+
+  /* —— 字体与密度（03 §13.1：元数据 11–12，正文 13，标题 15–16；行高 1.4–1.6） —— */
+  --tl-font: var(--dsw-font-family, system-ui, sans-serif);
+  --tl-mono: var(--dsw-font-markdown-code-font-family, ui-monospace, monospace);
+  --tl-fs-meta-sm: var(--dsw-font-xxxs-11-font-size, 11px);
+  --tl-fs-meta: var(--dsw-font-xxs-12-font-size, 12px);
+  --tl-fs-body: var(--dsw-font-xs-13-font-size, 13px);
+  --tl-fs-subtitle: var(--dsw-font-s-14-font-size, 14px);
+  --tl-fs-title: var(--dsw-font-base-16-font-size, 16px);
+  --tl-lh-tight: 1.4;
+  --tl-lh-body: 1.5;
+  --tl-lh-loose: 1.6;
+
+  /* —— 动效（03 §13.1：120/180/240ms ease-out） —— */
+  --tl-dur-fast: 120ms;
+  --tl-dur-base: 180ms;
+  --tl-dur-slow: 240ms;
+  --tl-ease: ease-out;
+
+  /* —— 骨架（区域高度，8px 网格；Now/轮次带取规范给定值） —— */
+  --tl-header-h: 56px;
+  --tl-now-h: 36px;
+  --tl-timeline-h: 48px;
+  --tl-turns-h: 92px;
+  --tl-turns-h-collapsed: 40px;
+  --tl-inspector-w: 340px;
+  --tl-inspector-w-wide: 360px;
+  --tl-map-min-h: 520px;
+}
+
+/* reduced-motion：关闭脉冲、生长、平滑过渡（03 §15 / 06 N-13）。这是唯一的 viewport media query。 */
+@media (prefers-reduced-motion: reduce) {
+  :is(.threadline-app, .threadline-impact-root, .threadline-modal-root) {
+    --tl-dur-fast: 0ms;
+    --tl-dur-base: 0ms;
+    --tl-dur-slow: 0ms;
+  }
+
+  :is(.threadline-app, .threadline-impact-root, .threadline-modal-root) *,
+  :is(.threadline-app, .threadline-impact-root, .threadline-modal-root) *::before,
+  :is(.threadline-app, .threadline-impact-root, .threadline-modal-root) *::after {
+    animation-duration: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+}

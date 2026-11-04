@@ -1,0 +1,15 @@
+/*
+ * surface.css —— 「脉络」tab 独占会话区域时的宿主级适配（D-30）。
+ *
+ * 这是本插件**唯一**一处不挂 .threadline-app 前缀的样式：
+ * 它必须命中宿主的 composer 座位（composer 在 .threadline-app 之外），
+ * 且只有当我们的 tab 正在显示（滚动容器带 data-threadline-surface）时才生效。
+ * 机制照搬 dsh-context 0.78.1 的 data-lc-surface 做法。
+ *
+ * 安全阀：composer 里若含审批 / 提问 / 计划复核，**一律不隐藏**——
+ * 那些是用户必须回答的交互，藏掉等于把流程卡死。
+ */
+[data-conversation-scroll][data-threadline-surface] > [data-composer-seat]:not(:has([data-approval-key], [data-question-key], [data-plan-review-key])),
+[data-conversation-scroll][data-threadline-surface] ~ [data-width-handle] {
+  display: none;
+}

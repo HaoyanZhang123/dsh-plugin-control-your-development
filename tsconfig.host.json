@@ -1,0 +1,9 @@
+// host 半区：node 环境，只有 ES2022 内建，不允许 DOM 类型（host 不许碰 window/document）。
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": ["node"]
+  },
+  "include": ["src/host/**/*.ts", "src/shared/**/*.ts"]
+}

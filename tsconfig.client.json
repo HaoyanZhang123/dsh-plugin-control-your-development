@@ -1,0 +1,11 @@
+// client 半区：浏览器环境，DOM 类型 + React JSX 运行时。
+// react / react/jsx-runtime 由宿主 __ModuleLoader__ 提供，构建里是 external（不打包 React）。
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "types": []
+  },
+  "include": ["src/client/**/*.ts", "src/client/**/*.tsx", "src/shared/**/*.ts"]
+}

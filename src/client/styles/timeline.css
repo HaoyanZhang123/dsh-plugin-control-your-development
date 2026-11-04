@@ -1,0 +1,240 @@
+/*
+ * timeline.css —— 时间轴（T07 / 03 §5）的样式。
+ *
+ * 纪律同 base.css：选择器挂 .threadline-app；颜色只用 --tl-*；只做容器查询；
+ * 注入走 styles/index.ts 的单一 installStyles()（枚举 styles/*.css），不自己插 <style>。
+ */
+
+/* ========== 根 ========== */
+
+.threadline-app .tl-timeline {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  inline-size: 100%;
+  block-size: 100%;
+  min-inline-size: 0;
+  overflow: hidden;
+  color: var(--tl-fg-secondary);
+  font-size: var(--tl-fs-meta);
+}
+
+/* ========== 生长带（8px，03 §5） ========== */
+
+.threadline-app .tl-growth {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  flex: 1 1 auto;
+  block-size: 100%;
+  min-inline-size: 0;
+  overflow: hidden;
+}
+
+.threadline-app .tl-growth-svg {
+  display: block;
+  inline-size: 100%;
+  block-size: 8px;
+  overflow: visible;
+}
+
+.threadline-app .tl-growth-line {
+  fill: var(--tl-accent);
+  fill-opacity: 0.16;
+  stroke: var(--tl-accent);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+/* ========== 轨道 ========== */
+
+.threadline-app .tl-track {
+  position: relative;
+  flex: 1 1 auto;
+  block-size: 22px;
+  min-inline-size: 0;
+  border-block-start: 1px solid var(--tl-border-weak);
+  border-block-end: 1px solid var(--tl-border-weak);
+  background: var(--tl-surface-sunken);
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.threadline-app .tl-track:focus-visible {
+  outline: var(--dsw-focus-ring-width, 2px) solid var(--tl-accent);
+  outline-offset: 2px;
+}
+
+/* ========== 未加载区段（斜纹 + 真标签；不画假节点） ========== */
+
+.threadline-app .tl-unloaded {
+  position: absolute;
+  inset-block: 0;
+  background-color: var(--tl-surface);
+  background-image: repeating-linear-gradient(
+    135deg,
+    var(--tl-border-strong) 0 2px,
+    transparent 2px 7px
+  );
+  border-inline: 1px solid var(--tl-warn);
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+.threadline-app .tl-unloaded-label {
+  position: absolute;
+  inset-block-start: 2px;
+  inset-inline-start: 3px;
+  padding: 0 3px;
+  border-radius: var(--tl-radius-xs);
+  background: var(--tl-surface-raised);
+  color: var(--tl-fg-tertiary);
+  font-size: 10px;
+  line-height: 1.2;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.threadline-app .tl-unloaded-hint {
+  position: absolute;
+  inset-block-start: -20px;
+  z-index: 4;
+  padding: 1px 6px;
+  border: 1px solid var(--tl-warn);
+  border-radius: var(--tl-radius-sm);
+  background: var(--tl-surface-raised);
+  color: var(--tl-fg);
+  font-size: 10px;
+  line-height: 1.5;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* ========== 会话刻度（03 §5：开始/结束小竖线） ========== */
+
+.threadline-app .tl-session {
+  position: absolute;
+  inset-block: 0;
+  inline-size: 1px;
+  background: var(--tl-border-strong);
+  cursor: default;
+}
+
+.threadline-app .tl-session[data-edge='end'] {
+  background: var(--tl-fg-tertiary);
+}
+
+.threadline-app .tl-session:hover {
+  background: var(--tl-accent);
+}
+
+/* ========== 播放头 ========== */
+
+.threadline-app .tl-playhead {
+  position: absolute;
+  inset-block: -2px;
+  inline-size: 2px;
+  background: var(--tl-accent);
+  transform: translateX(-1px);
+  pointer-events: none;
+}
+
+.threadline-app .tl-playhead-handle {
+  position: absolute;
+  inset-block-start: -5px;
+  inset-inline-start: 50%;
+  inline-size: 10px;
+  block-size: 10px;
+  margin-inline-start: -5px;
+  border: 2px solid var(--tl-accent);
+  border-radius: var(--tl-radius-pill);
+  background: var(--tl-bg);
+  pointer-events: auto;
+  cursor: grab;
+}
+
+.threadline-app .tl-playhead-handle:active {
+  cursor: grabbing;
+}
+
+/* ========== 刻度标签 ========== */
+
+.threadline-app .tl-ticks {
+  position: relative;
+  flex: 0 0 auto;
+  block-size: 14px;
+}
+
+.threadline-app .tl-tick {
+  position: absolute;
+  inset-block-start: 0;
+  transform: translateX(-50%);
+  color: var(--tl-fg-tertiary);
+  font-family: var(--tl-mono);
+  font-size: 10px;
+  line-height: 14px;
+  white-space: nowrap;
+}
+
+.threadline-app .tl-tick[data-tick-priority='high'] {
+  color: var(--tl-fg-secondary);
+}
+
+/* ========== 控件（只读动作：播放/暂停 · 倍速 · 回到现在） ========== */
+
+.threadline-app .tl-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  min-inline-size: 0;
+}
+
+.threadline-app .tl-controls .threadline-btn {
+  block-size: 22px;
+}
+
+.threadline-app .tl-speed {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.threadline-app .tl-current {
+  flex: 0 0 auto;
+  color: var(--tl-fg-tertiary);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+/* ========== 响应式（容器查询） ========== */
+
+@container threadline (max-width: 899.98px) {
+  .threadline-app .tl-timeline {
+    gap: 4px;
+  }
+
+  .threadline-app .tl-controls .threadline-btn {
+    padding: 0 4px;
+  }
+
+  .threadline-app .tl-current {
+    display: none;
+  }
+}
+
+/* ========== reduced-motion（03 §15 / 06 N-13） ========== */
+
+@media (prefers-reduced-motion: reduce) {
+  .threadline-app .tl-timeline * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+.threadline-app .tl-timeline[data-reduced-motion='true'] * {
+  transition: none !important;
+  animation: none !important;
+}

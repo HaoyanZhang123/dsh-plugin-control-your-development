@@ -1,0 +1,48 @@
+/*
+ * shell/types.ts —— 外壳的共享类型与常量（区域名、范围枚举、默认值）。
+ *
+ * 单一事实源：区域名只在这里定义一次，组件与 harness 的自检都引用它，
+ * 避免"断言里写的区域名"和"DOM 里真实存在的区域名"各说一套。
+ */
+import type { MessageKey } from '../../locale/index.ts'
+
+/** 时间范围筛选：值直接就是 locale key（03 §5 / §16）。 */
+export type RangeKey = Extract<MessageKey, 'range.today' | 'range.7d' | 'range.30d' | 'range.all'>
+
+/** 范围 chip 的顺序（与 03 §3.1 的 [今天|7天|30天|全部] 一致）。 */
+export const RANGE_KEYS: readonly RangeKey[] = ['range.today', 'range.7d', 'range.30d', 'range.all']
+
+/** 默认范围：全部（03 §5：默认范围=全部，播放头在现在）。 */
+export const DEFAULT_RANGE: RangeKey = 'range.all'
+
+/** 外壳区域名（DOM 上的 data-region 值，断言按它取元素）。 */
+export const SHELL_REGIONS = {
+  header: 'header',
+  now: 'now',
+  map: 'map',
+  inspector: 'inspector',
+  timeline: 'timeline',
+  turns: 'turns',
+} as const
+
+export type ShellRegion = (typeof SHELL_REGIONS)[keyof typeof SHELL_REGIONS]
+
+/** 区域几何（与 tokens.css 的 --tl-* 变量对应；测试用来对账规范数值）。 */
+export const SHELL_METRICS = {
+  header: 56,
+  now: 36,
+  timeline: 48,
+  turns: 92,
+  turnsCollapsed: 40,
+  inspector: 340,
+  inspectorWide: 360,
+  mapMinHeight: 520,
+} as const
+
+/** 容器查询断点（03 §14）。base.css 的 @container 必须与这里一一对应。 */
+export const BREAKPOINTS = {
+  wide: 1100,
+  medium: 900,
+  narrow: 600,
+  minimum: 420,
+} as const

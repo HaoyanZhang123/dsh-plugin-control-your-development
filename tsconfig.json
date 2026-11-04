@@ -1,0 +1,26 @@
+// base：只放三套 leaf 配置共用的编译选项。
+// 类型检查请跑 tsconfig.host.json / tsconfig.client.json / tsconfig.test.json（见 package.json 的 typecheck）。
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": true,
+    // 允许在 import 里写显式 `.ts` 后缀（Lead 集成决策，2026-11-04）。
+    // 原因：测试用 Node 24 原生类型擦除直接跑 `.test.ts`，Node ESM **不做扩展名解析**，
+    // 被测模块内部跨文件 import 必须带 `.ts`；而 TS 默认禁止（TS5097）。
+    // 三套 leaf 配置全部 noEmit，esbuild 也接受 `.ts` 说明符，因此这是纯放宽：
+    // 原有不带后缀的写法仍然合法，两种风格可共存，不产生第二种执行路径。
+    "allowImportingTsExtensions": true,
+    "types": []
+  },
+  "include": ["src/shared/**/*.ts"]
+}

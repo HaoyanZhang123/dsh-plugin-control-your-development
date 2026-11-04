@@ -1,13 +1,8 @@
-# 机器产物与本地环境不进仓
+# 开发期忽略。
+# 注意：**.gitignore 对 npm/pnpm pack 无效** —— 打包看 package.json 的 files 白名单。
 node_modules/
-__pycache__/
-*.pyc
-*.cyd-backup
-dev-dashboard/index.html
-dev-dashboard/.facts.json
-dev-dashboard/.state.json
-**/.DS_Store
-# 分发包产物（由 pnpm pack 生成，不进仓库）
+.test-build/
+*.tsbuildinfo
 *.tgz
-# 绝不提交 npm 凭据
-.npmrc
+.tmp/
+*.log

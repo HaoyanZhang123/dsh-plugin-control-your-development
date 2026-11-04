@@ -1,0 +1,528 @@
+/*
+ * inspector.css —— 检查器（文件 / 轮次 / 会话 / 工作区概览）（03 §8 / §12 / §14 / §15；06 A42-2/A42-3）。
+ *
+ * 纪律：
+ * - 选择器一律挂 .threadline-app 前缀；颜色只用 --tl-*；
+ * - 响应式只用 @container threadline（断点 1100 / 900 / 600 / 420，与 types.ts 一致）；
+ * - 检查器的三种形态（内联 / 覆盖层 / 底部 sheet）由 base.css 管，这里只排内部内容；
+ * - 正文默认折叠：.threadline-inspector-body-text 只在用户展开后出现（组件控制挂载）。
+ */
+
+/* ========== 1. 根与分区 ========== */
+
+.threadline-app .threadline-inspector-view {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+.threadline-app .threadline-inspector-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-inline-size: 0;
+}
+
+.threadline-app .threadline-inspector-section-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-inline-size: 0;
+}
+
+.threadline-app .threadline-inspector-section-title {
+  color: var(--tl-fg-secondary);
+  font-size: var(--tl-fs-meta-sm);
+  line-height: var(--tl-lh-tight);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.threadline-app .threadline-inspector-section-hint {
+  margin-inline-start: auto;
+  color: var(--tl-fg-tertiary);
+  font-size: var(--tl-fs-meta-sm);
+  line-height: var(--tl-lh-tight);
+  white-space: nowrap;
+}
+
+.threadline-app .threadline-inspector-subhead {
+  color: var(--tl-fg-tertiary);
+  font-size: var(--tl-fs-meta-sm);
+  line-height: var(--tl-lh-tight);
+}
+
+/* ========== 2. 标题块 ========== */
+
+.threadline-app .threadline-inspector-title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
+}
+
+.threadline-app .threadline-inspector-title-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-inline-size: 0;
+}
+
+.threadline-app .threadline-inspector-filename {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--tl-fg);
+  font-family: var(--tl-mono);
+  font-size: var(--tl-fs-body);
+  line-height: var(--tl-lh-tight);
+  font-weight: 600;
+}
+
+.threadline-app .threadline-inspector-path {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--tl-fg-secondary);
+  font-family: var(--tl-mono);
+  font-size: var(--tl-fs-meta-sm);
+  line-height: var(--tl-lh-tight);
+}
+
+.threadline-app .threadline-inspector-family {
+  flex: 0 0 auto;
+  padding: 0 6px;
+  border: 1px solid var(--tl-border);
+  border-radius: var(--tl-radius-pill);
+  color: var(--tl-fg-secondary);
+  font-size: var(--tl-fs-meta-sm);
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+/* ========== 3. 键值行与列表 ========== */
+
+.threadline-app .threadline-inspector-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-inline-size: 0;
+}
+
+.threadline-app .threadline-inspector-row-label {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--tl-fg-secondary);
+  font-size: var(--tl-fs-meta);
+  line-height: var(--tl-lh-body);
+}
+
+.threadline-app .threadline-inspector-row-value {
+  flex: 0 1 auto;
+  max-inline-size: 62%;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+  color: var(--tl-fg);
+  font-size: var(--tl-fs-body);
+  line-height: var(--tl-lh-body);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+.threadline-app .threadline-inspector-row-value--mono {
+  font-family: var(--tl-mono);
+  font-size: var(--tl-fs-meta);
+}
+
+.threadline-app .threadline-inspector-row-value[data-muted='true'] {
+  color: var(--tl-fg-tertiary);
+}
+
+.threadline-app .threadline-inspector-row-value[data-tone='danger'] {
+  color: var(--tl-danger);
+}
+
+.threadline-app .threadline-inspector-row-value[data-tone='warning'] {
+  color: var(--tl-warn-label);
+}
+
+.threadline-app .threadline-inspector-note {
+  color: var(--tl-fg-tertiary);
+  font-size: var(--tl-fs-meta-sm);
+  line-height: var(--tl-lh-body);
+}
+
+.threadline-app .threadline-inspector-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.threadline-app .threadline-inspector-listitem {
+  display: block;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.threadline-app .threadline-inspector-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  inline-size: 100%;
+  min-inline-size: 0;
+  padding: 2px 4px;
+  border: 1px solid transparent;
+  border-radius: var(--tl-radius-xs);
+  background: transparent;
+  color: var(--tl-fg);
+  font-family: inherit;
+  font-size: var(--tl-fs-meta);
+  line-height: var(--tl-lh-body);
+  text-align: start;
+  cursor: default;
+}
+
+.threadline-app button.threadline-inspector-item {
+  cursor: pointer;
+}
+
+.threadline-app button.threadline-inspector-item:hover {
+  border-color: var(--tl-border);
+  background: var(--tl-hover);
+}
+
+.threadline-app .threadline-inspector-item-main {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.threadline-app .threadline-inspector-item-main--mono {
+  font-family: var(--tl-mono);
+  font-size: var(--tl-fs-meta-sm);
+}
+
+.threadline-app .threadline-inspector-item-meta {
+  flex: 0 0 auto;
+  color: var(--tl-fg-secondary);
+  font-size: var(--tl-fs-meta-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.threadline-app .threadline-inspector-item-meta[data-tone='danger'] {
+  color: var(--tl-danger);
+}
+
+.threadline-app .threadline-inspector-item-meta[data-tone='unknown'] {
+  color: var(--tl-fg-tertiary);
+}
+
+/* ========== 4. 徽标 / 横幅 / 动作 ========== */
+
+.threadline-app .threadline-inspector-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  padding: 0 6px;
+  border: 1px solid var(--tl-border);
+  border-radius: var(--tl-radius-pill);
+  color: var(--tl-fg-secondary);
+  font-size: var(--tl-fs-meta-sm);
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.threadline-app .threadline-inspector-badge[data-status='running'] {
+  border-color: var(--tl-accent);
+  color: var(--tl-accent);
+}
+
+.threadline-app .threadline-inspector-badge[data-status='aborted'] {
+  border-color: var(--tl-danger);
+  color: var(--tl-danger);
+}
+
+.threadline-app .threadline-inspector-badge[data-status='error'] {
+  border-color: var(--tl-danger);
+  color: var(--tl-danger);
+}
+
+.threadline-app .threadline-inspector-badge[data-status='unknown'] {
+  border-color: var(--tl-border-weak);
+  color: var(--tl-fg-tertiary);
+}
+
+.threadline-app .threadline-inspector-banner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid var(--tl-border);
+  border-radius: var(--tl-radius-sm);
+  background: var(--tl-surface-raised);
+  color: var(--tl-fg-secondary);
+  font-size: var(--tl-fs-meta-sm);
+  line-height: var(--tl-lh-body);
+}
+
+.threadline-app .threadline-inspector-banner[data-tone='accent'] {
+  border-color: var(--tl-accent);
+  color: var(--tl-accent);
+}
+
+.threadline-app .threadline-inspector-banner[data-tone='warning'] {
+  border-color: var(--tl-warn);
+  color: var(--tl-warn-label);
+}
+
+.threadline-app .threadline-inspector-banner[data-tone='danger'] {
+  border-color: var(--tl-danger);
+  color: var(--tl-danger);
+}
+
+.threadline-app .threadline-inspector-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-block-start: 4px;
+  border-block-start: 1px solid var(--tl-border-weak);
+}
+
+/* ========== 5. 折叠正文 / 证据 / 未确认 ========== */
+
+.threadline-app .threadline-inspector-disclosure {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  max-inline-size: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--tl-link);
+  font-family: inherit;
+  font-size: var(--tl-fs-meta);
+  line-height: var(--tl-lh-body);
+  cursor: pointer;
+}
+
+.threadline-app .threadline-inspector-disclosure-caret {
+  color: var(--tl-fg-tertiary);
+}
+
+.threadline-app .threadline-inspector-body-text {
+  max-block-size: 168px;
+  overflow: auto;
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--tl-border-weak);
+  border-radius: var(--tl-radius-sm);
+  background: var(--tl-surface-sunken);
+  color: var(--tl-fg);
+  font-family: var(--tl-mono);
+  font-size: var(--tl-fs-meta);
+  line-height: var(--tl-lh-body);
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+
+.threadline-app .threadline-inspector-evidence {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+  color: var(--tl-fg-secondary);
+  font-family: var(--tl-mono);
+  font-size: var(--tl-fs-meta-sm);
+  line-height: var(--tl-lh-body);
+}
+
+.threadline-app .threadline-inspector-relation {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  inline-size: 100%;
+  min-inline-size: 0;
+  padding: 2px 4px;
+  border: 1px solid transparent;
+  border-radius: var(--tl-radius-xs);
+  background: transparent;
+  color: var(--tl-fg);
+  font-family: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.threadline-app .threadline-inspector-relation:hover {
+  border-color: var(--tl-border);
+  background: var(--tl-hover);
+}
+
+.threadline-app .threadline-inspector-relation-target {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--tl-mono);
+  font-size: var(--tl-fs-meta);
+}
+
+.threadline-app .threadline-inspector-unconfirmed {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-inline-size: 0;
+  padding: 2px 0;
+  color: var(--tl-fg-secondary);
+  font-size: var(--tl-fs-meta-sm);
+  line-height: var(--tl-lh-body);
+}
+
+.threadline-app .threadline-inspector-unconfirmed-path {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+  color: var(--tl-fg);
+  font-family: var(--tl-mono);
+}
+
+/* ========== 6. 操作统计（细条，不是大 KPI 卡） ========== */
+
+.threadline-app .threadline-inspector-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-inline-size: 0;
+}
+
+.threadline-app .threadline-inspector-stat {
+  display: grid;
+  grid-template-columns: 4.5em minmax(0, 1fr) 2.5em;
+  align-items: center;
+  gap: 6px;
+  min-inline-size: 0;
+  color: var(--tl-fg-secondary);
+  font-size: var(--tl-fs-meta-sm);
+  line-height: var(--tl-lh-tight);
+}
+
+.threadline-app .threadline-inspector-stat-bar {
+  position: relative;
+  block-size: 4px;
+  min-inline-size: 0;
+  overflow: hidden;
+  border-radius: var(--tl-radius-pill);
+  background: var(--tl-hover);
+}
+
+.threadline-app .threadline-inspector-stat-fill {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  border-radius: inherit;
+  background: var(--tl-accent);
+}
+
+.threadline-app .threadline-inspector-stat-count {
+  color: var(--tl-fg);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+/* ========== 7. 图例 / 概览 ========== */
+
+.threadline-app .threadline-inspector-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-inline-size: 0;
+}
+
+.threadline-app .threadline-inspector-toggle-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-inline-size: 0;
+}
+
+.threadline-app .threadline-inspector-coverage {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-inline-size: 0;
+}
+
+.threadline-app .threadline-inspector-coverage-bar {
+  position: relative;
+  block-size: 6px;
+  min-inline-size: 0;
+  overflow: hidden;
+  border-radius: var(--tl-radius-pill);
+  background: var(--tl-hover);
+}
+
+.threadline-app .threadline-inspector-coverage-fill {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  border-radius: inherit;
+  background: var(--tl-accent);
+}
+
+/* ========== 8. 容器查询（中窄容器收紧密度） ========== */
+
+@container threadline (max-width: 899.98px) {
+  .threadline-app .threadline-inspector-view {
+    gap: 10px;
+  }
+
+  .threadline-app .threadline-inspector-row {
+    gap: 8px;
+  }
+
+  .threadline-app .threadline-inspector-row-value {
+    max-inline-size: 58%;
+  }
+}
+
+@container threadline (max-width: 599.98px) {
+  .threadline-app .threadline-inspector-view {
+    gap: 8px;
+  }
+
+  .threadline-app .threadline-inspector-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+  }
+
+  .threadline-app .threadline-inspector-row-value {
+    max-inline-size: 100%;
+    text-align: start;
+  }
+}
+
+@container threadline (max-width: 419.98px) {
+  .threadline-app .threadline-inspector-title-line {
+    flex-wrap: wrap;
+  }
+}

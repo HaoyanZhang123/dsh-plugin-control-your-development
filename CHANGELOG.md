@@ -1,6 +1,6 @@
 # Changelog
 
-本文件记录 `dsh-plugin-control-your-development` 的版本更新。
+`dsh-plugin-control-your-development` 的版本更新记录。
 
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
@@ -9,174 +9,48 @@
 
 ## [Unreleased]
 
-## [0.7.0] - 2026-10-24
+## [1.0.0-alpha.1] - 2026-11-05
+
+首个 alpha 预览版：产品重构为「脉络 / Threadline」，永久只读，三个入口。
+
+- 新增：工作区级星图（结构 / 共现 / 引用 / 时序四层关系）、时间轴、轮次带、三种检查器。
+- 新增：`/threadline` 命令弹窗与每轮「影响 N」入口；两者不需要先打开 tab 也能读数据。
+- 新增：隐私模式、列表视图（键盘可用）、reduced-motion 支持。
+- 优化：插件加载即按工作区预热扫描并持续增量更新，打开 tab 时数据已就绪。
+- 修复：弹窗与 popover 改为 portal 到 `document.body`（适配 DSH 0.2.2 的 docked composer）。
+- 重要说明：本版本为 alpha 预览，接口与界面仍可能调整；旧版（0.7.x）的面板实现与其构建链已整体移除，不提供迁移。
+
+## [1.0.0] - 2026-11-04
+
+**破坏性重构：产品改为「脉络 / Threadline」，旧面板实现与其整条构建链整体移除。** 无向后兼容层，旧配置与旧产物不迁移。
 
 ### 新增 | Added
 
-- 读模型 `dev-dashboard/.view.json`：由渲染器唯一生成、原子写入、带完整新鲜度指纹；面板与离线页只消费它，JS 侧 Markdown 解析与旧的双解析器套件整体删除。
-- 统一工作区：右侧**上下文检查器**（是什么 / 为什么 / 证据在哪 / 能做什么）+ 底部可折叠「进展与决策」抽屉；导航收敛为五个 tab。
-- 整链聚焦：鼠标悬停与键盘 focus 临时预览祖先 + 后代，点击固定；只改透明度、不改坐标。
-- 统一意图通道与回执四态（`accepted` / `queued` / `mailbox` / `failed`）；当前会话的运行控制（停止当前轮次 / 停止并清空队列 / 重试）与**只读**运行投影。
+- **三个表面**（且只有这三个）：对话页 tab「脉络」（`conversation.view` / `id: threadline`）、每轮「影响 N」（`conversation.chat.assistant-actions` / `id: threadline-impact`）、`/threadline` 与 `/脉络` 命令 + 居中弹窗（`inputTriggers.registerSource` + `conversation.input.overlay`）。
+- **星图**：工作区 → 会话 → 轮次 → 文件的分层关系视图；每条边可解释、可给证据，推断与共现显式标注。
+- **host 只读扫描**：`sessionPersistence` / `sessionQuery` 读会话日志 → 内存索引；同一工作区新扫描取消旧扫描，按 50ms 预算让出事件循环，超限标 `truncated`。
+- **三个同源只读路由**：`POST /api/dsh-threadline/{scan,snapshot,detail}`，全部只读、无外部 origin。
+- **可解释降级**：`connection` / `slots` / `inputTriggers` 缺失只 warn 不崩；读不到 / 观测不到显式显示，不用 0 或空态冒充成功。
+- **样式单一注入路径**：所有 CSS 走 `src/client/styles/index.ts` 的 `installStyles()`（`<style data-plugin-css>` 去重，卸载移除）；`css.ts` 由 `node tests/harness/emit-styles.mjs` 从 `styles/*.css` 逐字生成。
 
-### 优化 | Improved
+### 变更 | Changed
 
-- 新鲜度门禁：`sourceHashes` 覆盖事实源、选中的术语表 / TECH / CHANGES、`.facts.json`、`.dashboard-ignore`、上一版 TECH 快照，外加 `@evidence` / `@sources` / `@cyd` / `@prevtech`；跨语言（Python ↔ node）逐键一致由门禁对账。
-- 读模型过期时**保留旧图**并明确标注、禁用依赖旧上下文的对象动作；缺读模型 / 版本更高 / 无法校验各有独立状态，不把「没校验」当「新鲜」。
-- 离线 `index.html` 降为**只读快照**：删目录授权与页面内写回，首屏标出导出时间与来源版本。
-
-### 修复 | Fixed
-
-- 区分「读不到」与「没有」：`.inbox.jsonl` 不存在按 0 条处理，只有存在但读取失败才显示 `—`。
-- 待生效计数胶囊不再被拉伸成整行（`align-self` + 宽度上限）。
-- 运行投影改用会话公开接口 `getSnapshot()` / `subscribe()`，不再永远显示「运行状态观测不到」。
+- 依赖政策收敛：`dependencies` 为空对象；React / React DOM 作为宿主 peer 由 `window.__ModuleLoader__` 注入，不打包；运行期零第三方依赖。
+- 构建链收敛为一条：`pnpm run build` → `tools/build.mjs`（esbuild）产出 `lib/index.js`（host ESM）与 `lib/client.js`（CJS + `__ModuleLoader__.load` 包装），产物确定性（两次构建 sha256 相同、无 sourcemap / 时间戳 / 绝对路径）。
+- 类型检查拆三套 tsconfig（host / client / test），测试用 Node 24 原生 `node --test` 直接跑 `.test.ts`，不引 jest / vitest。
+- `package.json`：`files` 白名单只保留运行期需要的文件（`lib`、`cordis.patch.yml`、文档、`LICENSE`、`assets/icon.webp`）；移除 `locale/*.json` 导出（文案已进客户端 bundle）；`description` / `keywords` 改为脉络 / Threadline。
+- `dsh.client.inject` 增加 `@deepseek-ai/dsh-client-ui-input-trigger`（命令入口依赖）。
 
 ### 移除 | Removed
 
-- 删除独立「使用指南」tab 及其全部固中文案与断言（D2）；必要提示只留在空态与控件旁。
-- 删除 `smoke/dual_parser_diff.py`、`smoke/js_assemble_driver.js` 与退役的 goat 交叉核对探针。
+- 旧实现与其构建链：源码、构建脚本、旧元信息文件共 5 个路径整体删除（删除清单与 sha256 见 `output/_verify/threadline/T12/removed.txt`），旧渲染链一并下线，不留兼容分支。
+- 旧的产品化能力：右栏 tab、独立「使用指南」、离线 HTML 快照导出、任何写回/同步动作。
+- 项目 `project.yml` 的 `skills` 声明（skill 实体是用户全局资产，不由插件包分发）。
 
+### 修复 | Fixed
 
-## [0.6.2] - 2026-10-18
+- 版本号单一事实源：`src/shared/version.ts` ↔ `package.json` 由构建脚本校验，不一致直接构建失败。
 
-### Fixed
+---
 
-- **在 DSH 0.2.1-rc.2 上装不上（发布版 peer 区间过窄）**：npm 0.6.1 声明 `@deepseek-ai/dsh-agent|dsh-llm|dsh-settings: ">=0.2.0-0 <0.2.1-0"`，而宿主 `dsh-app-boot@0.2.1-rc.2` ⇒ 兼容判定 false：安装被拒并回滚，已装也会在启动时被 `skippedBundles` **静默跳过**（只在 stderr 留一行）。区间放宽为 `>=0.2.0-0`（保留 `-0` 后缀、不设上界）。
-- **本地 dev 链接随工厂重构失效**：插件从 `plugins/…` 迁到 `projects/<name>/plugin/` 后，profile 里的 `link:` 指向已删除目录 ⇒ 包解析失败、面板消失。安装文档补上迁移后的路径。
-- **读文件分页条件写反（既有缺陷，v0.6.2 发现）**：`src/client.src.js` 把宿主 `read` 的 `eof` 语义用反了——`eof=true` 才表示本页含文件最后一行；原写法 `if (!v.eof) break` 会在**还有下一页时提前停止**，导致 **>2000 行的文件被静默截断**。现改为 `if (v.eof) break`，超过一页继续翻页（`lib/client.js` 由 `build_panel.py` 重建）。
-
-### Changed
-
-- **在 DSH 0.2.1-rc.2 上完成真机验证**：客户端 bundle 装载、右侧栏 tab 类型与 guide 入口注册、面板渲染均实测通过（证据见 `knowledge/version-compatibility.md` §7）。
-- 展示元信息对齐新版官方要求：保留顶层 `icon`（优先）并新增 `exports["./icon"]` 指向同一文件；`locale` 的 `meta.title/description` 保持。
-- `project.yml` 的开发基准运行时更新为 `0.2.1-rc.2`。
-
-## [0.6.1] - 2026-10-15
-
-### Fixed
-
-- **窄栏证据路径胶囊溢出**（用户实拍报障）：右侧边栏收窄时证据行顶出卡片边框、复制键被推到框外。两条根因合起来才暴露：①**面板分支**把证据渲染成 `button.btn.mini`，继承 `.btn{white-space:nowrap}` ⇒ 胶囊最小宽度 = 整条路径，而 `.evrow` 是 `inline-flex`、子项 `min-width:auto` 不可收缩；②**离线分支**渲染成 `<a>`（无 `nowrap`）会自动折行 ⇒ **只有面板会溢出——这就是此前门禁全绿却漏掉它的原因**。实测：容器首次溢出 ≈`433px`、`404px` 时溢出 `28.8px`、`364px` 时最大溢出 `68.8px`（3 个复制键全部出框）
-- **打印/PDF 把证据路径整条吃掉**（**既有缺陷**，本轮发现并修掉）：打印隐藏规则原写 `.btn[data-cp]`，而**分支④（整片即复制）的路径片本身也带 `data-cp`** ⇒ print 下 **143 个路径片被整条隐藏**（纸面上路径消失）。收窄为专属类名 `.evcp` 后为 **0**；`data-cp` **属性保留**（点击处理器仍靠它工作，只改打印选择器）
-
-### Changed
-
-- **窄栏证据路径行为**（用户裁定）：路径走**单行省略**（`…`，悬停 `title` 看全文）；**复制键 `flex:none`，永不被裁**；面板与离线网页**两端形态统一**；打印/PDF **恢复折行**、不许截断
-- 打印隐藏选择器由 `.btn[data-cp]` 收窄为 `.evcp`（复制键专属类名）
-
-### Added
-
-- **真机断言套件新增 10 条**（`cdp_verify.mjs`）：`④c` 六条 —— 几何不溢出、**收缩方向**（路径片 `flex-shrink=1` / 复制键 `0`，唯一能区分"真省略"与"整行锁死"的判据）、**真发生省略**（`.evtxt` 的 `scrollWidth > clientWidth`，`display:inline` 的几何断言看不见）、可见性过滤，另加夹具守卫与"防空集恒真"的复制键存在性断言；`④d` 四条 —— **打印态**（分支④路径片可见且折行恢复、复制键隐藏、量测后切回 `screen` 的自证）
-- `cdp_verify.mjs` 纳入 JS 语法门禁（`JS_SYNTAX_FILES` **5 → 6** 个文件）；如实定位为"**便宜的附加网**"——它拦得住模板串内多一个反引号，但拦不住模板串内"括号不配而外层仍合法"的语法错
-
-## [0.6.0] - 2026-10-13
-
-### Added
-
-- **`TECH.md`（技术地图）**：固定七字段 `模块 / 层 / 职责 / 技术 / 状态 / 证据 / 连到`（`### 子项` 复用），`层` 为自由文本、纵向位置按**首次出现顺序**，**默认随 init 建立**；幽灵边复用 `references/graph-visuals.md` §B
-- **`CHANGES.md`（变更规则）**：文件名不写死（与术语表同构的识别链）、最小骨架、**默认随 init 建立**；从 FEATURES + 证据 + 依赖推出骨架，并对「地图变了而规则没更新」产漂移 WARN
-- **「功能 | 技术」视图切换**：放在功能地图 tab 的工具栏，**不新增 tab**（六 tab 的顺序与数量不变）
-- **陈旧／搬迁信号**（两端同文案，各有差分夹具 + 非恒真反例）
-  - **S3 模块级陈旧**：与 `.versions/` 最近一份 `TECH.md` 快照对比，按模块算失效率 → `tech_stale{modules,ratio}`；技术视图标题旁 `⚠`、图例下 `.snote`、审计弹层一行（**陈旧必须比正确更显眼**）
-  - **S4 搬迁检测**：本轮 `.facts.json` 里 `change: deleted` 的路径 ∩ 模块 / 功能 / 使用流程 / 时间线的证据 → WARN
-  - 两条都 **fail-closed**：无快照、无命中一律不产（不许恒真信号）
-- **版本位**（`.cyd.json`）：`format` 与 `writer:{skill,at}`；`format` 超前、或 `writer.skill` 比当前插件版本新 → 两端同一条 WARN。`writer.skill` 由渲染器按 `manifest.yaml` 写入，面板侧比对**构建期注入**的 `CYD_SKILL_VERSION`
-- **`health.declared_refs`**：`CHANGES.md` / `TECH.md` 两份声明类文件的证据**计入归置但审计单列**（防后门）
-- **`glossStatus` 可选失败 flag** `meta_error` / `meta_missing`：`.cyd.json` 非法 JSON / 指定术语表不存在必须是 flag（吞异常可以、静默吞事实不行）；**缺 flag = 降级**——不产 WARN、不报错，也不得当成「已检查无问题」
-
-### Fixed
-
-- **整页「功能地图」里隐藏宿主输入框座席**：声明式 CSS（`[data-conversation-scroll]:has(.cyd-immersive) > [data-composer-seat]`），**不动宿主的结构与样式**；**三个例外保留**（有待审批 / 待提问 / 待复核计划时输入框必须留着）
-- **「功能 | 技术」切换条宽度**：切换条贴合两个按钮（`|容器宽 − 按钮和| ≤ 4px`；整页视图与侧栏面板内各有一条断言）
-- **线上不再渲染可见边标签**（`.edgelabel === 0`）：关系名改走 `title` / `data-rel`，每条边仍带关系名
-
-### Changed
-
-- 配套 skill 版本 `1.4.0` → **`1.6.0`**；数据契约升到 **v1.6**（契约内不再内联任何中文 WARN 原文，唯一来源是 `references/copy-deck.md` §16.6）
-- `lib/client.js` 增加**构建期注入**的 skill 版本常量 `CYD_SKILL_VERSION`：读不到 `manifest.yaml` 的 `version` 即 **FATAL**，不再静默留 `null`（否则「版本比对新」这条判据会永不触发）
-
-## [0.5.4] - 2026-10-10
-
-### Added
-
-- **术语表成为一等功能**：新增「📖 术语表」tab（导航第 4 个，在「现在」与「使用指南」之间）；「项目」页那张旧卡片搬走，不再重复渲染
-- 术语表**默认随 init 一并建立**：有固定叫法就抽初稿，空白项目建骨架标「待补充」；`update` 增加体检——解析不到就在对话里问用户是否生成（**不静默创建**）
-- **按表头契约识别、文件名不写死**：`术语表.md` / `词汇表.md` / `glossary.md` 都认。解析优先级 = `.cyd.json` 显式指定 → 内容嗅探（唯一命中）→ 多命中不猜（报警并请用户指定）→ 一个都没有（未启用，不算错）
-- 空态给「让 AI 建立术语表」一键入口：面板里这句话直接进主对话，离线网页退回复制
-- 新增机器文件 `dev-dashboard/.cyd.json`：渲染器每轮写下识别结论，供面板读取真实文件名（面板只有按路径读的能力、没有列目录）
-
-### Fixed
-
-- 漂移明细每行可点「让 AI 统一」，把该别名在正文里统一成标准用词
-- 离线网页点「🔄 更新」此前漏读术语表——更新一次术语表就消失；现已补上
-- 看护（watch）与版本快照改为处理 `dev-dashboard/*.md` 全部：术语表改名后仍被看护、仍进快照
-- **全屏兜底补全**：`requestFullscreen` **同步抛错**时原实现没有 try/catch（只有 Promise 被拒才兜底），表现为按钮「点了完全没反应」；现在两种失败都退回铺满视口的弹层
-
-### Changed
-
-- 配套 skill 版本 `1.3.2` → **`1.4.0`**：术语表从「可选文件 + 有才渲染」改为一等功能（默认建立、独立 tab、按表头识别）；插件下次启动时会自动把全局技能目录里的旧副本同步到这一版（安装标记机制）
-- README（中英）与 `docs/images/` 补上「📖 术语表」实拍图（第 7 张）
-
-## [0.5.3] - 2026-10-09
-
-### Added
-
-- 关系图工具栏「⛶ 全屏」：点一下进**真·窗口全屏**看图，再点一次或按 Esc 退出；拿不到全屏能力时退回铺满视口的弹层（#3，贡献者 @cjl520xx）
-
-### Fixed
-
-- 退出全屏后关系图卡被撑到比视口还高：全屏期间算出的 SVG 行内高度在退出时没有清掉，现在非整页/非全屏一律交回 CSS（433px → 870px 的回归）
-- 全屏中发生过重渲染后退出，`cyd-immersive` 摘不掉（导航/筛选/进度/页脚全被隐藏）且用户视野还原失效：全屏状态提升为跨重渲染保留（#3 跟进修复）
-- `tools/build_panel.py` 渲染核查找顺序：本仓 `skill/` 优先，再退回 `<工作区>/.dsh/skills/`（此前在仓库布局下直接 FATAL）（#3）
-- `src/client.src.js` 补回产物里已有、源里却缺失的直发通道源码（此前每次重建都会静默抹掉约 2.4 KB）（#3）
-
-### Changed
-
-- README（中英）与 `docs/images/README.md` 补上 #3 的全屏实拍图（此前两张图在仓内无任何引用）；`release.yml` 增加「共享核 + src → `lib/client.js` 逐字节一致」守卫，挡住同类静默分叉再次发生
-- 配套 skill 版本 `1.3.1` → **`1.3.2`**：共享渲染核（面板与离线导出网页共用）随本轮加了「⛶ 全屏」并修掉两处退出缺陷；插件下次启动时会自动把全局技能目录里的旧副本同步到这一版（安装标记机制）
-
-## [0.5.2] - 2026-10-08
-
-### Fixed
-
-- 关系图拖节点"乱窜"：坐标换算改走 `getScreenCTM()`（旧版按 `vb.w / rect.width` 估算，SVG 等比缩放并居中时增益与偏移都是错的），并按抓取偏移跟随指针做到 1:1 跟手
-- 拖动期间到来的文件变更会自动刷新并重排整张图（连带把刚摆好的位置和缩放一起复位）：现在押后到松手后再应用；手动摆过的节点位置与缩放平移跨重刷保留，新增「↺ 重置」回到自动分层布局
-- 悬停速览气泡无限闪烁、点不到：气泡改放节点旁边，并给收起加延迟（指针进气泡就不收起）
-- 会话列被挤窄时整页关系图塌成一条：SVG 高度改由脚本按容器实高算死，标题栏提示强制单行省略
-- 版本快照看完某个版本的差异后无法返回列表：差异视图加「← 返回版本列表」
-
-### Added
-
-- 会话页「功能地图」改为整页视图：只渲染关系图并铺满可用高度，不再夹带标题栏、徽章条、筛选、进度条、功能卡网格与页脚（宿主自己的标签栏与输入框保持原样，不做隐藏）
-- 点关系图节点直接打开节点面板：一句话输入框 + 快捷追问（问问进展 / 怎么验收 / 下一步建议），点一下直接把消息发给当前会话的 agent；**默认走官方会话直发**（消息直接进主对话），宿主 RPC（steer / `.inbox.jsonl`）作为兜底，两条都不通才复制并把失败原因显示出来
-- CDP 真机验收新增 9 条断言：整页形态（并确认宿主标签栏与输入框未被隐藏）、关系图铺满、悬停气泡不闪且可点、拖动跟手（位移误差 ≤2px）、发送按钮是明显主按钮、节点面板直发、消息真的进了主对话正文、键盘回车可达、版本差异可返回列表
-
-### Changed
-
-- 配套 skill 版本 `1.3.0` → **`1.3.1`**：面板渲染模板随本轮改动更新；插件下次启动时会自动把全局技能目录里的旧副本同步到这一版（安装标记机制）
-
-## [0.5.1] - 2026-10-08
-
-### Fixed
-
-- 功能关系图节点底板（圆角矩形）未渲染导致节点只剩文字的"隐形节点"问题（0.5.0 引入的回归）；CDP 验收新增 `g.node>rect` 数量断言防回归
-- README 四张实拍图按 0.5.x 新界面重拍
-
-## [0.5.0] - 2026-10-08
-
-### Added
-
-- 双向闭环：面板上「拍板」直接通知当前会话的模型；会话不在线时写入 `dev-dashboard/.inbox.jsonl`，下次更新时收取
-- 会话页顶部「功能地图」标签页：整页关系图 + 节点详情，支持缩放 / 平移 / 适应屏幕
-- 关系图节点宽度自适应内容，长名称折行省略、悬浮显示全文；文件路径中间省略、悬浮显示完整路径
-- 数据契约 v1.3：功能块下可嵌套 `### 子项:`（默认折叠、点击展开）；新增 `GLOSSARY.md` 术语表与用词漂移检查
-- 插件设置（经 DSH 设置服务）：数据目录名、双向通知开关、时间线显示条数、版本快照保留上限等
-- 版本快照：`dev-dashboard/.versions/` 保存三份 Markdown 的里程碑，面板可查看与对比
-- 插件页元信息：`locale/zh.json` 与 `locale/en.json` 提供标题与描述，`assets/icon.webp` 提供图标
-- `peerDependencies` 声明兼容区间 `>=0.2.0-0 <0.2.1-0`（含预览版），避免被宿主静默跳过
-
-### Changed
-
-- `index.html` 从「每次必渲染的交付物」降级为「可选导出」（分享 / 归档用）；面板是唯一日常界面；Python 渲染器保留全部审计职责
-
-## [0.4.2] - 2026-10-06
-
-历史版本（更名 dsh-plugin-control-your-development 后的发布线）。详见仓库 git 历史。
+更早的 0.x 版本随旧产品线一并停止维护，本文件不再保留其条目；历史可查仓库提交记录。

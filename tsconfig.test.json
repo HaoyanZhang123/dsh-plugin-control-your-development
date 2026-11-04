@@ -1,0 +1,17 @@
+// 测试：node --test 跑 tests/ 下的用例（Node 24 原生 TS 类型擦除 + 原生 test runner，不引 jest/vitest）。
+// 实测（2026-11-04，Node 24.22.1）：`node --test` 可直接运行 tests/**/*.test.ts，无需先构建。
+// 两个必需选项（Lead 在 T02 之后补的集成级配置，原因见下）：
+//   allowImportingTsExtensions —— 被测模块必须用显式 `.ts` 后缀 import（Node ESM 不做扩展名解析），
+//                                 而 TS 默认禁止在 import 里写 `.ts`；本配置 noEmit，故可开。
+//   include 覆盖 src/client —— UI 组件测试要 import 客户端模块；DOM lib 已在此打开。
+//   jsx: react-jsx —— 允许测试/组件用 .tsx（宿主 React 18 的自动运行时）。
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "allowImportingTsExtensions": true,
+    "jsx": "react-jsx"
+  },
+  "include": ["src/shared/**/*.ts", "src/client/**/*.ts", "src/client/**/*.tsx", "tests/**/*.ts"]
+}

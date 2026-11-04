@@ -1,0 +1,320 @@
+/*
+ * turns.css —— 轮次带（03 §6 / §14 / §15；06 A42-1 / A42-4）。
+ *
+ * 纪律：
+ * - 选择器一律挂 .threadline-app 前缀（卸载 = 移除注入的 <style>，宿主零残留）；
+ * - 颜色只用 tokens.css 的 --tl-*（本文件不出现颜色字面量）；
+ * - 响应式只用 .threadline-app 的容器查询（断点与 types.ts 的 BREAKPOINTS 一致）；
+ * - 块宽是数据（--tl-turn-w，由 model 的 blockWidth 算出）；<900px 时容器查询接管为满宽纵向行。
+ */
+
+/* ========== 1. 带体与分组 ========== */
+
+.threadline-app .threadline-turn-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  inline-size: 100%;
+  max-inline-size: 100%;
+  min-inline-size: 0;
+  min-block-size: 0;
+  padding: 4px;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.threadline-app .threadline-turn-groups {
+  /* 每个会话一组、纵向堆叠；组内的轮次块才换行（宽度按 session 分组，不跨组换行） */
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+.threadline-app .threadline-turn-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  inline-size: 100%;
+}
+
+.threadline-app .threadline-turn-group-label {
+  max-inline-size: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--tl-fg-tertiary);
+  font-size: var(--tl-fs-meta-sm);
+  line-height: var(--tl-lh-tight);
+}
+
+.threadline-app .threadline-turn-group-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 4px;
+  min-inline-size: 0;
+}
+
+/* ========== 2. 轮次块 ========== */
+
+.threadline-app .threadline-turn-block {
+  /* 宽度是数据：model.blockWidth 写进 --tl-turn-w；最小 8px 由 model 保证 */
+  inline-size: var(--tl-turn-w, 8px);
+  min-inline-size: var(--tl-turn-w, 8px);
+  block-size: 56px;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 2px;
+  padding: 4px 3px;
+  overflow: hidden;
+  border: 1px solid var(--tl-border-weak);
+  border-radius: var(--tl-radius-xs);
+  background: transparent;
+  color: var(--tl-fg);
+  cursor: pointer;
+  text-align: start;
+  transition: background-color var(--tl-dur-fast) var(--tl-ease), border-color var(--tl-dur-fast) var(--tl-ease);
+}
+
+.threadline-app .threadline-turn-block:hover {
+  background: var(--tl-hover);
+}
+
+.threadline-app .threadline-turn-block[data-preview='true'] {
+  background: var(--tl-hover);
+}
+
+.threadline-app .threadline-turn-block[data-selected='true'] {
+  border-color: var(--tl-accent);
+  background: var(--tl-active);
+}
+
+.threadline-app .threadline-turn-bar {
+  display: block;
+  inline-size: 100%;
+  block-size: 6px;
+  flex: 0 0 auto;
+  border-radius: var(--tl-radius-xs);
+  background: var(--tl-idle);
+}
+
+/* 状态语义色（03 §6：完成中性 / 中止危险 / 运行中强调 / 未知灰）。
+   颜色不是唯一信息：旁边还有状态文字与序号。 */
+.threadline-app .threadline-turn-block[data-status='completed'] .threadline-turn-bar {
+  background: var(--tl-fg-tertiary);
+}
+
+.threadline-app .threadline-turn-block[data-status='aborted'] .threadline-turn-bar {
+  background: var(--tl-danger);
+}
+
+.threadline-app .threadline-turn-block[data-status='running'] .threadline-turn-bar {
+  background: var(--tl-accent);
+  animation: threadline-pulse var(--tl-dur-slow) var(--tl-ease) 0s infinite alternate;
+}
+
+.threadline-app .threadline-turn-block[data-status='unknown'] .threadline-turn-bar {
+  background: var(--tl-idle);
+}
+
+.threadline-app .threadline-turn-label {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-inline-size: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  color: var(--tl-fg-secondary);
+  font-size: 10px;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+.threadline-app .threadline-turn-index {
+  color: var(--tl-fg);
+  font-weight: 500;
+}
+
+.threadline-app .threadline-turn-status {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 9px;
+}
+
+.threadline-app .threadline-turn-block[data-status='completed'] .threadline-turn-status {
+  color: var(--tl-fg-tertiary);
+}
+
+.threadline-app .threadline-turn-block[data-status='aborted'] .threadline-turn-status {
+  color: var(--tl-danger);
+}
+
+.threadline-app .threadline-turn-block[data-status='running'] .threadline-turn-status {
+  color: var(--tl-accent);
+}
+
+.threadline-app .threadline-turn-block[data-status='unknown'] .threadline-turn-status {
+  color: var(--tl-fg-caption);
+}
+
+/* ========== 3. 标记（图标 + 计数，不只靠颜色） ========== */
+
+.threadline-app .threadline-turn-markers {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  block-size: 10px;
+  flex: 0 0 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+}
+
+.threadline-app .threadline-turn-marker {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  min-inline-size: 0;
+  color: var(--tl-fg-secondary);
+}
+
+.threadline-app .threadline-turn-marker[data-marker='errors'] {
+  color: var(--tl-danger);
+}
+
+.threadline-app .threadline-turn-marker-count {
+  color: var(--tl-fg-secondary);
+  font-size: 10px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.threadline-app .threadline-turn-marker-dot {
+  inline-size: 4px;
+  block-size: 4px;
+  flex: 0 0 auto;
+  border-radius: var(--tl-radius-pill);
+  background: currentColor;
+}
+
+.threadline-app .threadline-turn-marker-tick {
+  inline-size: 1px;
+  block-size: 6px;
+  flex: 0 0 auto;
+  background: currentColor;
+}
+
+.threadline-app .threadline-turn-marker-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 7px;
+  block-size: 7px;
+  flex: 0 0 auto;
+  font-size: 9px;
+  line-height: 1;
+}
+
+.threadline-app .threadline-turn-marker-overflow {
+  flex: 0 0 auto;
+  color: var(--tl-fg-tertiary);
+  font-size: 9px;
+  line-height: 1;
+}
+
+/* 「本轮仍在记录」：未结束轮次的显式标注（06 N-16），不伪造完整 */
+.threadline-app .threadline-turn-partial {
+  flex: 0 0 auto;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  color: var(--tl-accent);
+  font-size: 8px;
+  line-height: 1;
+}
+
+/* ========== 4. 会话选择器 ========== */
+
+.threadline-app .threadline-turn-scope {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-inline-size: 0;
+}
+
+.threadline-app .threadline-turn-scope-select {
+  max-inline-size: 220px;
+  block-size: 24px;
+  padding: 0 4px;
+  border: 1px solid var(--tl-border);
+  border-radius: var(--tl-radius-sm);
+  background: var(--tl-surface);
+  color: var(--tl-fg);
+  font-family: inherit;
+  font-size: var(--tl-fs-meta);
+  line-height: var(--tl-lh-tight);
+}
+
+/* 空态/加载态在带体里不要撑满高度 */
+.threadline-app .threadline-turn-strip .threadline-empty,
+.threadline-app .threadline-turn-strip .threadline-loading {
+  padding: 8px;
+  align-items: flex-start;
+  text-align: start;
+}
+
+/* ========== 5. 窄容器：< 900px 退化纵向列表（03 §14） ========== */
+
+@container threadline (max-width: 899.98px) {
+  .threadline-app .threadline-turn-group-list {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* 纵向行：满宽，状态条变竖条（仍由状态色 + 文字共同承载信息） */
+  .threadline-app .threadline-turn-block {
+    inline-size: 100%;
+    min-inline-size: 0;
+    block-size: 28px;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px;
+  }
+
+  .threadline-app .threadline-turn-bar {
+    inline-size: 6px;
+    block-size: 16px;
+    border-radius: var(--tl-radius-xs);
+  }
+
+  .threadline-app .threadline-turn-label {
+    flex: 0 0 auto;
+    min-inline-size: 64px;
+  }
+
+  .threadline-app .threadline-turn-markers {
+    flex: 1 1 auto;
+  }
+
+  .threadline-app .threadline-turn-partial {
+    flex: 0 0 auto;
+  }
+}
+
+/* 最小容器 < 420px：再收紧（编号列缩短，仍不横向滚动） */
+@container threadline (max-width: 419.98px) {
+  .threadline-app .threadline-turn-strip {
+    padding: 2px;
+  }
+
+  .threadline-app .threadline-turn-scope-select {
+    max-inline-size: 140px;
+  }
+}
