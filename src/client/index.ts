@@ -4,14 +4,16 @@
  * 这里只做"接线"，不实现界面：
  * 1. `installStyles()`（唯一样式注入路径，卸载移除）；
  * 2. 三个入口的注册（`conversation.view` / `conversation.chat.assistant-actions` /
- *    `inputTriggers` + `conversation.input.overlay`），**每个注册都收进 `ctx.effect`**；
- * 3. 卸载清理：详情缓存、弹窗状态、跨入口 focus 桥。
+ *    `inputTriggers`），**每个注册都收进 `ctx.effect`**；
+ * 3. 卸载清理：详情缓存、跨入口 focus 桥。
  *
  * 边界（T02 的构建契约仍然成立）：
  * - 只 `import * as React from 'react'`（构建里 React 是 external，不打包进来）；
  * - slot 缺失 / 服务缺失只 `logger.warn`，**不崩**（入口缺失由验收发现，06 N-19）；
  * - 不 append 到 `document.body`、不替换 app 根、不写任何存储、无外部网络（只有同源 /api/dsh-threadline/*）；
  * - 不注册右栏 / main / sidebar.panellist（用户只允许三个入口）。
+ * - T32（2026-11-05 notes/33 §7）：`/threadline` 弹窗已删除 —— 不再注册 `conversation.input.overlay`，
+ *   命令入口只切「脉络」tab（状态清理里也不再重置 modal store）。
  */
 import * as React from 'react'
 import { VERSION } from '../shared/version.ts'
@@ -25,7 +27,6 @@ import { disposeAllWarmups } from './data/index.ts'
 import { clearFocus } from './state/viewFocus.ts'
 import { resetPrivacyMode } from './state/privacyStore.ts'
 import { resetPerf } from './state/perf.ts'
-import { resetModalStore } from './ui/modal/store.ts'
 
 /** 客户端模块 id。必须等于 package.json 的 name 与 cordis.patch.yml 的行 id。 */
 export const name = 'dsh-plugin-control-your-development'
@@ -139,13 +140,12 @@ export function apply(ctx: ClientContext): void {
     warn(ctx, '部分入口注册失败：tab=' + String(tab) + ' impact=' + String(impact) + ' command=' + String(command))
   }
 
-  // 卸载清理：三份内存态（详情缓存 / 弹窗开关 / 跨入口 focus），都不持久化
+  // 卸载清理：内存态（详情缓存 / 跨入口 focus / 隐私 / 打点），都不持久化
   if (typeof ctx.effect === 'function') {
     ctx.effect(
       () => () => {
         disposeAllWarmups()
         disposeDetailStore()
-        resetModalStore()
         clearFocus()
         resetPrivacyMode()
         resetPerf()

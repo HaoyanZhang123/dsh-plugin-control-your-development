@@ -20,9 +20,11 @@ export const SHELL_REGIONS = {
   header: 'header',
   now: 'now',
   map: 'map',
+  /** 检查器组件保留但无产品入口（33 §7 允许保留）；region 常量只服务该组件的 SSR 测试。 */
   inspector: 'inspector',
   timeline: 'timeline',
   turns: 'turns',
+  rail: 'rail',
 } as const
 
 export type ShellRegion = (typeof SHELL_REGIONS)[keyof typeof SHELL_REGIONS]

@@ -1,22 +1,21 @@
 /*
- * map/labels.ts —— 标签避让（03 §4.4）。
+ * map/labels.ts —— 标签避让（33 §3：标签 11–12px、避让、可读）。
  *
- * 规则：
- * - 目录簇标签常驻（不受避让影响，由簇盒子自己的位置决定）；
- * - 文件名标签只在 hover / 选中 / 放大到 1.4× 以上显示；
- * - 重叠时隐藏低优先级标签，**选中/悬停的标签永远显示**（03 §4.4）；
- * - 排序键固定（优先级降序 → 键升序），因此同一帧的可见标签集合是确定的。
+ * 规则（从 03 §4.4 沿用到文件关系图）：
+ * - 文件名标签常驻（在可视节点集内），重叠时隐藏低优先级标签，选中/悬停永远显示；
+ * - 排序键固定（优先级降序 → 键升序），同一帧的可见标签集合确定；
+ * - 纯函数：只吃候选框（**屏幕像素坐标**）与已占用框，不碰 DOM。
  *
- * 纯函数：只吃候选框（世界坐标）与已占用的簇标签框，不碰 DOM。
+ * 与旧星图的区别：现在坐标就是屏幕坐标（viewBox 与容器 1:1，无缩放），
+ * 因此字号/框宽直接按 11px 估算，不再有 zoom 阈值。
  */
 
-/** 标签候选（世界坐标下的包围盒 + 文本）。 */
+/** 标签候选（屏幕坐标下的包围盒 + 文本）。 */
 export interface LabelCandidate {
   /** 唯一键（节点路径）。 */
   key: string
-  /** 文本（basename 或截断后的名字）。 */
+  /** 文本（basename）。 */
   text: string
-  /** 包围盒左上角世界坐标。 */
   x: number
   y: number
   width: number
@@ -25,9 +24,11 @@ export interface LabelCandidate {
   priority: number
   /** 永远显示（选中/悬停；即使重叠也不隐藏）。 */
   force?: boolean
+  /** 文本锚点（径向标签：外侧左半区用 end，右半区用 start）。默认 start。 */
+  anchor?: 'start' | 'middle' | 'end'
 }
 
-/** 已占用的框（簇标签、强制标签）。 */
+/** 已占用的框（图例/摘要等常驻元素）。 */
 export interface OccupiedBox {
   x: number
   y: number
@@ -41,6 +42,9 @@ export interface LabelPlacement {
   x: number
   y: number
   text: string
+  anchor?: 'start' | 'middle' | 'end'
+  /** 估算宽度（渲染 text-anchor=end/middle 时用来反推文本 x）。 */
+  width?: number
 }
 
 /** 两个矩形是否重叠（含 2px 安全间隙；边界相接不算重叠）。 */
@@ -73,23 +77,26 @@ export function estimateTextWidth(text: string, fontSize = 11): number {
  * 计算可见标签。
  *
  * @param candidates 全部候选（顺序无关；内部会排序）
- * @param occupied   已被占用的框（簇标签等常驻元素）
+ * @param occupied   已被占用的框（节点圆、已画的状态行等）
  */
-export function placeLabels(candidates: readonly LabelCandidate[], occupied: readonly OccupiedBox[] = []): LabelPlacement[] {
+export function placeLabels(
+  candidates: readonly LabelCandidate[],
+  occupied: readonly OccupiedBox[] = [],
+  gap = 2,
+): LabelPlacement[] {
   const placed: OccupiedBox[] = occupied.map((box) => ({ ...box }))
   const used: LabelPlacement[] = []
   const ordered = candidates.slice().sort(compareLabels)
   for (const candidate of ordered) {
     const box: OccupiedBox = { x: candidate.x, y: candidate.y, width: candidate.width, height: candidate.height }
-    const collides = placed.some((other) => boxesOverlap(box, other))
+    const collides = placed.some((other) => boxesOverlap(box, other, gap))
     if (collides && candidate.force !== true) {
-      used.push({ key: candidate.key, visible: false, x: candidate.x, y: candidate.y, text: candidate.text })
+      used.push({ key: candidate.key, visible: false, x: candidate.x, y: candidate.y, text: candidate.text, width: candidate.width, ...(candidate.anchor === undefined ? {} : { anchor: candidate.anchor }) })
       continue
     }
     placed.push(box)
-    used.push({ key: candidate.key, visible: true, x: candidate.x, y: candidate.y, text: candidate.text })
+    used.push({ key: candidate.key, visible: true, x: candidate.x, y: candidate.y, text: candidate.text, width: candidate.width, ...(candidate.anchor === undefined ? {} : { anchor: candidate.anchor }) })
   }
-  // 输出保持与输入相同的顺序无关的稳定顺序：按 key 升序返回，渲染方可直接 map。
   return used.sort((left, right) => (left.key < right.key ? -1 : left.key > right.key ? 1 : 0))
 }
 
@@ -98,5 +105,7 @@ export function visibleLabelKeys(placements: readonly LabelPlacement[]): string[
   return placements.filter((item) => item.visible).map((item) => item.key)
 }
 
-/** 放大到多少倍才显示文件名标签（03 §4.4）。 */
-export const LABEL_ZOOM_THRESHOLD = 1.4
+/** 文件名标签字号（屏幕像素；33 §3 的 11–12px）。 */
+export const GRAPH_LABEL_FONT_PX = 11
+/** 状态行字号（屏幕像素）。 */
+export const GRAPH_STATUS_FONT_PX = 10

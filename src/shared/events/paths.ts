@@ -10,6 +10,8 @@
  * - 路径里出现 NUL / 控制字符 / 超长 → 非法，丢弃。
  */
 
+import type { FileFamily } from './types.ts'
+
 /** 归一化结果。 */
 export interface ResolvedPath {
   /** 展示用：工作区相对 POSIX 路径（保留原大小写）。 */
@@ -145,32 +147,56 @@ export function looksLikeFile(path: string): boolean {
   return dot > 0 && dot < base.length - 1
 }
 
-const DOC_EXT = new Set(['md', 'mdx', 'markdown', 'txt', 'rst', 'pdf', 'doc', 'docx', 'odt', 'rtf'])
+/** 文本扩展名（33 §5：文档 + 配置并入文本）。 */
+const TEXT_EXT = new Set([
+  // 文档
+  'md', 'mdx', 'markdown', 'txt', 'rst', 'pdf', 'doc', 'docx', 'odt', 'rtf',
+  // 配置（33 §5：配置并入文本）
+  'yml', 'yaml', 'toml', 'ini', 'cfg', 'conf', 'env', 'properties', 'lock', 'gitignore', 'editorconfig',
+])
+/** 代码扩展名（33 §5：修 bug —— html/css/scss/less 归代码）。 */
 const CODE_EXT = new Set([
   'ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'mts', 'cts', 'py', 'rb', 'go', 'rs', 'java', 'kt',
   'c', 'h', 'cc', 'cpp', 'hpp', 'cs', 'php', 'swift', 'scala', 'sh', 'bash', 'ps1', 'psm1', 'lua',
   'sql', 'vue', 'svelte', 'astro',
+  // 33 §5：标记/样式语言按代码算（旧实现把它们判成 other，是 bug）
+  'html', 'htm', 'css', 'scss', 'less', 'sass',
 ])
 const DATA_EXT = new Set(['json', 'jsonl', 'ndjson', 'csv', 'tsv', 'xml', 'parquet', 'db', 'sqlite', 'xlsx', 'xls', 'arrow'])
-const IMAGE_EXT = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico', 'tif', 'tiff', 'avif', 'heic'])
-const CONFIG_EXT = new Set(['yml', 'yaml', 'toml', 'ini', 'cfg', 'conf', 'env', 'properties', 'lock', 'gitignore', 'editorconfig'])
+/** 媒体：图片 + 音频 + 视频（33 §5 合成一类）。 */
+const MEDIA_EXT = new Set([
+  // 图片
+  'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico', 'tif', 'tiff', 'avif', 'heic',
+  // 音频
+  'mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a', 'opus', 'wma',
+  // 视频
+  'mp4', 'mov', 'avi', 'mkv', 'webm', 'm4v', 'mpg', 'mpeg', 'wmv',
+])
 
-/** 按扩展名判家族（04 §4.2）；未知 → `other`。 */
-export function familyOf(path: string): 'doc' | 'code' | 'data' | 'image' | 'config' | 'other' {
-  const slash = path.lastIndexOf('/')
-  const base = slash >= 0 ? path.slice(slash + 1) : path
+/**
+ * 按扩展名判文件大类（33 §5 / §6）；未识别 → `other`（字体/压缩包/二进制/未知）。
+ *
+ * - **dotfile**（basename 以 `.` 开头：`.gitignore`、`.env`、`.editorconfig`、`.eslintrc.json`）
+ *   归文本——它们是隐藏的配置文件，33 §5「配置并入文本」；旧实现把这些落到 `other`，是 bug；
+ * - 无扩展名：`Makefile`/`Dockerfile` 归代码，其余 → `other`；
+ * - 以 `.` 结尾（也不是 dotfile）→ `other`（不是有效扩展名）。
+ */
+export function familyOf(path: string): FileFamily {
+  const base = baseName(path)
+  // dotfile：`.` 在最前（且不是单独的 "."）→ 文本。
+  if (base.length > 1 && base.startsWith('.')) return 'text'
   const dot = base.lastIndexOf('.')
-  if (dot <= 0 || dot === base.length - 1) {
+  if (dot <= 0) {
     const lowered = base.toLowerCase()
     if (lowered === 'makefile' || lowered === 'dockerfile') return 'code'
     return 'other'
   }
+  if (dot === base.length - 1) return 'other'
   const ext = base.slice(dot + 1).toLowerCase()
-  if (IMAGE_EXT.has(ext)) return 'image'
-  if (DOC_EXT.has(ext)) return 'doc'
-  if (DATA_EXT.has(ext)) return 'data'
-  if (CONFIG_EXT.has(ext)) return 'config'
+  if (TEXT_EXT.has(ext)) return 'text'
   if (CODE_EXT.has(ext)) return 'code'
+  if (DATA_EXT.has(ext)) return 'data'
+  if (MEDIA_EXT.has(ext)) return 'media'
   return 'other'
 }
 

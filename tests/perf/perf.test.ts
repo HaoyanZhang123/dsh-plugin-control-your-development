@@ -153,7 +153,9 @@ test('A44-3 实测：600 节点 / 4000 条边的布局与重绘预算', () => {
 
   assert.equal(result.nodes, 600)
   assert.equal(result.edges, 4000)
-  assert.equal(result.laidOutNodes, 600, '上限内全部参与布局')
+  // T31：文件关系图有 LOD 上限（目录 40）；bench 测的是"上限内实际布局的节点数"（600 输入被截到 40，
+  // 边收口仍按 4000 原始边压）。节点上限的取舍见 33 §3。
+  assert.equal(result.laidOutNodes, 40, '目录图上限 40（33 §3 + Lead 2026-11-05 复审）；超出显式截断')
   assert.ok(result.preparedEdges > 0 && result.preparedEdges <= PERF_BUDGET.maxEdges)
 
   const verdict = checkBench(result)

@@ -69,6 +69,13 @@ export {
 export { TURN_COPY, turnLabel, type LabelKey } from './copy.ts'
 
 export {
+  turnFileStatusOf,
+  type FileTurnStatus,
+  type TurnStatusSnapshot,
+  type TurnStatusSummary,
+} from './status.ts'
+
+export {
   baseName,
   commandProgram,
   commandSummary,

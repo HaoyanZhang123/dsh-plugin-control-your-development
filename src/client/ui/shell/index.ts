@@ -5,7 +5,6 @@ export { ErrorBoundary, ERROR_STACK_LINES, stackHead, type ErrorBoundaryProps } 
 export { Header, type HeaderProps } from './Header.ts'
 export { InspectorPanel, type InspectorPanelProps } from './InspectorPanel.ts'
 export { NowStrip, type NowStripProps } from './NowStrip.ts'
-export { Portal, type PortalProps } from './Portal.ts'
 export { ThreadlineShell, type NowStripModel, type ThreadlineShellProps } from './Shell.ts'
 export { TimelineSlot, type TimelineSlotProps } from './TimelineSlot.ts'
 export { TurnStripSlot, type TurnStripSlotProps } from './TurnStripSlot.ts'

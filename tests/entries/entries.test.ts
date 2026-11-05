@@ -1,11 +1,17 @@
 /*
- * tests/entries/entries.test.ts —— 总装配 + 入口清单（06 A43-5 / N-19）。
+ * tests/entries/entries.test.ts —— 总装配 + 入口清单（06 A43-5 / N-19；T32 新契约）。
+ *
+ * T32（2026-11-05 notes/33 §1/§7）：`/threadline` 弹窗删除后只剩**两个 slot 表面**：
+ * `conversation.view`（tab）+ `conversation.chat.assistant-actions`（影响）；
+ * 命令入口（`inputTriggers`）不是 slot。旧断言「恰好三个 slot / 必须注入 modal.css」测的是被删除的弹窗表面，
+ * 已替换为：两个 slot、每个 css.ts 里的样式表都真的注入（与生成物口径一致）、源码里 0 处 overlay/modal 引用。
  *
  * 覆盖：
- * - `apply(ctx)` 注册**恰好三个** slot（tab / 影响 N / 弹窗），不碰 main / sidebar.panellist / sidebar.right.pane.tab；
+ * - `apply(ctx)` 注册**恰好两个** slot（tab / 影响 N），不碰 main / sidebar.panellist / sidebar.right.pane.tab；
  * - 样式注入走唯一路径，卸载后 `<style>` 归 0；
  * - slots 缺失只 warn 不崩；
- * - 只读审计：无写文件、无浏览器存储、无 session.prompt/cancel、无外部网络请求。
+ * - 只读审计：无写文件、无浏览器存储、无 session.prompt/cancel、无外部网络请求；
+ * - 单一执行路径：源码里没有 `conversation.input.overlay` 注册、没有 ui/modal 导入。
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -18,8 +24,8 @@ import { createFakeCtx, createFakeInputTriggers } from './fake-ctx.ts'
 import { createStyleDocument } from './fake-dom.ts'
 
 const CLIENT_ROOT = join(PLUGIN_ROOT, 'src', 'client')
-const ALLOWED_SLOTS = ['conversation.view', 'conversation.chat.assistant-actions', 'conversation.input.overlay']
-const FORBIDDEN_SLOTS = ['sidebar.panellist', 'sidebar.right.pane.tab', 'conversation.chat.turnTail', 'plugins.bundle.config']
+const ALLOWED_SLOTS = ['conversation.view', 'conversation.chat.assistant-actions']
+const FORBIDDEN_SLOTS = ['sidebar.panellist', 'sidebar.right.pane.tab', 'conversation.chat.turnTail', 'plugins.bundle.config', 'conversation.input.overlay']
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
@@ -33,7 +39,7 @@ function walk(dir: string, out: string[] = []): string[] {
 const SOURCES = walk(CLIENT_ROOT).map((file) => ({ file, text: readFileSync(file, 'utf8') }))
 
 /** T09 自己拥有的路径（只读审计只看这些；其它区域的审计由 T10/T11 负责）。 */
-const T09_DIRS = [join(CLIENT_ROOT, 'entries'), join(CLIENT_ROOT, 'state'), join(CLIENT_ROOT, 'ui', 'modal')]
+const T09_DIRS = [join(CLIENT_ROOT, 'entries'), join(CLIENT_ROOT, 'state')]
 const OWN_SOURCES = [
   { file: join(CLIENT_ROOT, 'index.ts'), text: readFileSync(join(CLIENT_ROOT, 'index.ts'), 'utf8') },
   ...T09_DIRS.flatMap((dir) => walk(dir)).map((file) => ({ file, text: readFileSync(file, 'utf8') })),
@@ -49,7 +55,7 @@ test('模块导出：name = 包名，inject = ["slots"]', () => {
   assert.deepEqual(inject, ['slots'])
 })
 
-test('apply：注册恰好三个 slot，名字只允许这三个（无 main / 无右栏 / 无侧栏面板）', () => {
+test('apply：注册恰好两个 slot，名字只允许这两个（无 main / 无右栏 / 无侧栏面板 / 无 input.overlay）', () => {
   const triggers = createFakeInputTriggers()
   const fake = createFakeCtx({ services: { inputTriggers: triggers.service } })
   const dom = createStyleDocument()
@@ -77,10 +83,16 @@ test('apply：样式经唯一注入路径写入，卸载后 <style> 归 0', () =
   ;(globalThis as unknown as { document: Document }).document = dom.document
   try {
     apply(fake.ctx)
+    // 逐张表断言（不再点名 modal.css：弹窗样式已随 T32 删除；这里只要求"生成物里的每一张都注入"，
+    // 与 css.ts 的生成口径一致，等 map-dev/Lead 重建 css.ts 后自动收敛到删表后的集合）。
     assert.equal(dom.liveStyles().length, STYLE_SHEETS.length, '每个样式表一个 <style>')
+    for (const sheet of STYLE_SHEETS) {
+      assert.ok(
+        dom.liveStyles().some((el) => el.attrs['data-plugin-css'] === sheet.key),
+        '样式表未注入：' + sheet.key,
+      )
+    }
     assert.ok(dom.liveStyles().some((el) => el.attrs['data-plugin-css'] === 'threadline/turns.css'))
-    assert.ok(dom.liveStyles().some((el) => el.attrs['data-plugin-css'] === 'threadline/inspector.css'))
-    assert.ok(dom.liveStyles().some((el) => el.attrs['data-plugin-css'] === 'threadline/modal.css'))
     fake.disposeAll()
     assert.equal(dom.liveStyles().length, 0, '卸载后不得留 <style>')
   } finally {
@@ -94,7 +106,7 @@ test('apply：slots 缺失只 warn、不抛错（旧版宿主，06 N-19）', () 
   assert.ok(fake.logs.some((line) => line.level === 'warn' && line.message.includes('slots')))
 })
 
-test('A43-5：源码里出现的 slot 名字只有三个（grep 级断言）', () => {
+test('A43-5：源码里出现的 slot 名字只有两个（grep 级断言；input.overlay 属禁用）', () => {
   const found = new Set<string>()
   for (const source of SOURCES) {
     for (const slot of [...ALLOWED_SLOTS, ...FORBIDDEN_SLOTS]) {
@@ -104,7 +116,21 @@ test('A43-5：源码里出现的 slot 名字只有三个（grep 级断言）', (
   const forbiddenFound = [...found].filter((slot) => FORBIDDEN_SLOTS.includes(slot))
   assert.deepEqual(forbiddenFound, [], '源码里出现禁用 slot：' + forbiddenFound.join(', '))
   const allowedFound = [...found].filter((slot) => ALLOWED_SLOTS.includes(slot))
-  assert.deepEqual(allowedFound.sort(), [...ALLOWED_SLOTS].sort(), '三个入口都要真的出现在源码里')
+  assert.deepEqual(allowedFound.sort(), [...ALLOWED_SLOTS].sort(), '两个可见表面（tab + 影响）都要真的出现在源码里')
+  assert.equal(found.has('conversation.input.overlay'), false, 'T32：input.overlay 不再注册')
+})
+
+test('T32 单一执行路径：源码里没有 ui/modal 导入、没有 overlay/modal 组件引用', () => {
+  const modalImport = /from\s+'[^']*ui\/modal/
+  const modalExports = /ThreadlineOverlay|OverlaySlotProps|ThreadlineModal|useModalState|resetModalStore|closeModal|openModal\s*\(/
+  const offenders: string[] = []
+  for (const source of SOURCES) {
+    const code = stripComments(source.text)
+    if (modalImport.test(code)) offenders.push(source.file + ' 仍 import ui/modal')
+    const hit = modalExports.exec(code)
+    if (hit !== null) offenders.push(source.file + ' 仍引用弹窗符号 ' + String(hit[0]))
+  }
+  assert.deepEqual(offenders, [], offenders.join(' | '))
 })
 
 test('只读审计：无写文件 / 无浏览器存储 / 无 session.prompt|cancel / 无外部网络', () => {

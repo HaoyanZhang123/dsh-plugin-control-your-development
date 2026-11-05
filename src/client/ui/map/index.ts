@@ -1,9 +1,46 @@
 /*
- * ui/map/index.ts —— 星图的唯一出口（T09 只从这里 import）。
+ * ui/map/index.ts —— 文件关系图的唯一出口（tab 只从这里 import）。
  *
- * 纯展示组件 + 可单测的纯函数（布局/边/标签/视口），不注册 slot、不发请求、不读数据层单例。
+ * 2.0 起不再有星图/总览/缩放：这里只有文件级关系图（FileGraph）、确定性径向布局、
+ * 标签避让、5 类文件族视觉与关系层工具函数。纯展示 + 可单测的纯函数，不注册 slot、不发请求。
  */
-export { MapView, type MapViewProps } from './MapView.ts'
+export { FileGraph, type FileGraphProps, type FileGraphTurn } from './FileGraph.ts'
+export {
+  compareGraphFiles,
+  graphFingerprint,
+  graphRadius,
+  layoutFileGraph,
+  selectGraphFiles,
+  type GraphLayout,
+  type GraphLayoutNode,
+  type GraphLayoutOptions,
+  type GraphMode,
+  type GraphSourceFile,
+} from './graphLayout.ts'
+export {
+  boxesOverlap,
+  compareLabels,
+  estimateTextWidth,
+  GRAPH_LABEL_FONT_PX,
+  GRAPH_STATUS_FONT_PX,
+  placeLabels,
+  visibleLabelKeys,
+  type LabelCandidate,
+  type LabelPlacement,
+  type OccupiedBox,
+} from './labels.ts'
+export {
+  FAMILY_COLOR,
+  FAMILY_MESSAGE_KEY,
+  FILE_FAMILIES,
+  GRAPH_CLASS,
+  GRAPH_DATA,
+  GRAPH_EDGE_LIMITS,
+  GRAPH_LABEL_LIMITS,
+  GRAPH_LAYER_ORDER,
+  GRAPH_LIMITS,
+  STATUS_COLOR,
+} from './theme.ts'
 export type { RelationLayerToggles, SelectedTurnRef, EdgeView, EdgeDraw, EdgeViewOptions, FocusTarget } from './relations.ts'
 export {
   edgeTouches,
@@ -17,70 +54,3 @@ export {
   selectVisibleEdges,
   sequenceOrderOf,
 } from './relations.ts'
-export {
-  clusterKeyOf,
-  clusterLabelOf,
-  compareByActivity,
-  hashString,
-  layoutEqual,
-  layoutFingerprint,
-  layoutMap,
-  MAP_GEOMETRY,
-  MAP_LIMITS,
-  NODE_RADIUS,
-  packClusters,
-  radiusFor,
-  ringCapacity,
-  ringPosition,
-  ringSlot,
-  ROOT_CLUSTER_KEY,
-  round2,
-  selectActiveNodes,
-  toLayoutNodeBase,
-  type LayoutCluster,
-  type LayoutNode,
-  type LayoutOptions,
-  type LayoutTruncation,
-  type MapLayout,
-  type NodeSelection,
-} from './layout.ts'
-export {
-  boxesOverlap,
-  compareLabels,
-  estimateTextWidth,
-  LABEL_ZOOM_THRESHOLD,
-  placeLabels,
-  visibleLabelKeys,
-  type LabelCandidate,
-  type LabelPlacement,
-  type OccupiedBox,
-} from './labels.ts'
-export {
-  FAMILY_COLOR,
-  FAMILY_MESSAGE_KEY,
-  FILE_FAMILIES,
-  LAYER_LABEL_KEY,
-  LAYER_STYLE,
-  MAP_CLASS,
-  MAP_DATA,
-  MAP_ZOOM,
-} from './theme.ts'
-export {
-  clampZoom,
-  fitScale,
-  fitViewport,
-  fitWorld,
-  focusOnBox,
-  IDENTITY_VIEWPORT,
-  normalizeViewport,
-  panByScreen,
-  screenToWorld,
-  transformOf,
-  viewBoxOf,
-  worldToScreen,
-  zoomAtPoint,
-  zoomForActualPixels,
-  type MapSize,
-  type MapViewport,
-  type WorldSize,
-} from './viewport.ts'

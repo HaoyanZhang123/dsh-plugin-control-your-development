@@ -1002,7 +1002,7 @@ export interface OverviewModel {
     commands: number | null
     subagents: number | null
   }
-  legend: Array<{ kind: 'doc' | 'code' | 'data' | 'image' | 'config' | 'other'; label: string }>
+  legend: Array<{ kind: 'text' | 'code' | 'data' | 'media' | 'other'; label: string }>
   /** 图层开关位（03 §10 的默认值来自 shared/relations，不在这里另写一遍）。 */
   layerToggles: Array<{ type: RelationType; label: string; defaultOn: boolean; focusOnly: boolean; weak: boolean }>
   degrade: { kind: string; message: string; retryable: boolean; retryLabel: string | null }
@@ -1054,7 +1054,7 @@ export function buildOverview(ctx: InspectorContext): OverviewModel {
       }
     : { files: null, sessions: null, turns: null, commands: null, subagents: null }
 
-  const legend = (['doc', 'code', 'data', 'image', 'config', 'other'] as const).map((kind) => ({
+  const legend = (['text', 'code', 'data', 'media', 'other'] as const).map((kind) => ({
     kind,
     label: familyLabel(kind, t),
   }))

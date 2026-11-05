@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 测试夹具：内存版 workspaceFiles 通道 + events 正式类型的构造函数。
  *
  * 这里**不读磁盘**：`stat` / `read` 都是假实现，正好覆盖“注入式依赖、单测用假实现”的要求。
@@ -29,7 +29,7 @@ export function fileNode(path: string, overrides: Partial<FileNode> = {}): FileN
     path,
     name: index < 0 ? path : path.slice(index + 1),
     dir: index < 0 ? '' : path.slice(0, index),
-    family: 'doc',
+    family: 'text',
     firstAt: 0,
     lastAt: 0,
     reads: 0,

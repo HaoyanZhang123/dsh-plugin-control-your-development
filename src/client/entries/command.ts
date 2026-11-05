@@ -1,32 +1,21 @@
 /*
- * entries/command.ts —— `/threadline` 命令 + `conversation.input.overlay` 弹窗（03 §2.3 / §9；06 A43-3/A43-4）。
+ * entries/command.ts —— `/threadline` 命令（03 §2.3 / §9；06 A43-3/A43-4；T32）。
  *
- * 两件事：
- * 1. `inputTriggers.registerSource(...)`：菜单里出现「脉络」，Enter 精确匹配 `/threadline` 与 `/脉络`
- *    （T01 已静态确认中文整行能被我们自己的 matchEnter 认领；两条都注册，菜单 label 仍走 locale）；
- * 2. `conversation.input.overlay` 槽里渲染居中弹窗（状态放在 `ui/modal/store.ts`，按会话内存态）。
+ * 只有一件事：`inputTriggers.registerSource(...)` —— 菜单里出现「脉络」，Enter 精确匹配 `/threadline` 与 `/脉络`
+ * （T01 已静态确认中文整行能被我们自己的 matchEnter 认领；两条都注册，菜单 label 仍走 locale）。
+ *
+ * 触发（菜单 pick / Enter）= **跳到「脉络」tab 并聚焦当前会话**：
+ * `requestFocus({ kind: 'session' })` + `activateThreadlineTab()`。
+ * T32（2026-11-05 notes/33 §1/§7）：**删除弹窗** —— `conversation.input.overlay` 注册、`ui/modal/**`、
+ * `styles/modal.css` 全部删除；这里不弹任何窗口、不投递、不写存储。
+ * 命令上下文只给 `sessionId`（没有"当前轮"），所以落点固定为会话级 focus；轮级聚焦由每轮「影响」图标（T20）负责。
  *
  * 纪律：无 LLM、无生成文字；`registerSource` 返回的 disposer 进 `ctx.effect`；
  * `inputTriggers` 服务缺失只 warn（不崩，命令入口缺失由验收发现）。
  */
-import * as React from 'react'
-import { createTranslator, DEFAULT_LOCALE, type Locale, type Translator } from '../locale/index.ts'
-import type { FetchLike } from '../data/index.ts'
-import {
-  threadlineWorkspaceKey,
-  useThreadlineDetail,
-  useWorkspaceScope,
-  type WarmupSession,
-} from '../data/index.ts'
-import type { FileNode, SessionDetail } from '../../shared/events/index.ts'
+import { createTranslator, DEFAULT_LOCALE, type Locale } from '../locale/index.ts'
 import { requestFocus, activateThreadlineTab } from '../state/viewFocus.ts'
-import { PrivacyProvider } from '../privacy/index.ts'
-import { setPrivacyMode, usePrivacyMode } from '../state/privacyStore.ts'
-import { getDetailStore } from '../state/detailStore.ts'
-import { closeModal, openModal, useModalState } from '../ui/modal/store.ts'
-import { fileNodesOfDetail } from '../ui/modal/model.ts'
-import { ThreadlineModal, type ModalFocusRequest } from '../ui/modal/ThreadlineModal.ts'
-import { defaultFetch, readSnapshot, registerSlot, warn, type ClientScopeLike, type SnapshotHook } from './context.ts'
+import { warn, type ClientScopeLike } from './context.ts'
 
 /** 命令名字（ASCII 标识；菜单 label 走 locale）。 */
 export const COMMAND_NAME = 'threadline'
@@ -88,7 +77,17 @@ function contextSessionId(context: InputTriggerContext | undefined): string {
   return ''
 }
 
-/** 命令注册（返回值 = 两条注册是否都成功；失败只 warn）。 */
+/**
+ * 命令触发的**唯一**动作：先登记会话级跨入口 focus（有 sessionId 时），再切到「脉络」tab。
+ * 不弹窗、不投递、不写存储；tab 找不到时返回 false（viewFocus 记下原因，用户仍可手动切）。
+ * 导出是为了让单测用假 document 验证"命令触发 = 导航"这条真实路径（SSR 不跑事件）。
+ */
+export function openThreadlineForCommand(sessionId: string): boolean {
+  if (typeof sessionId === 'string' && sessionId !== '') requestFocus({ kind: 'session', sessionId })
+  return activateThreadlineTab()
+}
+
+/** 命令注册（返回值 = trigger source 是否注册成功；失败只 warn）。 */
 export function registerCommand(ctx: ClientScopeLike, options?: { locale?: Locale }): boolean {
   const t = createTranslator(options?.locale ?? DEFAULT_LOCALE)
   let triggersRegistered = false
@@ -117,13 +116,13 @@ export function registerCommand(ctx: ClientScopeLike, options?: { locale?: Local
         // rc.5：pick.candidate.name 才是归属；不是我们的命令就交还给宿主（不抢占别人的 pick）
         const candidateName = context.candidate?.name
         if (typeof candidateName === 'string' && candidateName !== COMMAND_NAME) return undefined
-        openModal(contextSessionId(context))
+        openThreadlineForCommand(contextSessionId(context))
         return 'handled'
       },
       matchEnter: (context, line) => {
         const text = typeof line === 'string' ? line.trim() : ''
         if (!COMMAND_TOKENS.includes(text)) return Promise.resolve(undefined)
-        openModal(contextSessionId(context))
+        openThreadlineForCommand(contextSessionId(context))
         return Promise.resolve('handled')
       },
     }
@@ -161,109 +160,5 @@ export function registerCommand(ctx: ClientScopeLike, options?: { locale?: Local
     warn(ctx, '解析 inputTriggers 失败：' + String(error instanceof Error ? error.message : error))
   }
 
-  const overlayRegistered = registerSlot(
-    ctx,
-    'conversation.input.overlay',
-    { id: 'threadline-modal', order: 20 },
-    (props: never) => React.createElement(ThreadlineOverlay, { ...(props as unknown as OverlaySlotProps), locale: options?.locale }),
-    'threadline: input overlay',
-  )
-
-  return triggersRegistered && overlayRegistered
-}
-
-/** `conversation.input.overlay` 的 props（宿主标准 props + 我们自己要的）。 */
-export interface OverlaySlotProps {
-  sessionId?: string
-  useSessions?: SnapshotHook
-  /** T13e：宿主标准 props；解析工作区用（workspaceKey/cwd 必须与 tab 同一把）。 */
-  useWorkspaces?: SnapshotHook
-  /** 测试注入：固定 fetch（缺省用宿主页面的同源 fetch）。 */
-  fetch?: FetchLike
-  locale?: Locale
-}
-
-/** 弹窗入口组件：先套隐私 Provider（与 tab 共享同一份模式），再渲染弹窗。 */
-export function ThreadlineOverlay(props: OverlaySlotProps): React.ReactElement {
-  const mode = usePrivacyMode()
-  return React.createElement(PrivacyProvider, { mode, onChange: setPrivacyMode }, React.createElement(OverlayBody, { ...props, mode }))
-}
-
-/** 弹窗主体（在 Provider 内）。 */
-function OverlayBody(props: OverlaySlotProps & { mode: 'metadata' | 'hidden' }): React.ReactElement | null {
-  const t: Translator = React.useMemo(() => createTranslator(props.locale ?? DEFAULT_LOCALE), [props.locale])
-  const sessions = readSnapshot<{ current?: string }>(props.useSessions)
-  const sessionId =
-    typeof props.sessionId === 'string' && props.sessionId !== ''
-      ? props.sessionId
-      : typeof sessions?.current === 'string'
-        ? sessions.current
-        : ''
-  const state = useModalState(sessionId)
-  const fetchImpl = props.fetch ?? defaultFetch()
-  const store = getDetailStore(fetchImpl)
-  // T13e：直接按 /threadline 也要能用（不必先开 tab）：带 cwd 走 cold-read + 幂等预热。
-  const workspacesSnapshot = readSnapshot<never>(props.useWorkspaces)
-  const scope = useWorkspaceScope({ workspaces: workspacesSnapshot, sessions: sessions as never, sessionId })
-  const detailCwd = typeof scope.cwd === 'string' && scope.cwd !== '' ? scope.cwd : undefined
-  const warmup =
-    detailCwd === undefined
-      ? undefined
-      : {
-          workspaceKey: threadlineWorkspaceKey(scope.workspaceId, detailCwd),
-          cwd: detailCwd,
-          sessions: scope.sessions as unknown as readonly WarmupSession[],
-        }
-  const entry = useThreadlineDetail(store, sessionId === '' ? null : sessionId, {
-    ...(detailCwd === undefined ? {} : { cwd: detailCwd }),
-    ...(warmup === undefined ? {} : { warmup }),
-    fetch: fetchImpl,
-  })
-  const detail: SessionDetail | null = entry?.detail ?? null
-  const nodes: FileNode[] = React.useMemo(() => fileNodesOfDetail(detail), [detail])
-  const files = React.useMemo(() => {
-    const map = new Map<string, FileNode>()
-    for (const node of nodes) map.set(node.path.toLowerCase(), node)
-    return map
-  }, [nodes])
-
-  // 弹窗打开时若数据还没到，主动请求一次（不阻塞其它 UI）
-  React.useEffect(() => {
-    if (!state.open || sessionId === '') return
-    if (entry !== null && entry.status !== 'idle') return
-    void store.request(sessionId, detailCwd === undefined ? {} : { cwd: detailCwd }).catch(() => undefined)
-  }, [state.open, sessionId, store, entry])
-
-  const onOpenFull = React.useCallback(
-    (target: ModalFocusRequest) => {
-      if (sessionId === '') return
-      if (target.kind === 'turn' && typeof target.turn === 'number') {
-        requestFocus({ kind: 'turn', sessionId, turn: target.turn })
-      } else if (target.kind === 'file' && typeof target.path === 'string') {
-        requestFocus({ kind: 'file', sessionId, path: target.path })
-      } else {
-        requestFocus({ kind: 'session', sessionId })
-      }
-      activateThreadlineTab()
-      closeModal(sessionId)
-    },
-    [sessionId],
-  )
-
-  return React.createElement(ThreadlineModal, {
-    open: state.open,
-    sessionId,
-    detail,
-    detailLoading: entry === null || (entry.status === 'loading' && detail === null),
-    detailError: entry?.status === 'error',
-    files,
-    mode: props.mode,
-    t,
-    onClose: () => closeModal(sessionId),
-    onRetry: () => {
-      void store.refresh(sessionId).catch(() => undefined)
-    },
-    onOpenFull,
-    testId: 'threadline-modal',
-  })
+  return triggersRegistered
 }

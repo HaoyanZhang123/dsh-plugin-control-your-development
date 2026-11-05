@@ -1,211 +1,186 @@
 /*
- * component.test.ts —— 星图/时间轴的静态渲染断言（A41-1 / A41-3 的结构一半）。
+ * component.test.ts —— 文件关系图（FileGraph）的静态渲染断言（33 §3/§4/§8）。
  *
- * 渲染用 react-dom/server 的静态标记（与 tests/ui-shell 同一套方式，不引 jsdom）：
- * - 星图：节点/簇/四层边/图例/标签/焦点透明度/截断文案；
- * - 时间轴：未加载斜纹/播放头 slider/刻度优先级/reduced-motion/aria-live；
- * - 两次渲染逐字符相同（确定性）。
- * "hover/click/拖拽/播放"这类行为由 tests/ui-map/run-t07.mjs 在真实浏览器里断言。
+ * 覆盖：directory/turn 两种 mode、节点/标签/边（只取两端都在当前集合内）、
+ * 选中态（填充加深+同色细环、无大框/outline）、本轮状态小字与摘要条、
+ * 目录 40 / 轮次 200 上限的显式提示、空态、确定性。
+ *
+ * hover/click/双击/Esc 这类行为由 tests/ui-map/run-t07.mjs 在真实浏览器里断言。
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import * as React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { caseKey } from '../../src/shared/relations/index.ts'
-import { MapView, FAMILY_COLOR, FILE_FAMILIES } from '../../src/client/ui/map/index.ts'
-import { layoutMap } from '../../src/client/ui/map/layout.ts'
-import { Timeline } from '../../src/client/ui/timeline/index.ts'
-import { makeDataset, makeFiles, makeTimelineFixture, NOW } from './fixtures.ts'
+import { FileGraph, FILE_FAMILIES, FAMILY_COLOR } from '../../src/client/ui/map/index.ts'
+import { turnFileStatusOf } from '../../src/client/ui/turns/index.ts'
+import { buildEdges, makeFiles, makeTurnDetail, NOW } from './fixtures.ts'
 
 const h = React.createElement
-
-function renderMap(overrides: Record<string, unknown> = {}): string {
-  const dataset = makeDataset()
-  const coTurn = dataset.edges.find((edge) => edge.type === 'coTurn')
-  assert.ok(coTurn)
-  return renderToStaticMarkup(
-    h(MapView, {
-      nodes: dataset.files,
-      edges: [...dataset.edges, ...dataset.sequence],
-      now: NOW,
-      selectedPath: coTurn.from,
-      selectedTurn: { sessionId: dataset.turns[0].sessionId, turn: dataset.turns[0].turn },
-      layers: { coSession: true },
-      showAllRelations: false,
-      showAllReferences: false,
-      ...overrides,
-    }),
-  )
-}
 
 function countMatches(html: string, pattern: RegExp): number {
   const matches = html.match(pattern)
   return matches === null ? 0 : matches.length
 }
 
-test('星图：200 个节点、目录簇、簇标签与计数都渲染', () => {
-  const files = makeFiles({ count: 200 })
-  const html = renderMap({ nodes: files, edges: [], selectedPath: null, selectedTurn: null })
-  const layout = layoutMap(files)
-  assert.equal(countMatches(html, /data-node-path="/g), layout.nodes.length)
-  assert.equal(layout.nodes.length, 200)
-  assert.ok(layout.clusters.length >= 2)
-  assert.equal(countMatches(html, /data-cluster-key="/g), layout.clusters.length)
-  // 簇标签常驻（根目录显示 `/`，目录显示顶层目录名）。
-  for (const cluster of layout.clusters) assert.ok(html.includes('>' + cluster.label + '<'), '缺少簇标签 ' + cluster.label)
-  // 节点半径落在 3–9（data-ops 由 ops 派生，r 在 SVG 属性里）。
-  const radii = [...html.matchAll(/class="tl-node-core"[^>]*r="([0-9.]+)"/g)].map((match) => Number(match[1]))
-  assert.ok(radii.length > 0)
-  for (const radius of radii) assert.ok(radius >= 3 && radius <= 9, '半径越界 ' + radius)
-})
-
-test('星图：四层边全渲染（结构/共现/引用/时序 + 可选同会话），每条边带证据 title', () => {
-  const html = renderMap({ showAllRelations: true, showAllReferences: true, layers: { coSession: true, sequence: true } })
-  for (const layer of ['structure', 'coTurn', 'reference', 'sequence', 'coSession']) {
-    assert.ok(html.includes('data-layer="' + layer + '"'), '缺少图层 ' + layer)
-  }
-  assert.ok(countMatches(html, /data-edge-id="/g) > 0)
-  // 每条边都有证据文本（T05 统一模板，UI 不造句）。
-  assert.ok(html.includes('同属目录') || html.includes('同时出现'))
-})
-
-test('星图：选中文件时焦点模式只改透明度（邻居 1 / 其它 0.2），坐标来自布局', () => {
-  const dataset = makeDataset()
-  const coTurn = dataset.edges.find((edge) => edge.type === 'coTurn')
-  assert.ok(coTurn)
-  const focusKey = caseKey(coTurn.from)
-  const partnerKey = caseKey(coTurn.to)
-  const html = renderMap({ nodes: dataset.files, edges: dataset.edges, selectedPath: coTurn.from, selectedTurn: null, layers: { coSession: false } })
-  assert.ok(html.includes('data-node-path="' + coTurn.from + '"'))
-  // 邻居（共现另一端）不被 dim。
-  const partnerBlock = html.slice(html.indexOf('data-node-path="' + coTurn.to + '"'))
-  assert.ok(partnerBlock.slice(0, 400).includes('data-dim="false"'))
-  // 至少存在被 dim 到 0.2 的节点。
-  assert.ok(html.includes('data-opacity="0.2"'))
-  const layout = layoutMap(dataset.files)
-  const node = layout.nodes.find((item) => caseKey(item.path) === focusKey)
-  assert.ok(node)
-  assert.ok(html.includes('data-x="' + node.x + '"'))
-  assert.ok(html.includes('data-y="' + node.y + '"'))
-  assert.notEqual(partnerKey, focusKey)
-})
-
-test('星图：标签避让——未放大时只有选中/悬停的标签，选中标签永远显示', () => {
-  const dataset = makeDataset()
-  const selected = dataset.files[3].path
-  const html = renderMap({ nodes: dataset.files, edges: [], selectedPath: selected, selectedTurn: null })
-  const visibleLabels = countMatches(html, /data-label-for="/g)
-  // 未放大（zoom 1 < 1.4）→ 只有选中的那一个标签可见。
-  assert.equal(visibleLabels, 1)
-  assert.ok(html.includes('data-label-for="' + selected + '"'))
-  assert.ok(html.includes('data-selected="true"'))
-})
-
-test('星图：超过 600 个节点时显式显示 locale 文案（显示 600/1200 个活跃文件）', () => {
-  const files = makeFiles({ count: 1200, seed: 5 })
-  const html = renderMap({ nodes: files, edges: [], selectedPath: null, selectedTurn: null })
-  assert.ok(html.includes('data-map-node-limit="true"'))
-  assert.ok(html.includes('显示 600/1200 个活跃文件'))
-  assert.equal(countMatches(html, /data-node-path="/g), 600)
-})
-
-test('星图：图例用 locale 文案（图例/文档/代码/…），颜色语义 6 个族', () => {
-  const html = renderMap({ edges: [], selectedPath: null, selectedTurn: null })
-  assert.ok(html.includes('图例'))
-  for (const label of ['文档', '代码', '数据', '图片', '配置', '其它']) assert.ok(html.includes(label), '缺少族文案 ' + label)
-  assert.equal(cutCount(html, 'class="threadline-swatch"'), 6)
-})
-
-function cutCount(html: string, needle: string): number {
-  return html.split(needle).length - 1
-}
-
-test('星图：确定性——同一份 props 两次静态渲染逐字符相同', () => {
-  const first = renderMap()
-  const second = renderMap()
-  assert.equal(first, second)
-})
-
-test('星图：6 个文件族的颜色互不相同（颜色语义来自 tokens 的 6 个令牌）', () => {
-  const colors = FILE_FAMILIES.map((family) => FAMILY_COLOR[family])
-  assert.equal(colors.length, 6)
-  assert.equal(new Set(colors).size, 6)
-  for (const color of colors) assert.match(color, /^var\(--tl-/)
-})
-
-test('星图：reduced-motion 标记 + 无选中时无焦点透明度', () => {
-  const html = renderMap({ selectedPath: null, selectedTurn: null, reducedMotion: true })
-  assert.ok(html.includes('data-reduced-motion="true"'))
-  assert.equal(html.includes('data-opacity="0.2"'), false)
-})
-
-test('星图：空数据不崩（0 节点、无簇、无图例计数）', () => {
-  const html = renderMap({ nodes: [], edges: [], selectedPath: null, selectedTurn: null })
-  assert.ok(html.includes('data-node-count="0"'))
-  assert.ok(html.includes('data-truncated="false"'))
-})
-
-function renderTimeline(overrides: Record<string, unknown> = {}): string {
-  const fixture = makeTimelineFixture()
+function renderGraph(overrides: Record<string, unknown> = {}): string {
+  const files = makeFiles({ count: 30, dirs: ['src'] })
   return renderToStaticMarkup(
-    h(Timeline, {
-      range: 'range.all',
-      domain: fixture.domain,
-      playhead: Math.round(fixture.unloadedRanges[0].start + 1),
-      unloadedRanges: fixture.unloadedRanges,
-      nodes: fixture.nodes,
-      sessions: fixture.sessions,
-      now: fixture.domain.end,
+    h(FileGraph, {
+      files,
+      edges: [],
+      mode: 'directory',
+      directoryKey: 'src',
+      directoryLabel: 'src',
+      now: NOW,
+      locale: 'zh',
+      testId: 'graph',
       ...overrides,
     }),
   )
 }
 
-test('时间轴：未加载区段画斜纹 + 标签，播放头落入时提示 state.unloadedRange', () => {
-  const html = renderTimeline()
-  assert.ok(html.includes('data-tl-timeline="true"'))
-  assert.equal(cutCount(html, 'class="tl-unloaded"'), 1)
-  assert.ok(html.includes('>未加载<'))
-  assert.ok(html.includes('data-unloaded-hint="true"'))
-  assert.ok(html.includes('该时间段还在读取'))
+const files = makeFiles({ count: 30, dirs: ['src'] })
+
+test('directory 模式：文件节点 + 标签 + 图例 5 类，无簇框/网格/缩放', () => {
+  const html = renderGraph()
+  assert.ok(html.includes('data-tl-graph="true"'))
+  assert.ok(html.includes('data-graph-mode="directory"'))
+  assert.equal(countMatches(html, /data-file-path="/g), files.length)
+  assert.equal(countMatches(html, /data-label-for="/g) > 0, true)
+  assert.equal(html.includes('tl-cluster-box'), false, 'T31 删除簇底框')
+  assert.equal(html.includes('tl-map-grid'), false, 'T31 删除网格背景')
+  assert.equal(html.includes('data-zoom'), false)
+  assert.equal(html.includes('tl-map-toolbar'), false)
+  // 图例：5 类 + 每类一个色点。
+  for (const label of ['文本', '代码', '数据', '媒体', '其它']) assert.ok(html.includes(label), '缺图例 ' + label)
+  assert.equal(countMatches(html, /class="tl-graph-legend-item"/g), 5)
+  // 周围一圈文件都在画布里。
+  for (const match of html.matchAll(/data-file-path="[^"]+"/g)) assert.ok(match[0].length > 0)
 })
 
-test('时间轴：播放头是 slider（aria-valuemin/max/now/valuetext），控件与刻度齐全', () => {
-  const html = renderTimeline()
-  assert.ok(html.includes('role="slider"'))
-  assert.match(html, /aria-valuemin="[0-9]+"/)
-  assert.match(html, /aria-valuemax="[0-9]+"/)
-  assert.match(html, /aria-valuenow="[0-9]+"/)
-  assert.match(html, /aria-valuetext="[^"]+"/)
-  assert.ok(html.includes('data-testid="timeline-play"'))
-  assert.ok(html.includes('data-testid="timeline-speed-1"'))
-  assert.ok(html.includes('data-testid="timeline-speed-4"'))
-  assert.ok(html.includes('data-testid="timeline-now"'))
-  assert.ok(cutCount(html, 'data-tick-priority="high"') >= 2)
-  assert.ok(html.includes('aria-live="polite"'))
-  assert.ok(html.includes('回到现在'))
+test('4 个文件大类颜色来自 tokens（不写颜色字面量）', () => {
+  const colors = FILE_FAMILIES.map((family) => FAMILY_COLOR[family])
+  assert.equal(colors.length, 5)
+  assert.equal(new Set(colors).size, 5)
+  for (const color of colors) assert.match(color, /^var\(--tl-/)
 })
 
-test('时间轴：会话刻度、生长带与播放头标签渲染', () => {
-  const html = renderTimeline()
-  assert.equal(cutCount(html, 'class="tl-session"'), 4)
-  assert.ok(html.includes('class="tl-growth-line"'))
-  assert.ok(html.includes('data-playhead-label="true"'))
+test('选中态：填充加深（fillOpacity=1）+ 同色 1.5px 细环，不出现大框/outline', () => {
+  const selected = files[0].path
+  const html = renderGraph({ selectedPath: selected })
+  const at = html.indexOf('data-file-path="' + selected + '"')
+  assert.ok(at > 0)
+  const start = html.lastIndexOf('<g', at)
+  const block = html.slice(start, html.indexOf('</g>', at))
+  assert.ok(block.includes('data-selected="true"'))
+  assert.ok(block.includes('fill-opacity="1"'))
+  assert.ok(block.includes('stroke-width="1.5"'))
+  assert.equal(block.includes('outline'), false)
+  // 未选中的节点是浅填充（不会全部一样深）。
+  assert.ok(html.includes('fill-opacity="0.55"'))
 })
 
-test('时间轴：reduced-motion 标记 + 播放/暂停文案切换（受控）', () => {
-  const playing = renderTimeline({ playing: true, reducedMotion: true })
-  assert.ok(playing.includes('data-playing="true"'))
-  assert.ok(playing.includes('data-reduced-motion="true"'))
-  assert.ok(playing.includes('暂停'))
-  const paused = renderTimeline({ playing: false })
-  assert.ok(paused.includes('data-playing="false"'))
-  assert.ok(paused.includes('播放'))
+test('边：只画两端都在当前节点集合内的边；目录图不画"同目录结构边"（避免蜘蛛网）', () => {
+  const all = makeFiles({ count: 40, dirs: ['src', 'docs'] })
+  const edges = buildEdges(all, [], { references: 4 })
+  const directory = renderGraph({ files: all, edges, directoryKey: '', directoryLabel: '根目录' })
+  assert.equal((directory.match(/data-layer="structure"/g) ?? []).length, 0, '目录图不应画结构边')
+  const turn = makeTurnDetail(all.slice(0, 6), { n: 2 })
+  const status = turnFileStatusOf(turn, all)
+  const turnHtml = renderGraph({ files: all, edges, mode: 'turn', turn: { turn, status } })
+  const endpoints = [...turnHtml.matchAll(/data-edge-from="([^"]+)" data-edge-to="([^"]+)"/g)]
+  assert.ok(endpoints.length > 0)
+  const allowed = new Set(all.map((file) => caseKey(file.path)))
+  for (const match of endpoints) {
+    assert.ok(allowed.has(caseKey(match[1])), '边端点不在集合内：' + match[1])
+    assert.ok(allowed.has(caseKey(match[2])), '边端点不在集合内：' + match[2])
+  }
+  assert.equal(countMatches(turnHtml, /data-edge-id="/g), endpoints.length)
 })
 
-test('时间轴：没有数据域时不崩（空态，不造 0）', () => {
-  const html = renderTimeline({ domain: null, unloadedRanges: [], sessions: [], nodes: [], playhead: NOW })
-  assert.ok(html.includes('data-tl-timeline="true"'))
-  assert.equal(cutCount(html, 'class="tl-unloaded"'), 0)
-  assert.equal(html.includes('data-unloaded-hint="true"'), false)
+test('目录模式：摘要条始终占位（data-empty），hover 切到 turn 时高度不变', () => {
+  const html = renderGraph()
+  assert.ok(html.includes('class="tl-graph-summary"'))
+  assert.ok(html.includes('data-empty="true"'))
+})
+
+test('turn 模式：摘要条（读/写行/首见/删除命令）+ 每个文件的状态小字', () => {
+  const turnFiles = files.slice(0, 5)
+  const turn = makeTurnDetail(turnFiles, { n: 7, deleteCommands: 2 })
+  const status = turnFileStatusOf(turn, files)
+  const html = renderGraph({
+    files: turnFiles,
+    mode: 'turn',
+    turn: { turn, status },
+    edges: [],
+    directoryKey: 'src',
+    directoryLabel: 'src',
+  })
+  assert.ok(html.includes('data-graph-mode="turn"'))
+  assert.ok(html.includes('class="tl-graph-summary"'))
+  assert.ok(html.includes('T7'))
+  assert.ok(html.includes('读 4'))
+  assert.ok(html.includes('写 +16 / −3 行'))
+  assert.ok(html.includes('首见 0'))
+  assert.ok(html.includes('删除命令 2（未逐文件归属）'))
+  // 状态小字：至少出现「读 n / 写+ / 写−」三种标记。
+  assert.ok(countMatches(html, /class="tl-fnode-status"/g) >= 3)
+  assert.ok(html.includes('写+12'))
+  assert.ok(html.includes('写−3'))
+  assert.ok(html.includes('data-read="1"'))
+  assert.ok(html.includes('data-write-add="12"'))
+  // 首见：窗口外的文件不标。
+  assert.ok(html.includes('data-first-seen="false"'))
+})
+
+test('turn 模式：删除命令不可知时显示 —（不显示 0）', () => {
+  const turn = makeTurnDetail(files.slice(0, 3), { n: 2 })
+  const status = turnFileStatusOf(turn, files)
+  const html = renderGraph({ files: files.slice(0, 3), mode: 'turn', turn: { turn, status }, edges: [] })
+  assert.ok(html.includes('data-status="delete"'))
+  assert.ok(html.includes('删除命令 —'))
+  assert.equal(html.includes('删除命令 0'), false)
+})
+
+test('上限：目录 40 / 轮次 200 截断时显式「显示 N/M」', () => {
+  const many = makeFiles({ count: 300, dirs: ['big'] })
+  const directory = renderGraph({ files: many, directoryKey: 'big', directoryLabel: 'big' })
+  assert.ok(directory.includes('data-node-count="40"'))
+  assert.ok(directory.includes('显示 40/300 个活跃文件'))
+  assert.ok(directory.includes('data-graph-truncated="true"'))
+  const turn = renderGraph({ files: many, mode: 'turn', edges: [] })
+  assert.ok(turn.includes('data-node-count="200"'))
+  assert.ok(turn.includes('显示 200/300 个活跃文件'))
+})
+
+test('空数据：不画假图，显示既有空态口径', () => {
+  const html = renderGraph({ files: [], edges: [] })
+  assert.ok(html.includes('data-file-count="0"'))
+  assert.equal(countMatches(html, /data-file-path="/g), 0)
+  assert.equal(html.includes('tl-graph-svg'), false)
+  assert.ok(html.includes('data-threadline-empty'))
+  assert.ok(html.includes('有对话记录，但没有文件操作'))
+})
+
+test('确定性：同一份 props 两次静态渲染逐字符相同', () => {
+  assert.equal(renderGraph(), renderGraph())
+  const turn = makeTurnDetail(files.slice(0, 5), { n: 4 })
+  const status = turnFileStatusOf(turn, files)
+  const props = { files: files.slice(0, 5), mode: 'turn' as const, turn: { turn, status }, edges: [] }
+  assert.equal(renderGraph(props), renderGraph(props))
+})
+
+test('reduced-motion 标记透传到图根（无动画依赖）', () => {
+  const html = renderGraph({ reducedMotion: true })
+  assert.ok(html.includes('data-reduced-motion="true"'))
+})
+
+test('turn 模式：运行中轮次（无 end）首见显示 —，不显示 0', () => {
+  const turnFiles = files.slice(0, 3)
+  const turn = makeTurnDetail(turnFiles, { n: 2, end: null })
+  const status = turnFileStatusOf(turn, files)
+  const html = renderGraph({ files: turnFiles, mode: 'turn', turn: { turn, status }, edges: [] })
+  assert.ok(html.includes('首见 —'))
+  assert.equal(html.includes('首见 0'), false)
 })

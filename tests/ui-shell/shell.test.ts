@@ -19,7 +19,6 @@ import {
   ErrorState,
   Legend,
   LoadingState,
-  Overlay,
   ProgressPill,
   Tooltip,
 } from '../../src/client/ui/common/index.ts'
@@ -45,9 +44,16 @@ test('外壳根节点：只有 .threadline-app，带 locale 标记', () => {
   assert.match(html, /class="threadline-shell"/)
 })
 
-test('区域齐全且顺序正确：header → Now(条件) → main → timeline → turns', () => {
+test('区域齐全且顺序正确：header → layout（左列 graph/timeline/turns + 右列 rail）', () => {
   const html = renderShell()
-  const order = ['data-region="header"', 'class="threadline-main"', 'data-region="timeline"', 'data-region="turns"']
+  const order = [
+    'data-region="header"',
+    'class="threadline-layout"',
+    'data-region="map"',
+    'data-region="timeline"',
+    'data-region="turns"',
+    'data-region="rail"',
+  ]
   let cursor = -1
   for (const needle of order) {
     const index = html.indexOf(needle)
@@ -55,6 +61,21 @@ test('区域齐全且顺序正确：header → Now(条件) → main → timeline
     cursor = index
   }
   assert.equal(html.includes('data-region="now"'), false, '没有 running 会话时不渲染 Now strip')
+  // 33 §2：左列（图/时间轴/轮次带）在右列（卡片）之前；右列是 aside。
+  assert.match(html, /<aside class="threadline-rail" data-region="rail"/)
+})
+
+test('33 §2：没有检查器、没有遮罩；主区就是左列 + 右列', () => {
+  const html = renderShell({
+    graphSlot: h('div', { 'data-fixture': 'graph' }, 'g'),
+    railSlot: h('div', { 'data-fixture': 'rail' }, 'r'),
+  })
+  assert.equal(html.includes('data-region="inspector"'), false)
+  assert.equal(html.includes('threadline-inspector'), false)
+  assert.equal(html.includes('threadline-inspector-mask'), false)
+  assert.match(html, /class="threadline-left" data-region="map"/)
+  assert.match(html, /data-fixture="graph"/)
+  assert.match(html, /data-fixture="rail"/)
 })
 
 test('Now strip 仅在传了 nowStrip 时出现，并带 running 标记', () => {
@@ -69,14 +90,6 @@ test('范围 chip：四个都在，且恰好一个 aria-pressed=true（默认全
   assert.equal(pressed.length, 1)
   for (const label of ['今天', '7 天', '30 天', '全部']) assert.ok(html.includes('>' + label + '<'), '缺范围 chip：' + label)
   assert.match(html, /data-testid="range-range\.all"[^>]*aria-pressed="true"/)
-})
-
-test('检查器默认关闭；打开后是 aside[data-inspector-open=true]，并有关闭按钮的 aria-label', () => {
-  assert.equal(renderShell().includes('data-region="inspector"'), false)
-  const open = renderShell({ inspectorOpen: true, inspectorTitle: '文件', inspectorSlot: h('p', null, '内容') })
-  assert.match(open, /data-region="inspector" data-inspector-open="true"/)
-  assert.match(open, /aria-label="关闭"/)
-  assert.match(open, /data-inspector-open="true"/, '主区要带上打开标记（决定栅格列数）')
 })
 
 test('时间轴 / 轮次带槽高度与折叠状态由 data 属性暴露', () => {
@@ -98,10 +111,9 @@ test('切到 en：产品名与范围 chip 跟着 locale 走', () => {
 })
 
 test('所有可点元素都是 button（没有 div 假装按钮）', () => {
-  const html = renderShell({ inspectorOpen: true, onTurnStripToggle: () => undefined })
+  const html = renderShell({ onTurnStripToggle: () => undefined })
   // 允许 role="button" 的写法，但本项目一律用 button
   assert.equal(/<div[^>]*onclick/i.test(html), false)
-  assert.equal((html.match(/tabindex="-1"/g) ?? []).length, 1, '只有遮罩是程序化可点（tabindex=-1）')
 })
 
 test('Button：icon-only 必须有 aria-label，否则抛错（运行期兜底）', () => {
@@ -189,24 +201,18 @@ test('ProgressPill：loading/partial 是 progressbar，failed 是 status + 重�
 
 test('Legend：默认折叠状态可读，宽容器由 CSS 展开（组件不写死宽度）', () => {
   const html = renderToStaticMarkup(
-    h(Legend, { title: '图例', items: [{ kind: 'doc', label: '文档' }, { kind: 'code', label: '代码' }] }),
+    h(Legend, { title: '图例', items: [{ kind: 'text', label: '文本' }, { kind: 'code', label: '代码' }] }),
   )
   assert.match(html, /data-open="false"/)
   assert.match(html, /aria-expanded="false"/)
-  assert.match(html, /data-kind="doc"/)
+  assert.match(html, /data-kind="text"/)
   assert.match(html, /role="group" aria-label="图例"/)
 })
 
-test('Overlay：关闭时不渲染；打开时 dialog + aria-modal + 标题关联', () => {
-  assert.equal(renderToStaticMarkup(h(Overlay, { open: false, onClose: () => undefined, title: 'x', closeLabel: '关闭' })), '')
-  const html = renderToStaticMarkup(
-    h(Overlay, { open: true, onClose: () => undefined, title: t('modal.title'), closeLabel: t('ui.close') }, h('p', null, 'body')),
-  )
-  assert.match(html, /role="dialog"/)
-  assert.match(html, /aria-modal="true"/)
-  assert.match(html, /aria-labelledby="threadline-overlay-title-/)
-  assert.match(html, /本次对话的脉络/)
-  assert.match(html, /aria-label="关闭"/)
+test('Overlay 已删除：T31 起没有弹窗表面（单一执行路径，无 dialog）', () => {
+  const html = renderShell({ graphSlot: h('div', { 'data-fixture': 'graph' }), railSlot: h('div', { 'data-fixture': 'rail' }) })
+  assert.equal(html.includes('role="dialog"'), false)
+  assert.equal(html.includes('aria-modal'), false)
 })
 
 test('子槽组件单独可用（T07/T08 直接复用）', () => {

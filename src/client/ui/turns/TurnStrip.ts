@@ -35,6 +35,8 @@ export interface TurnStripProps {
   selected: Selection
   /** hover 预览（由上层 reducer 管）。 */
   preview: Selection | null
+  /** hover 关联高亮（例如悬停某文件时，它被哪些轮次碰过）。 */
+  relatedKeys?: ReadonlySet<string> | null
   onPreview: (target: Selection | null) => void
   onSelect: (target: Selection) => void
   onDoubleClick?: (target: Selection) => void
@@ -165,6 +167,7 @@ export function TurnStrip(props: TurnStripProps): React.ReactElement {
               model,
               selected: isSelected,
               preview: !isSelected && sameSelection(model.selection, props.preview),
+              related: props.relatedKeys !== null && props.relatedKeys !== undefined && props.relatedKeys.has(selectionKey(model.selection)),
               focusable: index >= 0 && index === tabbableIndex,
               onPreview: (target) => props.onPreview(target === null ? null : target.selection),
               onSelect: (target) => props.onSelect(target.selection),
@@ -206,7 +209,7 @@ export function TurnStrip(props: TurnStripProps): React.ReactElement {
       'data-running-count': String(runningCount),
       ref: containerRef,
       onKeyDown,
-      onMouseLeave: () => props.onPreview(null),
+      // 不在这里清预览：从轮次块移到左图看状态时，预览需要保持（由入口的 layout mouseleave 清）。
       onBlur: (event: React.FocusEvent<HTMLDivElement>) => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) props.onPreview(null)
       },

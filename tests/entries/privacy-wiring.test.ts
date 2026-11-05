@@ -16,11 +16,10 @@ import {
 import { markFirstUsable, measureFirstUsable, perfEntries, resetPerf, listNeedsVirtualization, listWindow } from '../../src/client/state/perf.ts'
 import { disabledReferenceLayer } from '../../src/client/state/referenceLayer.ts'
 import { ThreadlineTabView, referenceDisabledText } from '../../src/client/entries/tab.ts'
-import { buildModalModel, modalTitle } from '../../src/client/ui/modal/model.ts'
-import { maskPathFor } from '../../src/client/privacy/index.ts'
+import { maskPathFor, maskTitle } from '../../src/client/privacy/index.ts'
 import { buildFileRows } from '../../src/client/a11y/index.ts'
 import type { FileNode } from '../../src/shared/events/index.ts'
-import { BASE_TIME, SESSION_ID, buildDetail, buildSessionRows, buildWorkspaceItems } from './fixtures.ts'
+import { BASE_TIME, SESSION_ID, buildSessionRows, buildWorkspaceItems } from './fixtures.ts'
 
 const t = createTranslator('zh')
 
@@ -44,14 +43,9 @@ test('隐私 store：默认 metadata；toggle/set 幂等；订阅只收到变化
   assert.equal(getPrivacyMode(), 'metadata')
 })
 
-test('弹窗隐私：标题掩码「会话 n」、起点/终点正文入口消失（显示「内容已隐藏」）', () => {
-  const detail = buildDetail()
-  const files = new Map<string, FileNode>()
-  const hidden = buildModalModel({ detail, files, mode: 'hidden', t, now: detail.startedAt + 60_000 })
-  assert.equal(hidden.startText, null, '隐私模式下正文不进入模型')
-  assert.equal(hidden.endText, null)
-  assert.equal(modalTitle({ title: detail.title, sessionId: detail.id, mode: 'hidden', index: 0, t }), '会话 1')
-  assert.equal(modalTitle({ title: detail.title, sessionId: detail.id, mode: 'metadata', index: 0, t }), detail.title)
+test('隐私：标题掩码（tab 会话选择器共用 T10 的 maskTitle；T32 起弹窗已删除，不再有弹窗专属掩码）', () => {
+  assert.equal(maskTitle({ sessionId: SESSION_ID, title: '修复读模型指纹' }, 0, 'hidden', t), '会话 1')
+  assert.equal(maskTitle({ sessionId: SESSION_ID, title: '修复读模型指纹' }, 0, 'metadata', t), '修复读模型指纹')
 })
 
 test('隐私模式：列表行路径只留 basename（走 T10 maskPathFor，不是自己写 basename）', () => {

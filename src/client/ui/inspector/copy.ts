@@ -1,4 +1,4 @@
-/*
+﻿/*
  * inspector/copy.ts —— 检查器文案的**唯一映射点**（03 §16 定稿 key）。
  *
  * 纪律：组件与 model 里不写任何中文/英文句子；全部文字经 `label()` 从 locale 取。
@@ -86,11 +86,10 @@ export const INSPECTOR_COPY: {
   expand: CopyKey
   collapse: CopyKey
   listView: CopyKey
-  familyDoc: CopyKey
+  familyText: CopyKey
   familyCode: CopyKey
   familyData: CopyKey
-  familyImage: CopyKey
-  familyConfig: CopyKey
+  familyMedia: CopyKey
   familyOther: CopyKey
 } = {
   file: 'inspector.file',
@@ -160,11 +159,10 @@ export const INSPECTOR_COPY: {
   expand: 'ui.expand',
   collapse: 'ui.collapse',
   listView: 'inspector.listView',
-  familyDoc: 'fileFamily.doc',
+  familyText: 'fileFamily.text',
   familyCode: 'fileFamily.code',
   familyData: 'fileFamily.data',
-  familyImage: 'fileFamily.image',
-  familyConfig: 'fileFamily.config',
+  familyMedia: 'fileFamily.media',
   familyOther: 'fileFamily.other',
 }
 
@@ -173,19 +171,17 @@ export function label(key: CopyKey, fallback: string, t: Translator): string {
   return key === null ? fallback : t(key)
 }
 
-/** 文件族标签（03 §8.1 标题里的「族」）。 */
-export function familyLabel(family: 'doc' | 'code' | 'data' | 'image' | 'config' | 'other', t: Translator): string {
+/** 文件族标签（33 §5 的 5 类；标题里的「族」）。 */
+export function familyLabel(family: 'text' | 'code' | 'data' | 'media' | 'other', t: Translator): string {
   switch (family) {
-    case 'doc':
-      return label(INSPECTOR_COPY.familyDoc, '·', t)
+    case 'text':
+      return label(INSPECTOR_COPY.familyText, '¶', t)
     case 'code':
       return label(INSPECTOR_COPY.familyCode, '</>', t)
     case 'data':
       return label(INSPECTOR_COPY.familyData, '{ }', t)
-    case 'image':
-      return label(INSPECTOR_COPY.familyImage, '▣', t)
-    case 'config':
-      return label(INSPECTOR_COPY.familyConfig, '⚙', t)
+    case 'media':
+      return label(INSPECTOR_COPY.familyMedia, '▣', t)
     case 'other':
     default:
       return label(INSPECTOR_COPY.familyOther, '•', t)

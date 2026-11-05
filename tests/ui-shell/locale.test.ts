@@ -2,7 +2,8 @@
  * locale.test.ts —— A40-3「文案完整」的静态判据。
  *
  * 三件事，缺一即红：
- * 1. 03 §16 的 key 清单**逐条写在本文件里**（SPEC_KEYS，共 110 条 = 初版 §16 的 71 条 + 2026-11-04 扩展段的 39 条），
+ * 1. 03 §16 的 key 清单**逐条写在本文件里**（SPEC_KEYS，共 130 条 = 初版 §16 的 71 条 + 2026-11-04 扩展段的 39 条 + 2026-11-06 摘要条 1 条
+ *    + 2026-11-05 T21 目录总览的 7 条 + T31 脉络 2.0 的 13 条 - 5 类合并后的 1 条），
  *    zh/en 少任何一个 key 都红；key 集合必须完全相等；
  * 2. 值必须与 03 §16 表格**逐字一致**（测试直接解析规范文件，不靠人眼）；
  * 3. t()/createTranslator 的占位符替换与默认 locale 行为正确。
@@ -115,11 +116,10 @@ export const SPEC_KEYS: readonly string[] = [
   "status.ok",
   "status.failed",
   "status.unknown",
-  "fileFamily.doc",
+  "fileFamily.text",
   "fileFamily.code",
   "fileFamily.data",
-  "fileFamily.image",
-  "fileFamily.config",
+  "fileFamily.media",
   "fileFamily.other",
   "inspector.externalSources",
   "inspector.more",
@@ -139,6 +139,29 @@ export const SPEC_KEYS: readonly string[] = [
   "inspector.timeRange",
   "map.truncatedNodes",
   "relations.collapsed",
+  // —— §16 扩展段（2026-11-05，T21 目录总览；Lead 同步到 03 §16 表格）——
+  "map.rootCluster",
+  "map.overview",
+  "map.overviewHint",
+  "map.clusterCount",
+  "map.clusterMeta",
+  "map.clusterVisible",
+  "map.clusterCurrent",
+  // —— §16 扩展段（2026-11-05，T31 脉络 2.0：文件关系图 / 轮次状态 / 目录 rail；Lead 同步表格）——
+  "graph.title",
+  "graph.directoryHint",
+  "graph.turnHint",
+  "rail.title",
+  "turnStatus.read",
+  "turnStatus.write",
+  "turnStatus.firstSeen",
+  "turnStatus.deleteCommands",
+  "turnStatus.deleteShort",
+  "turnStatus.unknown",
+  "turnStatus.markRead",
+  "turnStatus.markWriteAdd",
+  "turnStatus.markWriteDel",
+  "turnStatus.markFirstSeen",
 ]
 
 /** §16 未列、但实现必需的接口文案（已在 zh.ts/en.ts 头部注明）。 */
@@ -161,12 +184,12 @@ function readSpecTable(): Array<{ key: string; zh: string; en: string }> {
     })
 }
 
-test('03 §16 的 110 个 key 在 zh/en 里都存在', () => {
+test('03 §16 的 130 个 key 在 zh/en 里都存在', () => {
   for (const key of SPEC_KEYS) {
     assert.ok(Object.prototype.hasOwnProperty.call(zh, key), 'zh 缺 key：' + key)
     assert.ok(Object.prototype.hasOwnProperty.call(en, key), 'en 缺 key：' + key)
   }
-  assert.equal(SPEC_KEYS.length, 110)
+  assert.equal(SPEC_KEYS.length, 130)
   assert.equal(new Set(SPEC_KEYS).size, SPEC_KEYS.length, 'key 清单本身有重复')
 })
 
@@ -174,7 +197,7 @@ test('zh / en 的 key 集合完全相等', () => {
   assert.deepEqual(Object.keys(zh).sort(), Object.keys(en).sort())
 })
 
-test('key 全集 = §16 的 110 条 + 4 条扩展接口文案（没有多余漂移）', () => {
+test('key 全集 = §16 的 130 条 + 4 条扩展接口文案（没有多余漂移）', () => {
   const all = Object.keys(zh)
   assert.equal(all.length, SPEC_KEYS.length + EXTENSION_KEYS.length)
   for (const key of EXTENSION_KEYS) assert.ok(all.includes(key), '缺扩展 key：' + key)
@@ -231,7 +254,7 @@ test('缺变量时保留占位符（宁可显示 {n}，也不伪造数字）', (
 })
 
 test('模板占位符只用 03 §16 约定的变量名（填满后不残留 {…}）', () => {
-  const vars = { n: 1, done: 1, total: 1, files: 1, commands: 1, subagents: 1, duration: '1 分', s: 1, m: 1, h: 1, shown: 1, errors: 1 }
+  const vars = { n: 1, done: 1, total: 1, files: 1, commands: 1, subagents: 1, duration: '1 分', s: 1, m: 1, h: 1, shown: 1, errors: 1, count: 1, ops: 1, time: '1', visible: 1, add: 1, del: 1 }
   for (const key of Object.keys(zh) as MessageKey[]) {
     for (const locale of ['zh', 'en'] as const) {
       const filled = format(MESSAGES[locale][key], vars)

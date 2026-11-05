@@ -1,31 +1,24 @@
 /*
- * perf/bench.ts —— 星图布局与交互选择的可复现基准（04 §8；06 A44-3）。
+ * perf/bench.ts —— 文件关系图布局与交互选择的可复现基准（04 §8；06 A44-3）。
  *
  * 只测**纯计算**（不含 React 渲染），这样基准在 node 里稳定可跑、不依赖浏览器：
- *   layout  = `layoutMap(600 节点)`     —— 预算 150ms
+ *   layout  = `layoutFileGraph(600 节点 → 目录图上限 120)` —— 预算 150ms
  *   prepare = `prepareEdges(4000 条边)` —— 边去重/收拢（预算同布局，单列报告）
  *   select  = `selectVisibleEdges` + 邻居集 —— 每次 hover/选中重绘的纯计算，预算 16ms
- *
- * 合成数据是确定性的（同一 seed 同一形状），边用共享层的 `createEdge` + `coTurnEvidence`
- * 生成 —— 不手写证据文案，避免第二份模板。
- *
- * 纪律：`bench()` 只测量、不判定"通过"；判定在 `checkBench()` 里按 `PERF_BUDGET` 做，
- * 未达标就是 FAIL（不许调宽预算）。
  */
 import type { FileFamily, FileNode } from '../../shared/events/index.ts'
 import { coTurnEvidence, createEdge, type GraphEdge } from '../../shared/relations/index.ts'
-import { layoutMap, prepareEdges, selectVisibleEdges } from '../ui/map/index.ts'
+import { layoutFileGraph, prepareEdges, selectVisibleEdges } from '../ui/map/index.ts'
 import { PERF_BUDGET, checkBudget, type BudgetCheck } from './budget.ts'
 import { measureSync, median, minimum } from './timing.ts'
 
-const FAMILIES: readonly FileFamily[] = ['doc', 'code', 'data', 'image', 'config', 'other']
+const FAMILIES: readonly FileFamily[] = ['text', 'code', 'data', 'media', 'other']
 const EXTENSIONS: Record<FileFamily, string> = {
-  doc: '.md',
+  text: '.md',
   code: '.ts',
   data: '.json',
-  image: '.png',
-  config: '.yml',
-  other: '.txt',
+  media: '.png',
+  other: '.bin',
 }
 
 /** 基准时间原点（固定值，保证每次合成数据完全相同；不读系统时间）。 */
@@ -148,7 +141,7 @@ export function bench(options: BenchOptions = {}): BenchResult {
   let preparedEdges = 0
 
   for (let run = 0; run < runs; run += 1) {
-    const layout = measureSync(() => layoutMap(files))
+    const layout = measureSync(() => layoutFileGraph(files, { width: 680, height: 460, mode: 'directory' }))
     laidOutNodes = layout.value.shown
     layoutSamples.push(layout.ms)
 

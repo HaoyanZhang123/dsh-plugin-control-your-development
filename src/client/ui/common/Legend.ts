@@ -7,8 +7,8 @@
  */
 import * as React from 'react'
 
-/** 文件族（03 §4.1；T07 的星图复用同一套 kind）。 */
-export type FileKind = 'doc' | 'code' | 'data' | 'image' | 'config' | 'other' | 'new'
+/** 文件大类（33 §5；T31 起 5 类 + 图例里的「新」标记）。 */
+export type FileKind = 'text' | 'code' | 'data' | 'media' | 'other' | 'new'
 
 export interface LegendItem {
   kind: FileKind

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/images/threadline-cover.png" alt="脉络星图：工作区文件按目录分簇，叠加结构、共现、引用与时序四种关系边" width="100%">
+  <img src="assets/images/threadline-cover.png" alt="脉络 2.0：左文件关系图 + 右两列目录卡片 + 轮次状态与悬停联动" width="100%">
 </p>
 
 <h1 align="center">脉络 · Threadline</h1>
@@ -10,7 +10,7 @@
   <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white" alt="React 18"></a>
   <a href="https://github.com/deepseek-ai/deepseek-harness"><img src="https://img.shields.io/badge/DeepSeek%20Harness-%E6%8F%92%E4%BB%B6-4B6BFB" alt="DeepSeek Harness 插件"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green" alt="MIT 许可证"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.0.0--alpha.1-orange" alt="版本 1.0.0-alpha.1"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.0.0-blue" alt="版本 1.0.0"></a>
 </p>
 
 ## 简介
@@ -25,16 +25,18 @@
 
 ## 核心特性
 
-- **工作区星图**——只画 DSH 真正触碰过的文件，按目录分簇；节点大小跟随操作次数，颜色跟随文件族。默认最多渲染 600 个活跃文件，超出时明确写出「显示 600/1200 个活跃文件」。
-- **四层关系**——结构、共现（同一轮 / 同一会话）、引用（解析文件正文所得）、时序（同一轮内的先后）。**共现从不冒充依赖**；未确认的引用只列在检查器里，不画边。
-- **轮次带**——一个会话的每一轮，带状态、时长，以及文件 / 命令 / 错误 / 子智能体标记；仍在记录的那一轮会明确标注「本轮仍在记录」。
-- **三种检查器**——文件、轮次、会话；每个数字都给出对应的记录证据，另有「后续触碰」与「与上一轮对比」。
-- **`/threadline` 命令**——把一段对话重建成结构化视图：起点、轮次轨迹、终点，以及它碰过的文件与仍未闭环的事项。
-- **每轮影响**——每条已定稿的助手消息下方一个小图标，打开就是这一轮的影响，并可跳进完整脉络。
-- **隐私模式**——默认只显示元数据、正文折叠；隐私模式下路径只显示文件名、命令只显示程序名、会话标题改为「会话 N」。
-- **列表视图**——同一份数据的文件表与轮次表，键盘可达、读屏可读。
-- **渐进加载**——插件一加载就开始扫描当前工作区并持续增量更新，打开 tab 时数据已经就绪。
-- **诚实优先**——未加载、读取失败、观测不到、按参数估算，全部显式标注；**不用 0 或空态冒充未知**。
+- **左图 · 文件关系图** —— 默认显示当前会话最活跃的目录；点右卡切换目录，点轮次切成该轮涉及的跨目录文件。
+  确定性径向布局，无缩放/平移/簇框/网格；节点颜色 = 5 类文件族（文本 / 代码 / 数据 / 媒体 / 其它）。
+- **右栏 · 两列目录卡片** —— 目录名、文件数、本轮徽章、操作数/最近活动、5 族构成条、前 3 个最活跃文件。
+  与左图同屏，整页只有一条滚动；<960px 上下堆叠。
+- **轮次状态只在可证事实上叠加** —— `读 N` / `写 +A/−D 行` / `首见`；文件级删除/新增不可证，不显示。
+  摘要条固定单行：`读 N · 写 +A/−D 行 · 首见 F · 删除 C`（完整语义在 tooltip）。
+- **双向 hover 联动** —— 悬停卡片预览该目录；悬停节点高亮所属目录卡与相关轮次；悬停轮次预览该轮文件并高亮相关目录。
+  hover 只预览，不改变点击选择、不滚动页面。
+- **每轮影响入口** —— 已定稿助手消息下的图标；点击直接切到「脉络」tab 并聚焦该轮，不打开任何窗口。
+- **`/threadline` 命令** —— 保留为快捷入口：切到「脉络」tab 并聚焦当前会话；不再有弹窗。
+- **隐私模式 / 列表视图 / 渐进加载 / 诚实优先** —— 与 1.0 相同：路径/标题可掩码，文件与轮次表键盘可达；
+  未加载、读取失败、观测不到都显式标注，不用 0 或空态冒充未知。
 
 ## 安装
 
@@ -43,13 +45,13 @@
 从 npm 安装：
 
 ```text
-插件管理 → Add plugin → dsh-plugin-control-your-development@1.0.0-alpha.1
+插件管理 → Add plugin → dsh-plugin-control-your-development@1.0.0
 ```
 
 或直接装进 profile：
 
 ```bash
-dsh plugin add dsh-plugin-control-your-development@1.0.0-alpha.1 --profile desktop
+dsh plugin add dsh-plugin-control-your-development@1.0.0 --profile desktop
 ```
 
 装完刷新页面（客户端代码生效）或重启 DSH（宿主代码生效）。
@@ -58,26 +60,22 @@ dsh plugin add dsh-plugin-control-your-development@1.0.0-alpha.1 --profile deskt
 
 ## 使用方式
 
-打开任意会话，点对话页的 **脉络 / Threadline** tab（在「对话」「轨迹」之后）。这个 tab 会占满会话区域并自己滚动；在 tab 内输入框会被隐藏，切回「对话」自动恢复。
+打开任意会话，点对话页的 **脉络 / Threadline** tab（在「对话」「轨迹」之后）。tab 占满会话区域并自己滚动；tab 内的输入框隐藏，切回「对话」自动恢复。
 
 <p align="center">
-  <img src="assets/images/threadline-map.png" alt="脉络 tab：工作区星图，按目录分簇，底部是四层关系的图例" width="100%">
+  <img src="assets/images/threadline-map.png" alt="脉络 2.0：左文件关系图与右两列目录卡片，全页单滚动" width="100%">
 </p>
 
-- 点节点 = 固定选中：邻居保持高亮、其余淡出，检查器切到该文件；`Esc` 逐层退出。
-- 点轮次带里的一轮 = 高亮该轮碰过的文件，检查器切到该轮。
-- 时间轴可以把工作区按时间回放；时间范围有 **今天 / 7 天 / 30 天 / 全部**。
-
-另外两个入口用的是同一份数据：
-
-- 在输入框敲 **`/threadline`** 打开「本次对话的脉络」——同一段对话按 起点 → 轮次轨迹 → 终点 重建，并列出它产出的文件与未闭环事项。
-- 已定稿助手消息下方的**影响图标**打开单独一轮的影响。
+- 左图看当前目录的文件关系；点右侧任意目录卡切换目录；点轮次块切到该轮的文件图并叠加状态。
+- 鼠标悬停卡片、节点或轮次会临时预览并联动高亮；点击才固定选择，离开整块视图恢复。
+- 时间轴把工作区按时间回放；范围有 **今天 / 7 天 / 30 天 / 全部**。
+- `/threadline` 命令 = 跳到 tab；每轮「影响」图标 = 跳到 tab 并聚焦该轮。
 
 <p align="center">
-  <img src="assets/images/threadline-modal.png" alt="/threadline 弹窗：对话概要、轮次轨迹，以及本对话碰过的文件" width="70%">
+  <img src="assets/images/threadline-turn.png" alt="轮次视图：读 / 写行 / 首见状态与删除命令计数" width="100%">
 </p>
 
-脉络只读当前会话所属的**那一个工作区**；不会汇总其它工作区、其它 profile 或其它机器。
+脉络只读当前会话所属的**那一个工作区**；不汇总其它工作区、profile 或机器。
 
 ## 配置
 
@@ -96,9 +94,9 @@ plugin/
 
 ## 发布
 
-当前版本：**面板插件 v1.0.0-alpha.1**（alpha 预览版）。
+当前版本：**面板插件 v1.0.0**（正式版）。
 
-每个版本改了什么见 [CHANGELOG.md](CHANGELOG.md)，可安装的版本见 [Releases](https://github.com/HaoyanZhang123/dsh-plugin-control-your-development/releases)。`1.0.0-alpha.1` 是 alpha 预览版：界面与数据模型仍可能调整。
+每个版本改了什么见 [CHANGELOG.md](CHANGELOG.md)，可安装的版本见 [Releases](https://github.com/HaoyanZhang123/dsh-plugin-control-your-development/releases)。
 
 ## 许可证
 

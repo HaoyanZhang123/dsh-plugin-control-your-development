@@ -192,7 +192,7 @@ function HarnessApp(): React.ReactElement {
   const params = new URLSearchParams(location.search)
   const locale: Locale = params.get('locale') === 'en' ? 'en' : 'zh'
   const t = React.useMemo(() => createTranslator(locale), [locale])
-  const [inspectorOpen, setInspectorOpen] = React.useState(params.get('inspector') !== '0')
+  const [inspectorOpen] = React.useState(params.get('inspector') !== '0')
   const [turnsCollapsed, setTurnsCollapsed] = React.useState(params.get('turns') === 'collapsed')
   const state = params.get('state') ?? 'full'
   const showNow = params.get('now') !== '0'
@@ -200,13 +200,11 @@ function HarnessApp(): React.ReactElement {
   const legend = h(Legend, {
     title: t('legend.title'),
     items: [
-      { kind: 'doc' as const, label: '文档' },
+      { kind: 'text' as const, label: '文本' },
       { kind: 'code' as const, label: '代码' },
       { kind: 'data' as const, label: '数据' },
-      { kind: 'image' as const, label: '图片' },
-      { kind: 'config' as const, label: '配置' },
+      { kind: 'media' as const, label: '媒体' },
       { kind: 'other' as const, label: '其它' },
-      { kind: 'new' as const, label: '新' },
     ],
   })
 
@@ -232,12 +230,20 @@ function HarnessApp(): React.ReactElement {
           onAction: () => undefined,
         }
       : null,
-    mapSlot: h(FixtureMap, { width: 640, height: 420 }),
-    legendSlot: legend,
-    inspectorOpen,
-    onInspectorClose: () => setInspectorOpen(false),
-    inspectorTitle: t('inspector.file'),
-    inspectorSlot: h(InspectorBody, { t, state }),
+    // T31：产品外壳不再有检查器/图例槽；T06 的 SSR/截图夹具把图例与检查器内容放进右列。
+    graphSlot: h(FixtureMap, { width: 640, height: 420 }),
+    railSlot: h(
+      'div',
+      null,
+      legend,
+      inspectorOpen
+        ? h(
+            'div',
+            { className: 'threadline-inspector-stack', style: { marginBlockStart: 12 } },
+            h(InspectorBody, { t, state }),
+          )
+        : null,
+    ),
     timelineSlot: h(FixtureTimeline, null),
     turnStripTitle: t('inspector.turn'),
     turnStripCollapsed: turnsCollapsed,

@@ -1,0 +1,188 @@
+/*
+ * rail.css —— 右栏目录卡片（33 §2/§4：两列、内容与 1.0 一致、无内部滚动）。
+ *
+ * 纪律：只用 --tl-* tokens；选择器挂插件根；长文本 min-width:0 + 省略 + title；
+ * 卡片是 <button>（focus ring 由 base.css 的 :focus-visible 统一给）。
+ */
+
+:is(.threadline-app, .threadline-impact-root) .tl-rail {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-content: start;
+  min-inline-size: 0;
+  font-family: var(--tl-font);
+  color: var(--tl-fg);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-rail .threadline-empty {
+  grid-column: 1 / -1;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-rail-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--tl-border);
+  border-radius: var(--tl-radius-md);
+  background: var(--tl-surface);
+  box-shadow: var(--tl-shadow-1);
+  color: var(--tl-fg);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  appearance: none;
+  transition:
+    background-color var(--tl-dur-fast) var(--tl-ease),
+    border-color var(--tl-dur-fast) var(--tl-ease),
+    opacity var(--tl-dur-fast) var(--tl-ease);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-rail-card:hover {
+  border-color: var(--tl-border-strong);
+  background: var(--tl-surface-raised);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-rail-card {
+  transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
+}
+
+/* hover 预览：卡片本身高亮（真正切图由入口做）；related = 悬停文件/轮次关联到的目录。 */
+:is(.threadline-app, .threadline-impact-root) .tl-rail-card[data-hover='true'],
+:is(.threadline-app, .threadline-impact-root) .tl-rail-card[data-related='true'] {
+  border-color: var(--tl-accent);
+  background: var(--tl-hover);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-rail-card[data-hover='true'] {
+  box-shadow: inset 0 0 0 1px var(--tl-accent);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-rail-card[data-selected='true'] {
+  border-color: var(--tl-accent);
+  box-shadow: inset 0 0 0 1px var(--tl-accent);
+}
+
+/* 本轮未涉及的目录：降透明（不隐藏，保持"目录还在"的完整性） */
+:is(.threadline-app, .threadline-impact-root) .tl-rail-card[data-dim='true'] {
+  opacity: 0.55;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-rail-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-inline-size: 0;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-rail-card-name {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--tl-fs-subtitle);
+  font-weight: 600;
+  line-height: var(--tl-lh-tight);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-rail-card-badge {
+  flex: 0 0 auto;
+  block-size: 18px;
+  padding: 0 7px;
+  border-radius: var(--tl-radius-pill);
+  background: var(--tl-accent);
+  color: var(--tl-fg-on-accent);
+  font-size: var(--tl-fs-meta-sm);
+  font-weight: 600;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-rail-card-count {
+  flex: 0 0 auto;
+  block-size: 18px;
+  padding: 0 7px;
+  border-radius: var(--tl-radius-pill);
+  background: var(--tl-hover);
+  color: var(--tl-fg-secondary);
+  font-family: var(--tl-mono);
+  font-size: var(--tl-fs-meta-sm);
+  font-variant-numeric: tabular-nums;
+  line-height: 18px;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-rail-card-meta {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--tl-fg-tertiary);
+  font-size: var(--tl-fs-meta-sm);
+  line-height: var(--tl-lh-tight);
+}
+
+/* 5 段文件大类构成条：段宽 = 该类文件数（空类不画；颜色之外还有图例文字） */
+:is(.threadline-app, .threadline-impact-root) .tl-rail-card-mix {
+  display: flex;
+  block-size: 4px;
+  border-radius: var(--tl-radius-pill);
+  overflow: hidden;
+  background: var(--tl-skeleton);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-rail-card-seg {
+  flex: 0 0 auto;
+  block-size: 100%;
+  min-inline-size: 2px;
+  opacity: 0.9;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-rail-card-files {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-rail-card-file {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-inline-size: 0;
+  color: var(--tl-fg-secondary);
+  font-family: var(--tl-mono);
+  font-size: var(--tl-fs-meta-sm);
+  line-height: var(--tl-lh-tight);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-rail-card-dot {
+  flex: 0 0 auto;
+  inline-size: 6px;
+  block-size: 6px;
+  border-radius: var(--tl-radius-pill);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-rail-card-file-name {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-rail-card-file-ops {
+  flex: 0 0 auto;
+  color: var(--tl-fg-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+@container threadline (max-width: 599.98px) {
+  .threadline-app .tl-rail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

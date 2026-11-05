@@ -58,6 +58,8 @@ export interface TurnBlockProps {
   model: TurnBlockModel
   selected: boolean
   preview: boolean
+  /** hover 联动高亮（例如悬停的文件属于该轮）。 */
+  related?: boolean
   focusable: boolean
   onPreview?: (model: TurnBlockModel | null) => void
   onSelect?: (model: TurnBlockModel) => void
@@ -85,6 +87,7 @@ export function TurnBlock(props: TurnBlockProps): React.ReactElement {
       'data-partial': model.partial ? 'true' : 'false',
       'data-selected': props.selected ? 'true' : 'false',
       'data-preview': props.preview ? 'true' : 'false',
+      'data-related': props.related === true ? 'true' : 'false',
       'data-width': String(model.widthPx),
       'data-marker-mode': model.markerMode,
       'data-marker-slots': String(model.markerSlots),

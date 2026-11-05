@@ -282,11 +282,22 @@ function App(): React.ReactElement {
       locale,
       workspaceName: 'skill开发',
       nowStrip: { text: t('session.running') + ' · T30 · 2 文件', running: true },
-      mapSlot: h(FixtureMap, null),
-      inspectorOpen: state.inspectorOpen,
-      onInspectorClose: () => dispatch({ type: 'closeInspector' }),
-      inspectorTitle: InspectorTitle({ selection }),
-      inspectorSlot: h(Inspector, { t, data, selection, privacyMode, now, actions, testId: 'inspector-body' }),
+      // T31：产品外壳不再挂检查器；T08 的检查器用例改为在 rail 槽里注入（测试入口，不是产品入口）。
+      graphSlot: h(FixtureMap, null),
+      railSlot:
+        view === 'keyboard'
+          ? h(
+              InspectorPanel,
+              {
+                title: InspectorTitle({ selection }),
+                closeLabel: t('ui.close'),
+                onClose: () => dispatch({ type: 'closeInspector' }),
+                open: state.inspectorOpen,
+                testId: 'inspector',
+              },
+              h(Inspector, { t, data, selection, privacyMode, now, actions, testId: 'inspector-body' }),
+            )
+          : h(FixtureMap, null),
       timelineSlot: h('span', { style: { color: 'var(--tl-fg-tertiary)' } }, 'timeline fixture'),
       turnStripTitle: t('inspector.turn'),
       turnStripCollapsed: false,

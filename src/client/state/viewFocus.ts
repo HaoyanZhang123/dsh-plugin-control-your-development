@@ -111,11 +111,44 @@ export function selectionOfFocus(target: FocusTarget): Selection {
 const TAB_LABELS = ['脉络', 'Threadline'] as const
 
 /**
+ * 单帧激活尝试（找到就 click）。优先级：
+ * 1. `data-view-id="threadline"`（宿主明确标注时最可靠）；
+ * 2. `[role="tab"]` 的 textContent 精确 / 包含 label；
+ * 3. `aria-label` 精确 / 包含 label。
+ * 找不到返回 false（不抛错）；DOM 抛错由调用方兜。
+ */
+function clickThreadlineTab(doc: Document): boolean {
+  const tabs = Array.from(doc.querySelectorAll<HTMLElement>('[role="tab"], [data-view-id]'))
+  const byData = tabs.find((el) => (el.getAttribute('data-view-id') ?? '').trim() === 'threadline')
+  if (byData !== undefined) {
+    byData.click()
+    return true
+  }
+  for (const label of TAB_LABELS) {
+    const byText = tabs.find((el) => {
+      const text = (el.textContent ?? '').trim()
+      return text === label || text.includes(label)
+    })
+    if (byText !== undefined) {
+      byText.click()
+      return true
+    }
+    const byAria = tabs.find((el) => (el.getAttribute('aria-label') ?? '').trim().includes(label))
+    if (byAria !== undefined) {
+      byAria.click()
+      return true
+    }
+  }
+  return false
+}
+
+/**
  * 切到「脉络」tab。
  *
- * 只在**本文件**做 DOM 查询：优先 `[role="tab"]` 的 textContent 精确匹配；
- * 其次 `aria-label`；再其次带 `data-view-id="threadline"` 的元素。
- * 找到就 `click()` 并返回 true；找不到/抛错返回 false（调用方记一次 warning，用户仍可手动切）。
+ * 只在**本文件**做 DOM 查询。找到就 `click()` 并返回 true；
+ * 没找到时**下一帧再试一次**（宿主 tab 可能比 action row 晚一帧挂载；只在有 requestAnimationFrame
+ * 的浏览器里调度，Node 单测不触发），首帧仍返回 false 并记下原因。
+ * 抛错返回 false（调用方仍可手动切，不白屏）。
  */
 export function activateThreadlineTab(doc: Document | null = typeof document === 'undefined' ? null : document): boolean {
   lastActivationFailure = null
@@ -124,30 +157,23 @@ export function activateThreadlineTab(doc: Document | null = typeof document ===
     return false
   }
   try {
-    const tabs = Array.from(doc.querySelectorAll<HTMLElement>('[role="tab"], [data-view-id]'))
-    const byData = tabs.find((el) => el.getAttribute('data-view-id') === 'threadline')
-    if (byData !== undefined) {
-      byData.click()
-      return true
-    }
-    for (const label of TAB_LABELS) {
-      const byText = tabs.find((el) => (el.textContent ?? '').trim() === label)
-      if (byText !== undefined) {
-        byText.click()
-        return true
-      }
-      const byAria = tabs.find((el) => (el.getAttribute('aria-label') ?? '').trim() === label)
-      if (byAria !== undefined) {
-        byAria.click()
-        return true
-      }
-    }
-    lastActivationFailure = 'tab-not-found'
-    return false
+    if (clickThreadlineTab(doc)) return true
   } catch (error) {
     lastActivationFailure = 'dom-error'
     return false
   }
+  lastActivationFailure = 'tab-not-found'
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(() => {
+      try {
+        if (clickThreadlineTab(doc)) lastActivationFailure = null
+        else lastActivationFailure = 'tab-not-found'
+      } catch (error) {
+        lastActivationFailure = 'dom-error'
+      }
+    })
+  }
+  return false
 }
 
 /** 最近一次激活失败原因（null = 没有失败）。 */

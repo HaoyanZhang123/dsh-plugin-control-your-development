@@ -1,304 +1,343 @@
 /*
- * map.css —— 星图（T07 / 03 §4）的样式。
+ * map.css —— 文件关系图（33 §3）的样式。
  *
  * 纪律（与 base.css 相同）：
- * - 选择器一律挂 .threadline-app 前缀；颜色只引用 tokens.css 的 --tl-*（不写颜色字面量）；
+ * - 选择器一律挂插件根前缀；颜色只引用 tokens.css 的 --tl-*（不写颜色字面量）；
  * - 只用容器查询（.threadline-app 是 inline-size 容器），不用 viewport media query；
- * - reduced-motion 下关闭脉冲（tokens.css 的全局规则 + 本文件兜底）；
- * - 注入路径仍是 styles/index.ts 的 installStyles()（枚举 styles/*.css），本文件不自己插 <style>。
+ * - reduced-motion 下关闭过渡（tokens.css 全局归零 + 本文件兜底）；
+ * - 注入路径仍是 styles/index.ts 的 installStyles()（枚举 styles/*.css）。
+ *
+ * 2.0 删除了 1.0 星图的簇框/网格/缩放相关样式：这里只有文件节点、关系线、标签、状态与摘要。
  */
 
-/* ========== 容器 ========== */
-
-:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .tl-map {
-  position: relative;
-  display: block;
-  inline-size: 100%;
-  block-size: 100%;
+:is(.threadline-app, .threadline-impact-root) .tl-graph {
+  display: flex;
+  flex-direction: column;
   min-inline-size: 0;
-  min-block-size: 0;
+  border: 1px solid var(--tl-border);
+  border-radius: var(--tl-radius-md);
+  background: var(--tl-surface);
+  box-shadow: var(--tl-shadow-1);
   overflow: hidden;
   color: var(--tl-fg);
   font-family: var(--tl-font);
   font-size: var(--tl-fs-meta);
   line-height: var(--tl-lh-body);
-  text-align: start;
 }
 
-:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .tl-map-svg {
+/* ---------- 图头：标题 + 5 类图例 ---------- */
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 14px 8px;
+  border-block-end: 1px solid var(--tl-border-weak);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-title {
+  font-size: var(--tl-fs-body);
+  font-weight: 600;
+  line-height: var(--tl-lh-tight);
+  white-space: nowrap;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-subtitle {
+  margin-inline-start: 6px;
+  color: var(--tl-fg-tertiary);
+  font-size: var(--tl-fs-meta-sm);
+  font-weight: 400;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-legend {
+  margin-inline-start: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  color: var(--tl-fg-secondary);
+  font-size: var(--tl-fs-meta-sm);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-legend-dot {
+  inline-size: 8px;
+  block-size: 8px;
+  border-radius: var(--tl-radius-pill);
+  flex: 0 0 auto;
+}
+
+/* ---------- 本轮摘要条（**始终占位**；固定高度、强制单行） ---------- */
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-summary {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  block-size: 36px;
+  min-block-size: 36px;
+  max-block-size: 36px;
+  padding: 0 12px;
+  border-block-end: 1px solid var(--tl-border-weak);
+  background: var(--tl-hover);
+  font-size: var(--tl-fs-meta-sm);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* 目录视图：摘要条空着，但占位不消失（hover 预览时不会改变面板高度）。 */
+:is(.threadline-app, .threadline-impact-root) .tl-graph-summary[data-empty='true'] {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-summary > * {
+  flex: 0 0 auto;
+  min-inline-size: 0;
+}
+
+/* 最后一个 chip（删除）允许被压缩/省略；完整文案在 title。 */
+:is(.threadline-app, .threadline-impact-root) .tl-graph-summary .tl-graph-chip[data-status='delete'] {
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-summary-title {
+  font-size: var(--tl-fs-meta);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  block-size: 20px;
+  padding: 0 8px;
+  border: 1px solid var(--tl-border);
+  border-radius: var(--tl-radius-pill);
+  background: var(--tl-surface);
+  color: var(--tl-fg-secondary);
+  font-size: var(--tl-fs-meta-sm);
+  white-space: nowrap;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-chip i {
+  inline-size: 6px;
+  block-size: 6px;
+  border-radius: var(--tl-radius-pill);
+  flex: 0 0 auto;
+}
+
+/* ---------- 画布（无网格、无簇框、无缩放） ---------- */
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-stage {
+  position: relative;
+  block-size: 420px;
+  min-block-size: 420px;
+  overflow: hidden;
+  background: var(--tl-surface);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-svg {
   display: block;
   inline-size: 100%;
   block-size: 100%;
-  touch-action: none;
+  touch-action: manipulation;
   -webkit-user-select: none;
   user-select: none;
 }
 
-:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .tl-map-svg:focus-visible {
+:is(.threadline-app, .threadline-impact-root) .tl-graph-svg:focus {
+  outline: none;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-svg:focus-visible {
   outline: var(--dsw-focus-ring-width, 2px) solid var(--tl-accent);
   outline-offset: -2px;
 }
 
-/* 极轻背景网格（03 §13.3：可以有，但不得干扰阅读） */
-:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .tl-map-grid {
-  opacity: 0.5;
-}
-
-/* ========== 目录簇（03 §4.1） ========== */
-
-:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .tl-cluster-box {
-  fill: var(--tl-hover);
-  stroke: var(--tl-border-weak);
-  stroke-width: 1;
-  vector-effect: non-scaling-stroke;
-}
-
-:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .tl-cluster[data-focused='true'] .tl-cluster-box {
-  stroke: var(--tl-accent);
-  stroke-dasharray: 4 3;
-}
-
-:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .tl-cluster-label {
-  fill: var(--tl-fg-secondary);
-  font-family: var(--tl-mono);
-  font-size: 11px;
-  cursor: pointer;
-}
-
-:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .tl-cluster-label:hover {
-  fill: var(--tl-fg);
-}
-
-:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .tl-cluster-label:focus-visible {
-  outline: var(--dsw-focus-ring-width, 2px) solid var(--tl-accent);
-  outline-offset: 2px;
-}
-
-:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .tl-cluster-count {
-  fill: var(--tl-fg-tertiary);
-  font-family: var(--tl-mono);
-  font-size: 10px;
-  pointer-events: none;
-}
-
-/* ========== 节点（03 §4.1） ========== */
-
-:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .tl-node {
-  cursor: pointer;
-}
-
-:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .tl-node:focus-visible {
-  outline: var(--dsw-focus-ring-width, 2px) solid var(--tl-accent);
-  outline-offset: 2px;
-}
-
-:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .tl-node-core,
-:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .tl-node-halo {
-  transition: opacity var(--tl-dur-fast) var(--tl-ease);
-}
-
-/* 焦点模式：只改透明度，不改坐标（03 §4.2） */
-:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .tl-node[data-dim='true'] .tl-node-core,
-:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .tl-node[data-dim='true'] .tl-node-halo {
-  opacity: 0.2;
-}
-
-/* 当前轮强调环：轻微脉冲；reduced-motion 下静态 */
-:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .tl-node-ring-current {
-  animation: threadline-map-pulse var(--tl-dur-slow) var(--tl-ease) 0s infinite alternate;
-}
-
-@keyframes threadline-map-pulse {
-  from {
-    opacity: 0.35;
-  }
-
-  to {
-    opacity: 0.95;
-  }
-}
-
-/* 文件名标签：描边保证压在网格/边上仍可读 */
-:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .tl-label {
-  fill: var(--tl-fg-secondary);
-  font-family: var(--tl-mono);
-  font-size: 11px;
-  paint-order: stroke;
-  stroke: var(--tl-bg);
-  stroke-width: 3px;
-  stroke-linejoin: round;
-  pointer-events: none;
-}
-
-:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .tl-label[data-selected='true'] {
-  fill: var(--tl-fg);
-  font-weight: 600;
-}
-
-:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .tl-label[data-hover='true'] {
-  fill: var(--tl-fg);
-}
-
-/* ========== 四层边（03 §4.2 / §10） ========== */
-
-:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .tl-edge {
+/* 关系线：默认淡；选中/悬停的焦点边由行内 opacity 加深。 */
+:is(.threadline-app, .threadline-impact-root) .tl-graph-edge {
   fill: none;
   stroke-linecap: round;
 }
 
-:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .tl-edge-line {
-  pointer-events: none;
+:is(.threadline-app, .threadline-impact-root) .tl-graph-edge[data-layer='structure'] {
+  stroke: var(--tl-fg-caption);
 }
 
-:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .tl-edge-hit {
-  fill: none;
-  stroke: transparent;
-  stroke-width: 10;
-  pointer-events: stroke;
+:is(.threadline-app, .threadline-impact-root) .tl-graph-edge[data-layer='coTurn'] {
+  stroke: var(--tl-fg-secondary);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-edge[data-layer='coSession'] {
+  stroke: var(--tl-fg-tertiary);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-edge[data-layer='reference'] {
+  stroke: var(--tl-link);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-edge[data-layer='sequence'] {
+  stroke: var(--tl-warn);
+}
+
+/* 文件节点：选中 = 填充加深 + 同色 1.5px 细环（点击不出大框/outline）。 */
+:is(.threadline-app, .threadline-impact-root) .tl-fnode {
   cursor: pointer;
 }
 
-:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .tl-edge:hover .tl-edge-line {
-  stroke-width: 2.4;
+:is(.threadline-app, .threadline-impact-root) .tl-fnode:focus {
+  outline: none;
 }
 
-:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .tl-edge[data-layer='structure'] .tl-edge-line {
-  stroke: var(--tl-fg-caption);
-  opacity: 0.42;
+:is(.threadline-app, .threadline-impact-root) .tl-fnode:focus-visible {
+  outline: var(--dsw-focus-ring-width, 2px) solid var(--tl-accent);
+  outline-offset: 2px;
 }
 
-:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .tl-edge[data-layer='coTurn'] .tl-edge-line {
+:is(.threadline-app, .threadline-impact-root) .tl-fnode-core {
+  transition: fill-opacity var(--tl-dur-fast) var(--tl-ease), stroke var(--tl-dur-fast) var(--tl-ease);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-fnode:hover .tl-fnode-core {
   stroke: var(--tl-fg-secondary);
-  stroke-dasharray: 4 3;
-  opacity: 0.72;
 }
 
-:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .tl-edge[data-layer='coSession'] .tl-edge-line {
-  stroke: var(--tl-fg-tertiary);
-  stroke-dasharray: 2 4;
-  opacity: 0.55;
-}
-
-:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .tl-edge[data-layer='reference'] .tl-edge-line {
-  stroke: var(--tl-link);
-  opacity: 0.85;
-}
-
-:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .tl-edge[data-layer='sequence'] .tl-edge-line {
-  stroke: var(--tl-warn);
-  opacity: 0.9;
-}
-
-:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .tl-edge-order {
-  fill: var(--tl-warn);
+/* 文件名标签：屏幕 11px；描边保证压在连线/节点上仍可读。 */
+:is(.threadline-app, .threadline-impact-root) .tl-fnode-label {
+  fill: var(--tl-fg-secondary);
   font-family: var(--tl-mono);
-  font-size: 9px;
-  font-weight: 600;
+  font-size: 11px;
   paint-order: stroke;
   stroke: var(--tl-surface);
-  stroke-width: 3px;
-}
-
-/* ========== 悬浮提示（SVG 内，屏幕坐标） ========== */
-
-:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .tl-map-tooltip {
+  stroke-width: 2px;
+  stroke-linejoin: round;
   pointer-events: none;
 }
 
-:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .tl-map-tooltip-bg {
-  fill: var(--tl-tooltip-bg);
-  opacity: 0.96;
-}
-
-:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .tl-map-tooltip-line {
-  fill: var(--tl-fg-inverse);
-  font-family: var(--tl-mono);
-  font-size: 11px;
-}
-
-:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .tl-map-tooltip-title {
-  fill: var(--tl-fg-inverse);
-  font-family: var(--tl-font);
-  font-size: 11px;
+:is(.threadline-app, .threadline-impact-root) .tl-fnode-label[data-selected='true'] {
+  fill: var(--tl-fg);
   font-weight: 600;
 }
 
-/* ========== 工具条（只读动作：适应 / 100% / 显示全部 / 整理） ========== */
-
-:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .tl-map-toolbar {
-  position: absolute;
-  inset-inline-end: 8px;
-  inset-block-start: 8px;
-  z-index: 5;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 4px;
-  max-inline-size: calc(100% - 16px);
+/* 本轮状态小字：读 / 写+ / 写− / 首见（颜色只是辅助，文字本身可读）。 */
+:is(.threadline-app, .threadline-impact-root) .tl-fnode-status {
+  font-family: var(--tl-mono);
+  font-size: 10px;
+  paint-order: stroke;
+  stroke: var(--tl-surface);
+  stroke-width: 2px;
+  stroke-linejoin: round;
+  pointer-events: none;
 }
 
-/* ========== 图例（03 §10：始终可见；窄容器由 base.css 折叠） ========== */
+/* ---------- 图尾：提示 / 状态图例 / 截断说明 ---------- */
 
-:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .tl-map-legend {
-  position: absolute;
-  inset-inline-start: 8px;
-  inset-block-end: 8px;
-  z-index: 6;
+:is(.threadline-app, .threadline-impact-root) .tl-graph-foot {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px 10px;
+  border-block-start: 1px solid var(--tl-border-weak);
+  color: var(--tl-fg-tertiary);
+  font-size: var(--tl-fs-meta-sm);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-hint {
+  min-inline-size: 0;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-status-legend {
+  display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  max-inline-size: calc(100% - 16px);
 }
 
-:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .tl-map-layer-list {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
-  min-inline-size: 0;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+:is(.threadline-app, .threadline-impact-root) .tl-graph-status-legend .tl-graph-chip {
+  block-size: 18px;
+  padding: 0 6px;
+  font-size: 10px;
 }
 
-:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .tl-map-note {
+:is(.threadline-app, .threadline-impact-root) .tl-graph-note {
+  margin-inline-start: auto;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
   padding: 2px 8px;
   border: 1px solid var(--tl-warn);
   border-radius: var(--tl-radius-pill);
   background: var(--tl-surface-raised);
   color: var(--tl-fg);
-  font-size: var(--tl-fs-meta-sm);
   white-space: nowrap;
 }
 
-/* ========== 响应式（容器查询，断点与 base.css 一致） ========== */
+:is(.threadline-app, .threadline-impact-root) .tl-graph-stage .threadline-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+/* ---------- 响应式（容器查询） ---------- */
+
+@container threadline (max-width: 1279.98px) {
+  .threadline-app .tl-graph-stage {
+    block-size: 360px;
+    min-block-size: 360px;
+  }
+}
+
+@container threadline (max-width: 999.98px) {
+  .threadline-app .tl-graph-stage {
+    block-size: 340px;
+    min-block-size: 340px;
+  }
+}
 
 @container threadline (max-width: 599.98px) {
-  .threadline-app .tl-map-toolbar {
-    inset-inline-end: 4px;
-    inset-block-start: 4px;
-    gap: 2px;
+  .threadline-app .tl-graph-head {
+    padding: 10px 10px 6px;
+    gap: 8px;
   }
 
-  .threadline-app .tl-map-legend {
-    inset-inline: 4px;
-    inset-block-end: 4px;
-    gap: 4px;
+  .threadline-app .tl-graph-legend {
+    margin-inline-start: 0;
+  }
+
+  .threadline-app .tl-graph-summary {
+    padding: 8px 10px;
+  }
+
+  .threadline-app .tl-graph-stage {
+    block-size: 320px;
+    min-block-size: 320px;
+  }
+
+  .threadline-app .tl-graph-foot {
+    padding: 8px 10px 10px;
   }
 }
-
-/* ========== reduced-motion（03 §15 / 06 N-13） ========== */
 
 @media (prefers-reduced-motion: reduce) {
-  .threadline-app .tl-node-ring-current {
-    animation: none !important;
+  .threadline-app .tl-fnode-core {
+    transition: none;
   }
 }
 
-:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) .tl-map[data-reduced-motion='true'] .tl-node-ring-current {
-  animation: none !important;
+:is(.threadline-app, .threadline-impact-root) .tl-graph[data-reduced-motion='true'] .tl-fnode-core {
+  transition: none;
 }

@@ -16,7 +16,6 @@ export {
 } from './focusTrap.ts'
 export { Legend, type FileKind, type LegendItem, type LegendProps } from './Legend.ts'
 export { LoadingState, type LoadingStateProps } from './LoadingState.ts'
-export { Overlay, type OverlayProps } from './Overlay.ts'
 export {
   ProgressPill,
   pillPercent,

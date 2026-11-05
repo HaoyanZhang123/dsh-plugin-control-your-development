@@ -97,8 +97,16 @@ export interface SessionEventLike {
 /** 文件操作种类（04 §3.4）。 */
 export type FileOp = 'read' | 'write' | 'search'
 
-/** 文件家族（04 §4.2），按扩展名判定。 */
-export type FileFamily = 'doc' | 'code' | 'data' | 'image' | 'config' | 'other'
+/**
+ * 文件大类（33 §5 / §6 定稿，5 类），按扩展名判定。
+ *
+ * - `text`  文本：md/txt/rst/pdf/docx + 配置（yml/toml/env/.gitignore/.editorconfig/lock）——配置并入文本；
+ * - `code`  代码：ts/js/py/go/rs… + **html/css/scss/less**（33 §5 修 bug）+ Makefile/Dockerfile；
+ * - `data`  数据：json/jsonl/csv/tsv/xml/db/sqlite/parquet/xlsx；
+ * - `media` 媒体：图片 + 音频 + 视频；
+ * - `other` 其它：字体/压缩包/二进制/未知。
+ */
+export type FileFamily = 'text' | 'code' | 'data' | 'media' | 'other'
 
 /** 轮次内单个文件的聚合（04 §3.2 TurnDetail.files 元素）。 */
 export interface TurnFile {
@@ -158,6 +166,14 @@ export interface TurnDetail {
   errors: number
   toolCalls: number
   toolFailures: number
+  /**
+   * 本轮命令文本里识别到的删除动作条数（33 §4/§6）。
+   *
+   * **可选**：只有 ≥1 时才写（缺省 = 0 或「不可知」，不伪造）。来源是 host reducer 对
+   * COMMAND_TOOLS（bash/pwsh/run_code/shell）`args.command` 的删除模式计数；
+   * **只计数，不保存命令文本、不归属文件路径**（DSH 没有删除文件工具，文件级「已删除」不可证）。
+   */
+  deleteCommands?: number
   plan?: PlanProgress
   /** 本轮的 assistant message id，按事件顺序（04 §3.2）。 */
   messageIds: string[]

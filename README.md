@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/images/threadline-cover.png" alt="Threadline star map: workspace files grouped by directory with structural, co-occurrence, reference and sequence edges" width="100%">
+  <img src="assets/images/threadline-cover.png" alt="Threadline 2.0: file relation map on the left, two columns of directory cards on the right, turn status and hover linking" width="100%">
 </p>
 
 <h1 align="center">Threadline · 脉络</h1>
@@ -10,7 +10,7 @@
   <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white" alt="React 18"></a>
   <a href="https://github.com/deepseek-ai/deepseek-harness"><img src="https://img.shields.io/badge/DeepSeek%20Harness-plugin-4B6BFB" alt="DeepSeek Harness plugin"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green" alt="License MIT"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.0.0--alpha.1-orange" alt="Version 1.0.0-alpha.1"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.0.0-blue" alt="Version 1.0.0"></a>
 </p>
 
 ## Overview
@@ -25,16 +25,13 @@ Typical use: you come back to a long session, or hand a workspace to someone els
 
 ## Features
 
-- **Workspace star map** — files DSH actually touched, clustered by directory; node size follows operation count, colour follows file family. Up to 600 active files are rendered, and the UI says so when it collapses the rest.
-- **Four relation layers** — structure, co-occurrence (same turn / same conversation), reference (parsed from file text) and sequence (order inside one turn). Co-occurrence is never presented as a dependency, and unconfirmed references are listed instead of drawn.
-- **Turn strip** — every turn of a session with status, duration, file / command / error / subagent markers. The turn that is still recording is labelled as such.
-- **Three inspectors** — file, turn and session, each showing the recorded evidence behind the number, plus later touches and a comparison with the previous turn.
-- **`/threadline` command** — rebuilds one conversation as structure: start, end, turn trail, the files it touched, and what is still open.
-- **Per-turn impact** — a single icon next to each finished assistant message; it opens the impact of that turn and can jump into the full map.
-- **Privacy mode** — metadata first, content folded by default; privacy mode masks paths to basenames, commands to program names and titles to session numbers.
-- **List view** — the same data as keyboard-navigable file and turn tables, for accessibility and for reading instead of scanning.
-- **Progressive load** — the plugin starts scanning the current workspace as soon as it loads and keeps updating incrementally, so the tab is already populated when you open it.
-- **Honest by design** — not loaded, failed to read, not observed and estimated are all shown as such; nothing is replaced by `0` or an empty state.
+- **File relation map (left)** — the most active directory of the current session by default. Pick any directory card to switch; pick a turn to switch to the files touched by that turn across directories. Deterministic radial layout, no pan/zoom, no cluster boxes, no grid. Node colour = five file families (text / code / data / media / other).
+- **Directory cards (right, two columns)** — name, file count, current-turn badge, operations / last activity, five-family bar, top 3 active files. Same screen as the map, one page scroll; stacks below 960px.
+- **Turn status only from recorded facts** — `read N`, `write +A / −D lines`, `first seen`; file-level deletion/creation is not provable and is not shown. The summary bar is fixed to one line: `read N · write +A/−D lines · first seen F · deletes C` (full wording in the tooltip).
+- **Two-way hover linking** — hover a card to preview its directory; hover a node to highlight its directory card and related turns; hover a turn to preview that turn's files and highlight related cards. Hover only previews; it never changes the click selection or scroll position.
+- **Per-turn impact icon** — under a finished assistant message; click jumps to the Threadline tab and focuses that turn, with no dialog.
+- **`/threadline` command** — a shortcut to the tab (focuses the current session); the old dialog is gone.
+- **Privacy mode / list view / progressive load / honest by design** — unchanged from 1.0: paths and titles can be masked; file and turn tables are keyboard-accessible; unloaded, failed and unobserved are labelled instead of replaced with 0 or an empty state.
 
 ## Installation
 
@@ -43,13 +40,13 @@ Requirements: DeepSeek Harness **0.2.2-rc.1** or newer, on a desktop or web prof
 Install it as a DSH plugin from npm:
 
 ```text
-Plugin manager → Add plugin → dsh-plugin-control-your-development@1.0.0-alpha.1
+Plugin manager → Add plugin → dsh-plugin-control-your-development@1.0.0
 ```
 
 Or install into a profile directly:
 
 ```bash
-dsh plugin add dsh-plugin-control-your-development@1.0.0-alpha.1 --profile desktop
+dsh plugin add dsh-plugin-control-your-development@1.0.0 --profile desktop
 ```
 
 Then reload the page (client code) or restart DSH (host code).
@@ -58,26 +55,22 @@ Then reload the page (client code) or restart DSH (host code).
 
 ## Usage
 
-Open any conversation and pick the **脉络 / Threadline** tab next to 对话 / 轨迹. The tab fills the conversation area and scrolls on its own; the composer is hidden while you are in it, and comes back when you leave.
+Open a conversation and pick the **Threadline** tab next to chat / trajectory. The tab fills the conversation area and scrolls on its own; the composer is hidden while you are in it and returns when you leave.
 
 <p align="center">
-  <img src="assets/images/threadline-map.png" alt="Threadline tab: workspace star map with directory clusters and the four relation legends" width="100%">
+  <img src="assets/images/threadline-map.png" alt="Threadline 2.0: file relation map on the left, two directory card columns on the right, one page scroll" width="100%">
 </p>
 
-- Click a node to fix the selection: its neighbours stay lit, everything else fades, the inspector shows that file. `Esc` steps back out.
-- Pick a turn in the strip to highlight the files that turn touched; the inspector switches to that turn.
+- The left map shows the current directory; pick another directory card to switch, or a turn block to switch to that turn's file map with status.
+- Hovering a card, node or turn previews and cross-highlights; clicking pins the selection; leaving the whole tab restores it.
 - The timeline plays the workspace back in time; ranges are **today / 7 days / 30 days / all**.
-
-Two smaller entries use the same data:
-
-- **`/threadline`** in the composer opens **本次对话的脉络** — the same conversation rebuilt as start → turn trail → end, with the files it produced and what is still open.
-- The **impact icon** under a finished assistant message opens that single turn's impact.
+- `/threadline` jumps to the tab; the per-turn impact icon jumps and focuses that turn.
 
 <p align="center">
-  <img src="assets/images/threadline-modal.png" alt="The /threadline dialog: conversation summary, turn trail and the files touched in this conversation" width="70%">
+  <img src="assets/images/threadline-turn.png" alt="Turn view: read / written-line / first-seen status and delete-command count" width="100%">
 </p>
 
-Threadline only reads the workspace the current session belongs to. Sessions from other workspaces, other profiles and other machines are not aggregated.
+Threadline only reads the workspace the current session belongs to. Sessions from other workspaces, profiles or machines are not aggregated.
 
 ## Configuration
 
@@ -96,9 +89,9 @@ plugin/
 
 ## Releases
 
-Current release: **panel plugin v1.0.0-alpha.1** (alpha preview).
+Current release: **panel plugin v1.0.0** (stable).
 
-See [CHANGELOG.md](CHANGELOG.md) for what changed in each version, and the [Releases](https://github.com/HaoyanZhang123/dsh-plugin-control-your-development/releases) page for installable versions. `1.0.0-alpha.1` is an alpha preview: the interface and the data model may still change.
+See [CHANGELOG.md](CHANGELOG.md) for what changed in each version, and the [Releases](https://github.com/HaoyanZhang123/dsh-plugin-control-your-development/releases) page for installable versions.
 
 ## License
 

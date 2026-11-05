@@ -1,38 +1,83 @@
 /*
  * tests/entries/t09.entry.ts —— T09 的截图夹具（合成数据 + 假 fetch，可复现）。
  *
- * 这不是产品代码：它 import **真实**的三个入口组件，喂 fixtures 的确定性数据，
+ * 这不是产品代码：它 import **真实**的入口组件，喂 fixtures 的确定性数据，
  * 用假 fetch 顶替同源 `/api/dsh-threadline/*`（截图不依赖 DSH 真机）。
  *
  * URL 参数：
- *   ?view=tab                 「脉络」tab（外壳 + 星图 + 时间轴 + 轮次带 + 检查器）
- *   ?view=modal               /threadline 弹窗（打开态）
- *   ?view=impact              「影响 5」按钮（打开态由 harness 点击触发）
+ *   ?view=tab                 「脉络」tab（外壳 + 关系图 + 时间轴 + 轮次带 + 目录卡片）
+ *   ?view=impact              「影响 5」按钮 + 假宿主 tab bar（点击图标 → 切到「脉络」tab，**不弹窗口**）
  *   &theme=dark               深色
  *
- * 探针：`window.__t09` 暴露只读状态（注册计数 / 焦点是否在 dialog 内 / 是否有投递），不打印任何正文。
+ * T32（2026-11-05 notes/33 §1/§7）：`/threadline` 弹窗已删除，本夹具不再有 `?view=modal` 分支，
+ * 也不再 import `ui/modal/**`。文件节点由本文件内的**测试专用**推导函数生成（原来的
+ * `fileNodesOfDetail` 随 ui/modal 删除；生产侧不再需要它）。
+ *
+ * 探针：`window.__t09` 暴露只读状态（假 tab 被点了几次），不打印任何正文。
  */
 import * as React from 'react'
 import { createRoot } from 'react-dom/client'
-import { createTranslator } from '../../src/client/locale/index.ts'
 import { installStyles } from '../../src/client/styles/index.ts'
 import { ThreadlineTabView } from '../../src/client/entries/tab.ts'
 import { disabledReferenceLayer } from '../../src/client/state/referenceLayer.ts'
 import { ImpactAction } from '../../src/client/entries/impact.ts'
-import { ThreadlineModal } from '../../src/client/ui/modal/ThreadlineModal.ts'
-import { fileNodesOfDetail } from '../../src/client/ui/modal/model.ts'
 import type { DetailStore } from '../../src/client/data/index.ts'
-import type { FileNode } from '../../src/shared/events/index.ts'
+import { fileNodeFromTouches } from '../../src/shared/events/index.ts'
+import type { FileNode, FileTouch } from '../../src/shared/events/index.ts'
 import { BASE_TIME, SESSION_ID, buildDetail, buildSummaries } from './fixtures.ts'
 
 const h = React.createElement
 const params = new URLSearchParams(location.search)
 const view = params.get('view') ?? 'tab'
-const t = createTranslator('zh')
 const detail = buildDetail()
-const nodes: FileNode[] = fileNodesOfDetail(detail)
-const files = new Map<string, FileNode>(nodes.map((node) => [node.path.toLowerCase(), node]))
 const summary = buildSummaries()[0]
+
+/**
+ * 测试专用：从单会话详情推导文件节点（快照夹具的 changedFiles）。
+ * 口径与生产一致：`fileNodeFromTouches` 是 events 里的唯一实现（不另写族/路径判定）；
+ * 原实现住在已删除的 `ui/modal/model.ts`，T32 随弹窗删除后搬进本测试夹具。
+ */
+function fileNodesOfDetailForFixture(detailValue: typeof detail): FileNode[] {
+  const touches: FileTouch[] = []
+  let seq = 0
+  for (const turn of detailValue.turns) {
+    for (const file of turn.files) {
+      seq += 1
+      const ops = file.ops
+      touches.push({
+        sessionId: detailValue.id,
+        turn: turn.n,
+        path: file.path,
+        key: file.path.toLowerCase(),
+        ops: ops.slice(),
+        reads: ops.includes('read') ? 1 : 0,
+        writes: ops.includes('write') ? 1 : 0,
+        searches: ops.includes('search') ? 1 : 0,
+        added: file.added,
+        removed: file.removed,
+        firstAt: turn.start,
+        lastAt: turn.end ?? turn.start,
+        seq,
+      })
+    }
+  }
+  const byPath = new Map<string, FileTouch[]>()
+  for (const touch of touches) {
+    const list = byPath.get(touch.key)
+    if (list === undefined) byPath.set(touch.key, [touch])
+    else list.push(touch)
+  }
+  const nodes: FileNode[] = []
+  for (const list of byPath.values()) {
+    const first = list[0]
+    if (first === undefined) continue
+    nodes.push(fileNodeFromTouches(first.path, list, [detailValue.id], 1, new Set(list.map((item) => item.turn)).size))
+  }
+  nodes.sort((a, b) => b.ops - a.ops || a.path.localeCompare(b.path))
+  return nodes
+}
+
+const nodes: FileNode[] = fileNodesOfDetailForFixture(detail)
 
 /** 宿主快照（模块级常量 = 身份稳定，避免每次 render 触发 memo 重算循环）。 */
 const SESSIONS_SNAPSHOT = {
@@ -113,47 +158,46 @@ const fakeStore = {
 } as unknown as DetailStore
 
 interface Probe {
-  dialogOpen: boolean
-  focusInDialog: boolean
-  dispatched: number
+  /** 假宿主 tab 被点中的次数（T20：点「影响」图标 / T32：命令触发 = click 这个 tab）。 */
+  tabClicks: number
 }
-const probe: Probe = { dialogOpen: false, focusInDialog: false, dispatched: 0 }
+const probe: Probe = { tabClicks: 0 }
 ;(window as unknown as { __t09: Probe }).__t09 = probe
 
-/** 弹窗夹具（自身持有 open 状态，Esc / 关闭按钮真的能关掉）。 */
-function ModalFixture(props: { now: number }): React.ReactElement {
-  const [open, setOpen] = React.useState(true)
-  return h(ThreadlineModal, {
-    open,
-    sessionId: SESSION_ID,
-    detail,
-    detailLoading: false,
-    detailError: false,
-    files,
-    edges: [],
-    mode: 'metadata',
-    now: props.now,
-    t,
-    onClose: () => setOpen(false),
-    onOpenFull: () => {
-      probe.dispatched += 1
-    },
-    testId: 'threadline-modal',
-  })
-}
-
-function App(): React.ReactElement {
-  const now = BASE_TIME + 10 * 60_000
-  if (view === 'modal') {
-    return h('div', { className: 'threadline-app', style: { blockSize: '100%' } }, h(ModalFixture, { now }))
+/**
+ * 影响入口夹具（T20）：造一个**假宿主 tab bar**（`role="tab"` + 文本「对话」/「脉络」）。
+ *
+ * 为什么：`activateThreadlineTab()` 只认 DOM（role=tab / aria-label / data-view-id），
+ * 真实宿主里 tab 由宿主管；夹具里自建一条即可证明「点击图标 → tab 真的被点中」，
+ * 同时断言页面里**没有** role="dialog"/popover（点击不再开窗）。
+ */
+function ImpactFixture(): React.ReactElement {
+  const [active, setActive] = React.useState('chat')
+  const select = (view: string): void => {
+    if (view === 'threadline') probe.tabClicks += 1
+    setActive(view)
   }
-  if (view === 'impact') {
-    return h(
+  return h(
+    'div',
+    { className: 'threadline-app', style: { blockSize: '100%', padding: '24px' } },
+    h(
       'div',
-      {
-        className: 'threadline-app',
-        style: { blockSize: '100%', padding: '24px', display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end' },
-      },
+      { role: 'tablist', 'data-testid': 'host-tabs', style: { display: 'flex', gap: '8px', marginBlockEnd: '16px' } },
+      h(
+        'button',
+        { type: 'button', role: 'tab', 'aria-selected': active === 'chat' ? 'true' : 'false', onClick: () => select('chat') },
+        '对话',
+      ),
+      h(
+        'button',
+        { type: 'button', role: 'tab', 'aria-selected': active === 'threadline' ? 'true' : 'false', onClick: () => select('threadline') },
+        '脉络',
+      ),
+    ),
+    h('div', { 'data-testid': 'active-view', 'data-active-view': active }, active === 'threadline' ? '当前：脉络' : '当前：对话'),
+    h(
+      'div',
+      { style: { display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end' } },
       h(ImpactAction, {
         messageId: 'm-1b',
         sessionId: SESSION_ID,
@@ -161,7 +205,14 @@ function App(): React.ReactElement {
         locale: 'zh',
         testId: 'impact',
       }),
-    )
+    ),
+  )
+}
+
+function App(): React.ReactElement {
+  const now = BASE_TIME + 10 * 60_000
+  if (view === 'impact') {
+    return h(ImpactFixture, null)
   }
   return h(
     'div',
@@ -198,15 +249,9 @@ if (view === 'tab') {
   container.style.blockSize = '100%'
 }
 
-// 探针：dialog 是否打开、焦点是否在 dialog 内（Esc/焦点陷阱证据由 harness 额外断言）
-setInterval(() => {
-  const dialog = document.querySelector('[role="dialog"]')
-  probe.dialogOpen = dialog !== null
-  probe.focusInDialog = dialog !== null && dialog.contains(document.activeElement)
-}, 80)
-
+// 探针：假宿主 tab 被点中的次数（T20/T32 的"点击 = 导航"证据；不再有 dialog 探针）
 /**
- * 就绪判定：等数据层把首帧扫描/详情落定（覆盖率文案稳定 + 星图有节点），再打 ready。
+ * 就绪判定：等数据层把首帧扫描/详情落定（覆盖率文案稳定 + 有关系图节点），再打 ready。
  * 只等两帧会截到"正在补全历史 x/y"的中间态，同一状态两次截图不一致（可复现性纪律）。
  */
 function whenStable(): void {
@@ -216,7 +261,7 @@ function whenStable(): void {
     const nodes = document.querySelectorAll('[data-node-path]').length
     const text = pill === null ? '' : (pill.textContent ?? '')
     const settled = text.includes('全部记录') || text.includes('读取失败') || text.length === 0
-    if ((settled && (nodes > 0 || document.querySelector('[role="dialog"]') !== null)) || Date.now() > deadline) {
+    if ((settled && nodes > 0) || Date.now() > deadline) {
       document.documentElement.setAttribute('data-harness-ready', '1')
       return
     }

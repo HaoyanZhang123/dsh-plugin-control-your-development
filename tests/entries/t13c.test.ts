@@ -1,84 +1,21 @@
 /*
- * tests/entries/t13c.test.ts —— 真机第二轮：D-27 portal/落位 + 影响 hidden 可观测 + D-28 布局依赖的纯函数。
+ * tests/entries/t13c.test.ts —— 真机第二轮：影响 hidden 可观测 + D-28 布局依赖的纯函数。
+ *
+ * T20（2026-11-05）：影响图标点击改为直接切「脉络」tab，popover/Portal/placeImpactPopover 整条旧路径删除，
+ * 因此本文件不再有 placeImpactPopover 的四条落位用例（它们测的是被删除的旧表面）。
+ * T32（2026-11-05 notes/33 §1/§7）：`/threadline` 弹窗删除（ui/modal/** 与 modal.css 全删），
+ * 本文件删除「弹窗根 + Overlay 走 Portal」用例（测的是被删除的旧表面）。
+ * Portal 组件本身也由 map-dev 在 T31 作为"无产品调用方"组件清理，故 Portal 的 SSR 兜底用例一并删除
+ * （删除理由：组件被删，测试无被测对象；不是削弱断言）。
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import * as React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { createTranslator } from '../../src/client/locale/index.ts'
-import {
-  ImpactAction,
-  impactHiddenMarker,
-  placeImpactPopover,
-} from '../../src/client/entries/impact.ts'
+import { ImpactAction, impactHiddenMarker } from '../../src/client/entries/impact.ts'
 import { decideImpact, turnOfMessage } from '../../src/client/entries/impactModel.ts'
-import { ThreadlineModal } from '../../src/client/ui/modal/ThreadlineModal.ts'
-import { Portal } from '../../src/client/ui/shell/Portal.ts'
 import { shouldShowDiag } from '../../src/client/entries/tab.ts'
-import { BASE_TIME, SESSION_ID, buildDetail } from './fixtures.ts'
-
-const t = createTranslator('zh')
-
-/* ---------------- D-27：portal 落位 ---------------- */
-
-test('placeImpactPopover：默认落按钮下方 6px，右对齐触发按钮', () => {
-  const placement = placeImpactPopover(
-    { top: 100, bottom: 124, left: 1200, right: 1224 },
-    { width: 1440, height: 900 },
-  )
-  assert.equal(placement.below, true)
-  assert.equal(placement.top, 130, '下方 6px')
-  assert.equal(placement.left, 1224 - 360)
-  assert.equal(placement.width, 360)
-})
-
-test('placeImpactPopover：下方空间不足且小于上方 → 翻到上方（bottom 锚定）', () => {
-  const placement = placeImpactPopover({ top: 600, bottom: 624, left: 400, right: 424 }, { width: 1440, height: 700 })
-  assert.equal(placement.below, false)
-  assert.equal(placement.top, 0)
-  assert.equal(placement.bottom, 700 - 600 + 6)
-})
-
-test('placeImpactPopover：左右越界夹进视口（右对齐优先，左侧保底 8px）', () => {
-  const roomy = placeImpactPopover({ top: 100, bottom: 124, left: 900, right: 924 }, { width: 1440, height: 900 })
-  assert.equal(roomy.left, 924 - 360, '空间足够时右对齐到按钮右缘')
-  const overflowRight = placeImpactPopover({ top: 100, bottom: 124, left: 140, right: 164 }, { width: 1440, height: 900 })
-  assert.equal(overflowRight.left, 8, '右侧越界 → 夹到左边界 8px')
-  const narrow = placeImpactPopover({ top: 100, bottom: 124, left: 10, right: 34 }, { width: 300, height: 900 })
-  assert.ok(narrow.left >= 8)
-  assert.equal(narrow.width, 284, '窄视口收窄到 视口-16')
-})
-
-test('Portal：无 document（SSR）时内联渲染 children（单测可断言）', () => {
-  const html = renderToStaticMarkup(
-    React.createElement(Portal, { testId: 'x' }, React.createElement('span', { 'data-x': '1' }, 'inl')),
-  )
-  assert.ok(html.includes('data-x="1"'))
-  assert.ok(html.includes('inl'))
-  assert.ok(!html.includes('data-threadline-portal'), 'SSR 不产生真实 portal 节点')
-})
-
-test('弹窗根只带 threadline-modal-root，Overlay 走 Portal（SSR 内联兜底），dialog 语义保持', () => {
-  const detail = buildDetail()
-  const html = renderToStaticMarkup(
-    React.createElement(ThreadlineModal, {
-      open: true,
-      sessionId: SESSION_ID,
-      detail,
-      files: new Map(),
-      mode: 'metadata',
-      now: BASE_TIME,
-      t,
-      onClose: () => undefined,
-      onOpenFull: () => undefined,
-    }),
-  )
-  assert.ok(html.includes('threadline-modal-root'))
-  assert.ok(!/class="[^"]*threadline-app/.test(html), '内嵌根不再带 threadline-app')
-  assert.ok(html.includes('role="dialog"'))
-  assert.ok(html.includes('aria-modal="true"'))
-  assert.ok(html.includes('threadline-overlay'), 'Overlay 内容仍在（SSR 内联）')
-})
+import { SESSION_ID, buildDetail } from './fixtures.ts'
 
 /* ---------------- 影响 hidden 可观测 ---------------- */
 

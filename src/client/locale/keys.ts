@@ -96,11 +96,10 @@ export type MessageKey =
   | "status.ok"
   | "status.failed"
   | "status.unknown"
-  | "fileFamily.doc"
+  | "fileFamily.text"
   | "fileFamily.code"
   | "fileFamily.data"
-  | "fileFamily.image"
-  | "fileFamily.config"
+  | "fileFamily.media"
   | "fileFamily.other"
   | "inspector.externalSources"
   | "inspector.more"
@@ -120,6 +119,29 @@ export type MessageKey =
   | "inspector.timeRange"
   | "map.truncatedNodes"
   | "relations.collapsed"
+  // —— §16 扩展段（2026-11-05，T21 目录总览）——
+  | "map.rootCluster"
+  | "map.overview"
+  | "map.overviewHint"
+  | "map.clusterCount"
+  | "map.clusterMeta"
+  | "map.clusterVisible"
+  | "map.clusterCurrent"
+  // —— §16 扩展段（2026-11-05，T31 脉络 2.0：文件关系图/轮次状态/目录 rail）——
+  | "graph.title"
+  | "graph.directoryHint"
+  | "graph.turnHint"
+  | "rail.title"
+  | "turnStatus.read"
+  | "turnStatus.write"
+  | "turnStatus.firstSeen"
+  | "turnStatus.deleteCommands"
+  | "turnStatus.deleteShort"
+  | "turnStatus.unknown"
+  | "turnStatus.markRead"
+  | "turnStatus.markWriteAdd"
+  | "turnStatus.markWriteDel"
+  | "turnStatus.markFirstSeen"
   | "ui.open"
   | "ui.close"
   | "ui.expand"
@@ -215,11 +237,10 @@ export const MESSAGE_KEYS: readonly MessageKey[] = [
   "status.ok",
   "status.failed",
   "status.unknown",
-  "fileFamily.doc",
+  "fileFamily.text",
   "fileFamily.code",
   "fileFamily.data",
-  "fileFamily.image",
-  "fileFamily.config",
+  "fileFamily.media",
   "fileFamily.other",
   "inspector.externalSources",
   "inspector.more",
@@ -239,6 +260,29 @@ export const MESSAGE_KEYS: readonly MessageKey[] = [
   "inspector.timeRange",
   "map.truncatedNodes",
   "relations.collapsed",
+  // —— §16 扩展段（2026-11-05，T21 目录总览）——
+  "map.rootCluster",
+  "map.overview",
+  "map.overviewHint",
+  "map.clusterCount",
+  "map.clusterMeta",
+  "map.clusterVisible",
+  "map.clusterCurrent",
+  // —— §16 扩展段（2026-11-05，T31 脉络 2.0：文件关系图/轮次状态/目录 rail）——
+  "graph.title",
+  "graph.directoryHint",
+  "graph.turnHint",
+  "rail.title",
+  "turnStatus.read",
+  "turnStatus.write",
+  "turnStatus.firstSeen",
+  "turnStatus.deleteCommands",
+  "turnStatus.deleteShort",
+  "turnStatus.unknown",
+  "turnStatus.markRead",
+  "turnStatus.markWriteAdd",
+  "turnStatus.markWriteDel",
+  "turnStatus.markFirstSeen",
   "ui.open",
   "ui.close",
   "ui.expand",

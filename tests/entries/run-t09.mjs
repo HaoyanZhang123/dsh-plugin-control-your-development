@@ -1,14 +1,16 @@
 /*
- * tests/entries/run-t09.mjs —— T09 的采集脚本（A43-1..5）。
+ * tests/entries/run-t09.mjs —— T09 的采集脚本（A43-1..5；T32 只保留 tab / impact / 命令导航）。
  *
  * 产出（output/_verify/threadline/T09/）：
- *   tab.png / modal.png / impact.png
+ *   tab.png / impact.png
  *   tab.txt      注册参数（name/id/order/label）+ focus 可用 + bundle 体积增长 + 截图断言
- *   impact.txt   三态 / finalMessageId 只渲染一次 / popover 内容 / 截图断言
- *   modal.txt    /threadline 可开 / Esc 关闭 / 焦点在 dialog 内 / 无 LLM / 加载·空·隐私态
- *   cross.txt    影响→tab、弹窗→完整脉络 / focus 目标正确 / 不产生投递 / DOM 查询只在一处
- *   entries.txt  slot 注册 grep（无 main / 无右栏 / 无侧栏面板 / 只有三个入口）
+ *   impact.txt   三态 / finalMessageId 只渲染一次 / 点击导航到「脉络」tab（无窗口）/ 截图断言
+ *   cross.txt    影响→tab、命令→tab（T32：弹窗已删除）/ focus 目标正确 / 不产生投递 / DOM 查询只在一处
+ *   entries.txt  slot 注册 grep（无 main / 无右栏 / 无侧栏面板 / 只有两个 slot；input.overlay 0 命中）
  *   verify.txt   四命令退出码 + 测试计数 + 截图 sha256
+ *
+ * T32（2026-11-05 notes/33 §1/§7）：`/threadline` 弹窗删除 —— 本脚本删除 modal 场景/截图/modal.txt，
+ * 并在 tab / impact 场景断言「无 role=dialog / 无 portal / 无 overlay 条目」。
  *
  * 用法（在 plugin/ 下）：node tests/entries/run-t09.mjs
  * 纪律：断言失败不落图；截图必须晚于最后一次代码改动；只写 output/。
@@ -24,7 +26,7 @@ const ENTRY = 'tests/entries/t09.entry.ts'
 const WIDTH = 1440
 const HEIGHT = 900
 
-const lines = { tab: [], impact: [], modal: [], cross: [], entries: [], verify: [], b: [] }
+const lines = { tab: [], impact: [], cross: [], entries: [], verify: [], b: [] }
 const say = (channel, text = '') => {
   lines[channel].push(text)
   console.log('[' + channel + '] ' + text)
@@ -46,8 +48,12 @@ function latestCodeMtime() {
     join(PLUGIN_ROOT, 'src', 'client', 'index.ts'),
     join(PLUGIN_ROOT, 'src', 'client', 'entries'),
     join(PLUGIN_ROOT, 'src', 'client', 'state'),
-    join(PLUGIN_ROOT, 'src', 'client', 'ui', 'modal'),
-    join(PLUGIN_ROOT, 'src', 'client', 'styles', 'modal.css'),
+    join(PLUGIN_ROOT, 'src', 'client', 'styles'),
+    join(PLUGIN_ROOT, 'src', 'client', 'ui', 'map'),
+    join(PLUGIN_ROOT, 'src', 'client', 'ui', 'rail'),
+    join(PLUGIN_ROOT, 'src', 'client', 'ui', 'shell'),
+    join(PLUGIN_ROOT, 'src', 'client', 'ui', 'turns'),
+    join(PLUGIN_ROOT, 'src', 'client', 'locale'),
     join(PLUGIN_ROOT, 'tests', 'entries'),
   ]
   const consider = (full) => {
@@ -94,14 +100,65 @@ const bundle = (() => {
   }
 })()
 
+/**
+ * 源码搜索（T23 修 F9）：旧实现用 `execSync('grep ...', {shell:'bash'})`，
+ * Windows 上没有 grep → 空输出被当成「0 命中」，证据不可信。这里改为 Node 内实现，
+ * 跨平台、且「0 命中」只可能来自真的扫过文件后的空结果。
+ */
+function walkSourceFiles(root) {
+  const result = []
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir)) {
+      const full = join(dir, entry)
+      if (statSync(full).isDirectory()) walk(full)
+      else if (/\.(ts|tsx|css)$/.test(full)) result.push(full)
+    }
+  }
+  walk(join(PLUGIN_ROOT, root))
+  return result
+}
+
+/** 在 src/client 下按正则搜；返回 `相对路径:行号: 行`（与 grep -RIn 同形）。 */
 const grep = (pattern) => {
+  const re = new RegExp(pattern)
+  const out = []
+  for (const file of walkSourceFiles('src/client')) {
+    const lines = readFileSync(file, 'utf8').split(String.fromCharCode(10))
+    lines.forEach((line, index) => {
+      if (re.test(line)) out.push(file.replaceAll('\\', '/').replaceAll(PLUGIN_ROOT.replaceAll('\\', '/') + '/', '') + ':' + (index + 1) + ': ' + line.trim())
+    })
+  }
+  return out.join(String.fromCharCode(10))
+}
+
+/** 单个文件按正则搜；返回 `行号:行`（与 grep -n 同形）。 */
+const grepFile = (pattern, relative) => {
+  const re = new RegExp(pattern)
+  const file = join(PLUGIN_ROOT, relative)
+  return readFileSync(file, 'utf8')
+    .split(String.fromCharCode(10))
+    .map((line, index) => ({ line, no: index + 1 }))
+    .filter((item) => re.test(item.line))
+    .map((item) => item.no + ':' + item.line.trim())
+    .join(String.fromCharCode(10))
+}
+
+/** 路径是否存在（T32 的"弹窗目录/样式已删除"证据用；不抛错）。 */
+function statSyncSafe(target) {
   try {
-    const out = execSync('grep -RIn "' + pattern + '" src/client || true', { cwd: PLUGIN_ROOT, encoding: 'utf8', shell: 'bash' })
-    return out.trim()
+    statSync(target)
+    return true
   } catch {
-    return ''
+    return false
   }
 }
+
+/** src/client 下包含某个字面量的文件列表（与 grep -RIl 同形）。 */
+const grepFilesContaining = (needle) =>
+  walkSourceFiles('src/client')
+    .filter((file) => readFileSync(file, 'utf8').includes(needle))
+    .map((file) => file.replaceAll('\\', '/').replaceAll(PLUGIN_ROOT.replaceAll('\\', '/') + '/', ''))
+    .join(String.fromCharCode(10))
 
 const slotGrep = (() => {
   const result = run('node -e "const {readdirSync,statSync,readFileSync}=require(\'node:fs\');const {join}=require(\'node:path\');const out=[];(function walk(d){for(const e of readdirSync(d)){const f=join(d,e);if(statSync(f).isDirectory())walk(f);else if(f.endsWith(\'.ts\')){const t=readFileSync(f,\'utf8\');t.split(/\\n/).forEach((line,i)=>{if(/slots\\.(register|inject)/.test(line))out.push(f+\':\'+(i+1)+\':\'+line.trim())})}}}) (\'src/client\');console.log(out.join(\'\\n\'))"')
@@ -179,9 +236,7 @@ try {
         contains: [
           { selector: '[data-region="header"]' },
           { selector: '[data-region="map"]' },
-          { selector: '[data-region="timeline"]' },
-          { selector: '[data-region="turns"]' },
-          { selector: '[data-region="inspector"]' },
+          { selector: '[data-region="rail"]' },
           { selector: '[data-testid="coverage-pill"]' },
           { selector: '[data-testid="turn-strip"]' },
           { selector: '[data-testid="list-toggle"]', text: '列表视图' },
@@ -190,17 +245,64 @@ try {
           { selector: '[data-testid="map-host"]' },
         ],
         count: [{ selector: '[role="option"]', equals: 3 }],
+        // T32：弹窗已删除 —— tab 页面上不得出现 dialog / portal / modal 根
+        absent: [
+          { selector: '[role="dialog"]' },
+          { selector: '[data-threadline-portal]' },
+          { selector: '.threadline-modal-root' },
+          { selector: '[data-inspector-kind]' },
+          { selector: '.threadline-inspector' },
+          { selector: '[data-inspector]' },
+        ],
         expr: [
-          { label: 'map-has-nodes', code: 'document.querySelectorAll("[data-node-path]").length', equals: 3 },
-          { label: 'inspector-kind-is-turn', code: 'document.querySelector("[data-inspector-kind]").getAttribute("data-inspector-kind")', equals: 'turn' },
+          // T33 / 2.0：左图 = 文件关系图；右栏 = 目录卡片两列；无检查器。
+          { label: 'rail-has-cards', code: 'document.querySelectorAll("[data-directory-card]").length >= 1', equals: true },
+          { label: 'rail-card-count-matches', code: 'Number(document.querySelector("[data-directory-rail]").getAttribute("data-card-count")) === document.querySelectorAll("[data-directory-card]").length', equals: true },
+          { label: 'graph-mode-directory', code: 'document.querySelector("[data-tl-graph]").getAttribute("data-graph-mode")', equals: 'directory' },
+          { label: 'graph-has-file-nodes', code: 'document.querySelectorAll("[data-file-path]").length >= 1', equals: true },
+          { label: 'graph-directory-set', code: '(document.querySelector("[data-tl-graph]").getAttribute("data-graph-directory") || "").length > 0', equals: true },
+          { label: 'graph-node-limit', code: 'Number(document.querySelector("[data-tl-graph]").getAttribute("data-node-count")) <= 40', equals: true },
+          { label: 'no-inspector', code: 'document.querySelectorAll("[data-inspector-kind], [data-inspector], .threadline-inspector").length', equals: 0 },
           { label: 'turn-strip-scoped', code: 'document.querySelectorAll("[role=option]").length', equals: 3 },
           { label: 'coverage-pill-text', code: 'document.querySelector("[data-testid=coverage-pill]").textContent.length > 0', equals: true },
-          { label: 'map-host-reduced-false', code: 'document.querySelector("[data-testid=map-host]").getAttribute("data-reduced-motion")', equals: 'false' },
+          { label: 'graph-reduced-false', code: 'document.querySelector("[data-testid=graph]").getAttribute("data-reduced-motion")', equals: 'false' },
           { label: 'reference-disabled-shown', code: 'document.querySelector("[data-testid=reference-disabled]").textContent.indexOf("引用") >= 0', equals: true },
         ],
       },
     },
     'tab',
+  )
+
+  /* T21：点目录卡片 → 文件细节（只渲染焦点目录的 SVG 节点；旧「tab 默认就是节点」的证据改到这里） */
+  await capture(
+    {
+      query: 'view=tab',
+      outPng: OUT_DIR + '/tab-detail.png',
+      label: 'tab-detail',
+      actions: [
+        { type: 'click', selector: '[data-directory-card][data-selected="false"]' },
+        { type: 'wait', ms: 300 },
+      ],
+      assert: {
+        contains: [
+          { selector: '[data-testid="graph"]' },
+          { selector: '.tl-graph-stage' },
+          { selector: '[data-directory-card][data-selected="true"]' },
+        ],
+        absent: [
+          { selector: '[role="dialog"]' },
+          { selector: '[data-inspector-kind]' },
+        ],
+        expr: [
+          { label: 'card-selected-matches-graph', code: '(function(){var c=document.querySelector("[data-directory-card][data-selected=true]");var g=document.querySelector("[data-tl-graph]");return !!c && !!g && g.getAttribute("data-graph-directory")===c.getAttribute("data-directory-card")})()', equals: true },
+          { label: 'graph-still-directory-mode', code: 'document.querySelector("[data-tl-graph]").getAttribute("data-graph-mode")', equals: 'directory' },
+          { label: 'graph-has-nodes-after-switch', code: 'document.querySelectorAll("[data-file-path]").length >= 1', equals: true },
+          { label: 'only-one-selected-card', code: 'document.querySelectorAll("[data-directory-card][data-selected=true]").length', equals: 1 },
+        ],
+      },
+    },
+    'tab',
+    '点目录卡片 → 文件细节（只渲染焦点目录；「‹ 全部目录」可返回）',
   )
 
   /* T09b ② 列表视图：点击「列表视图」→ 挂 FileListView / TurnListView；同一时刻只有一个 aria-live */
@@ -267,136 +369,64 @@ try {
     reducedMotion: true,
     assert: {
       expr: [
-        { label: 'reduced-map-host', code: 'document.querySelector("[data-testid=map-host]").getAttribute("data-reduced-motion")', equals: 'true' },
+        { label: 'reduced-graph', code: 'document.querySelector("[data-testid=graph]").getAttribute("data-reduced-motion")', equals: 'true' },
       ],
     },
   })
   if (!reducedProbe.ok) failures += 1
-  say('tab', '  reduced-motion: map-host data-reduced-motion=' + JSON.stringify(reducedProbe.checks.find((check) => check.label === 'expr:reduced-map-host')?.detail?.actual) + '（MapView/Timeline 同时收到 reducedMotion prop）')
+  say('tab', '  reduced-motion: graph data-reduced-motion=' + JSON.stringify(reducedProbe.checks.find((check) => check.label === 'expr:reduced-graph')?.detail?.actual) + '（FileGraph/Timeline 同时收到 reducedMotion prop）')
 
-  /* A43-2 impact */
+  /* A43-2 impact（T20：点击 = 切「脉络」tab，不再弹窗） */
   say('impact', '=== A43-2 「影响 N」（conversation.chat.assistant-actions）===')
   say('impact', '注册参数: name=conversation.chat.assistant-actions / id=threadline-impact / order=50（在 feedback 之后）')
+  say('impact', 'T20 点击契约（2026-11-05 用户真机反馈）：点击图标不再弹任何窗口，而是 requestFocus + activateThreadlineTab；')
+  say('impact', '  ready 带该轮（turn:<n>），loading/unknown/streaming 只带会话（tab 自己有加载态与「重新读取」）。')
   say('impact', '三态与锚点（tests/entries/impact.test.ts 逐条断言）：')
-  for (const line of passLines(entriesTests.out).filter((line) => line.includes('影响') || line.includes('三态') || line.includes('锚点') || line.includes('计数') || line.includes('messageTurns') || line.includes('popover'))) {
+  for (const line of passLines(entriesTests.out).filter((line) => line.includes('影响') || line.includes('三态') || line.includes('锚点') || line.includes('计数') || line.includes('messageTurns') || line.includes('点击') || line.includes('落点') || line.includes('导航'))) {
     say('impact', '  ' + line)
   }
-  const impactResult = await capture(
+  await capture(
     {
       query: 'view=impact',
       outPng: OUT_DIR + '/impact.png',
-      label: 'impact-open',
+      label: 'impact-open-tab',
       actions: [
         { type: 'click', selector: '[data-testid=impact] button' },
-        // 等按钮的 120ms 过渡结束再截图（否则 0%/50% 两帧都合法 → 同状态不同字节）
+        // 等按钮的 120ms 过渡结束再截图（否则同状态不同字节）
         { type: 'wait', ms: 300 },
       ],
       assert: {
         contains: [
+          // T20：点击后「脉络」tab 是 aria-selected 的那一个（旧断言取 [role=tab] 第一个元素，
+          // 会永远读到「对话」；改为按选中态定位，避免假阳性/假阴性）。
+          { selector: '[data-testid="host-tabs"] [role="tab"][aria-selected="true"]', text: '脉络' },
+          { selector: '[data-testid="active-view"]', text: '当前：脉络' },
+        ],
+        absent: [
           { selector: '[data-testid="impact-popover"]' },
-          { selector: '[data-testid="impact-popover"]', text: '本轮影响 · T1' },
-          { selector: '[data-testid="impact-popover"]', text: '在脉络中查看' },
-          { selector: '[data-testid="impact-popover"]', text: '打开本次对话脉络' },
+          { selector: '[role="dialog"]' },
+          { selector: '[data-threadline-impact-popover]' },
         ],
         expr: [
-          { label: 'files-capped-8', code: 'document.querySelectorAll("[data-testid=impact-popover] [data-row=file]").length <= 8', equals: true },
-          { label: 'commands-capped-3', code: 'document.querySelectorAll("[data-testid=impact-popover] [data-row=command]").length <= 3', equals: true },
-          { label: 'subagents-capped-3', code: 'document.querySelectorAll("[data-testid=impact-popover] [data-row=subagent]").length <= 3', equals: true },
-          { label: 'no-command-text', code: 'document.querySelector("[data-testid=impact-popover]").textContent.indexOf("pnpm test") < 0', equals: true },
-          { label: 'popover-width-360', code: 'Math.round(document.querySelector("[data-testid=impact-popover]").getBoundingClientRect().width)', equals: 360 },
+          { label: 'tab-clicked-once', code: 'window.__t09.tabClicks', equals: 1 },
+          { label: 'threadline-tab-selected', code: 'document.querySelectorAll("[data-testid=host-tabs] [role=tab]")[1].getAttribute("aria-selected")', equals: 'true' },
+          { label: 'no-haspopup', code: 'document.querySelector("[data-testid=impact] button").getAttribute("aria-haspopup") === null', equals: true },
+          { label: 'no-dialog', code: 'document.querySelectorAll("[role=dialog]").length', equals: 0 },
+          { label: 'no-portal', code: 'document.querySelectorAll("[data-threadline-portal]").length', equals: 0 },
+          { label: 'no-popover-marker', code: 'document.querySelectorAll("[data-threadline-impact-popover]").length', equals: 0 },
         ],
       },
     },
     'impact',
-    '点击「影响 5」后截图（popover 打开态）',
+    '点击「影响 5」图标 → 假宿主「脉络」tab 被点中（无窗口）',
   )
-  // Esc 关闭 popover（键盘可达）
-  const impactEsc = await renderAtWithBrowser(browser, {
-    width: WIDTH,
-    height: HEIGHT,
-    entry: ENTRY,
-    query: 'view=impact',
-    waitFor: 'html[data-harness-ready]',
-    actions: [
-      { type: 'click', selector: '[data-testid=impact] button' },
-      { type: 'wait', ms: 60 },
-      { type: 'evaluate', code: 'document.querySelector("[data-testid=impact-popover]").dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true,cancelable:true}))' },
-      { type: 'wait', ms: 60 },
-    ],
-    assert: { absent: [{ selector: '[data-testid="impact-popover"]' }] },
-  })
-  if (!impactEsc.ok) failures += 1
-  say('impact', '  Esc 关闭 popover: ' + (impactEsc.ok ? 'PASS' : 'FAIL'))
 
-  /* A43-3 modal */
-  say('modal', '=== A43-3 /threadline 命令 + 弹窗（conversation.input.overlay）===')
-  say('modal', '注册参数: trigger=/ / name=threadline / order=1；matchEnter 精确命中 /threadline 与 /脉络（两条都注册）')
-  say('modal', '弹窗 slot: name=conversation.input.overlay / id=threadline-modal / order=20')
-  for (const line of passLines(entriesTests.out).filter((line) => line.includes('命令') || line.includes('候选') || line.includes('matchEnter') || line.includes('弹窗入口') || line.includes('inputTriggers'))) {
-    say('modal', '  ' + line)
-  }
-  say('modal', '无 LLM：grep 生成式调用 0 命中（见 verify 的只读审计）')
-  const modalResult = await capture(
-    {
-      query: 'view=modal',
-      outPng: OUT_DIR + '/modal.png',
-      label: 'modal-open',
-      actions: [{ type: 'wait', ms: 120 }],
-      assert: {
-        contains: [
-          { selector: '[role="dialog"][aria-modal="true"]' },
-          { selector: '[role="dialog"]', text: '本次对话的脉络' },
-          { selector: '[role="dialog"]', text: '按记录重建，非生成摘要' },
-          { selector: '[data-testid="modal-turns"]' },
-          { selector: '[data-testid="modal-map"]' },
-          { selector: '[data-testid="modal-open-loops"]' },
-          { selector: '[role="dialog"]', text: '在完整脉络中查看' },
-        ],
-        expr: [
-          { label: 'focus-inside-dialog', code: 'window.__t09.focusInDialog === true', equals: true },
-          // D-27：浮层必须 portal 到 body（0.2.2-rc.1 的 composer 会裁切就地渲染的浮层）
-          { label: 'has-portal', code: 'document.querySelectorAll("[data-threadline-portal]").length', equals: 1 },
-          { label: 'portal-is-body-child', code: 'document.body.contains(document.querySelector("[data-threadline-portal]"))', equals: true },
-          // 弹窗本体：宽度受限（<=1040）且落在视口中央；遮罩层是 fixed
-          { label: 'overlay-fixed', code: 'String(getComputedStyle(document.querySelector(".threadline-overlay")).position)', equals: 'fixed' },
-          { label: 'overlay-inset-zero', code: 'String(document.querySelector(".threadline-overlay").getBoundingClientRect().x) === "0" && String(Math.round(document.querySelector(".threadline-overlay").getBoundingClientRect().width)) === String(window.innerWidth)', equals: true },
-          {
-            label: 'dialog-size',
-            code: 'Math.round(document.querySelector(".threadline-modal").getBoundingClientRect().width) <= 1040 && Math.round(document.querySelector(".threadline-modal").getBoundingClientRect().width) >= 320',
-            equals: true,
-          },
-          {
-            label: 'dialog-centered',
-            code: 'Math.abs((document.querySelector("[role=dialog]").getBoundingClientRect().x + document.querySelector("[role=dialog]").getBoundingClientRect().width / 2) - window.innerWidth / 2) <= 2',
-            equals: true,
-          },
-          { label: 'turn-rows', code: 'document.querySelectorAll("[data-testid=modal-turns] [data-turn]").length', equals: 3 },
-        ],
-      },
-    },
-    'modal',
-    '弹窗打开态（焦点在 dialog 内 = 焦点陷阱生效）',
-  )
-  // Esc 关闭
-  const modalEsc = await renderAtWithBrowser(browser, {
-    width: WIDTH,
-    height: HEIGHT,
-    entry: ENTRY,
-    query: 'view=modal',
-    waitFor: 'html[data-harness-ready]',
-    actions: [
-      { type: 'evaluate', code: 'document.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true,cancelable:true}))' },
-      { type: 'wait', ms: 80 },
-    ],
-    assert: { absent: [{ selector: '[role="dialog"]' }] },
-  })
-  if (!modalEsc.ok) failures += 1
-  say('modal', '  Esc 关闭弹窗: ' + (modalEsc.ok ? 'PASS' : 'FAIL'))
-  say('modal', '  焦点陷阱/遮罩点击/Esc 由 T06 的 Overlay 提供（tests/ui-shell/focus.test.ts 有单测），本弹窗不再写第二套')
+  /* A43-3 modal —— T32：弹窗已删除（notes/33 §1/§7），本场景/截图/modal.txt 一并删除；
+     命令触发改为跳 tab（见 tests/entries/command.test.ts 与 cross.test.ts），不再有 dialog 可断言。 */
 
   /* A43-4 cross */
-  say('cross', '=== A43-4 跨入口跳转 ===')
-  for (const line of passLines(entriesTests.out).filter((line) => line.includes('activateThreadlineTab') || line.includes('→ tab') || line.includes('→ 完整脉络') || line.includes('focus token'))) {
+  say('cross', '=== A43-4 跨入口跳转（T32：影响图标 / 命令 都只切 tab）===')
+  for (const line of passLines(entriesTests.out).filter((line) => line.includes('activateThreadlineTab') || line.includes('→ tab') || line.includes('命令') || line.includes('focus token'))) {
     say('cross', '  ' + line)
   }
   say('cross', '跨入口桥只在一处做 DOM 查询（源码 grep）：')
@@ -405,78 +435,65 @@ try {
     if (line.trim() !== '') say('cross', '  ' + line.trim())
   }
   say('cross', '不产生投递：session.prompt / session.cancel 0 命中（entries.test.ts 只读审计 + 本文件 grep）')
-  say('cross', '  probe: 打开 popover / 弹窗时 dispatched=0（没有任何会话动作）')
+  say('cross', '  T32：命令触发 = requestFocus(session) + activateThreadlineTab，不再 openModal；本脚本不渲染任何 dialog')
   say('cross', '')
-  // 截图：从打开态弹窗点「在完整脉络中查看」→ 调用 onOpenFull（probe 计数 +1），不投递
-  const crossProof = await renderAtWithBrowser(browser, {
-    width: WIDTH,
-    height: HEIGHT,
-    entry: ENTRY,
-    query: 'view=modal',
-    waitFor: 'html[data-harness-ready]',
-    actions: [
-      { type: 'click', selector: '[role="dialog"] button[class*="threadline-btn--md"]' },
-      { type: 'wait', ms: 80 },
-    ],
-    assert: {
-      expr: [
-        { label: 'open-full-called', code: 'window.__t09.dispatched', equals: 1 },
-        { label: 'no-delivery', code: 'String(window.__t09.dispatched) === "1"', equals: true },
-      ],
-    },
-  })
-  if (!crossProof.ok) failures += 1
-  say('cross', '  「在完整脉络中查看」→ onOpenFull 调用一次（probe dispatched=1）；没有任何会话投递')
 
   /* A43-5 entries */
   say('entries', '=== A43-5 入口清单（slot 注册 grep，原始输出）===')
   say('entries', '$ node -e "… /slots\.(register|inject)/ … src/client"（唯一封装点）')
   for (const line of slotGrep.split(String.fromCharCode(10))) say('entries', line)
   say('entries', '')
-  say('entries', '$ grep -n "<slot 名>" <入口文件>（三个入口的注册调用点）')
+  say('entries', '$ node 内搜 "<slot 名>" <入口文件>（两个可见表面的注册调用点；跨平台，不依赖 grep）')
   for (const [slot, file] of [
     ['conversation.view', 'src/client/entries/tab.ts'],
     ['conversation.chat.assistant-actions', 'src/client/entries/impact.ts'],
-    ['conversation.input.overlay', 'src/client/entries/command.ts'],
   ]) {
-    const found = run('grep -n "' + slot + '" ' + file)
-    const matches = found.out
+    const found = grepFile(slot.replaceAll('.', '\\.'), file)
+    const matches = found
       .split(String.fromCharCode(10))
       .map((line) => line.trim())
-      .filter((line) => line !== '' && !line.includes('* entries/'))
+      .filter((line) => line !== '')
     say('entries', '  ' + file + ':')
     for (const line of matches.slice(0, 2)) say('entries', '    ' + line)
   }
   say('entries', '')
   say('entries', '结论：')
-  say('entries', '  注册的 slot 只有三个：conversation.view / conversation.chat.assistant-actions / conversation.input.overlay')
+  say('entries', '  注册的 slot 只有两个：conversation.view / conversation.chat.assistant-actions（命令入口走 inputTriggers，不是 slot）')
+  // T32：conversation.input.overlay 必须 0 命中（弹窗已删）
+  const overlayHits = grepFilesContaining("'conversation.input.overlay'")
+  say('entries', '  conversation.input.overlay 命中: ' + (overlayHits.trim() === '' ? '0' : '命中: ' + overlayHits.trim()))
+  const modalDir = join(PLUGIN_ROOT, 'src', 'client', 'ui', 'modal')
+  say('entries', '  src/client/ui/modal 目录存在: ' + String(statSyncSafe(modalDir)))
+  const modalCss = join(PLUGIN_ROOT, 'src', 'client', 'styles', 'modal.css')
+  say('entries', '  src/client/styles/modal.css 存在: ' + String(statSyncSafe(modalCss)))
   const forbidden = ['main', 'sidebar.panellist', 'sidebar.right.pane.tab', 'conversation.chat.turnTail']
   for (const name of forbidden) {
-    const hit = run('grep -RIl "\'' + name + '\'" src/client || true')
-    say('entries', '  ' + (hit.out.trim() === '' ? '0 命中' : '命中: ' + hit.out.trim()) + '  ← ' + name)
+    const hit = grepFilesContaining(name)
+    say('entries', '  ' + (hit.trim() === '' ? '0 命中' : '命中: ' + hit.trim()) + '  ← ' + name)
   }
   say('entries', '  lib/client.js: ' + String(bundle) + ' bytes（T02 空壳 2324 bytes）')
-  say('entries', '  style sheets: ' + String(readdirSync(join(PLUGIN_ROOT, 'src', 'client', 'styles')).filter((name) => name.endsWith('.css')).length) + ' 个（含新增 modal.css）')
+  say('entries', '  style sheets: ' + String(readdirSync(join(PLUGIN_ROOT, 'src', 'client', 'styles')).filter((name) => name.endsWith('.css')).length) + ' 个（T32 起不再有 modal.css）')
   /* ---------------- T09b：五件事的接线对账 ---------------- */
   say('b', '=== T09b 接线轮（隐私 / 列表视图 / reduced-motion / 性能 / 引用层）===')
   say('b', '时间: ' + stamp)
   say('b', '')
   say('b', '① 隐私 —— 已接上')
-  say('b', '  · 三入口根部都包 PrivacyProvider（tab.ts / impact.ts / command.ts），模式来自 state/privacyStore（内存，不持久化）')
+  say('b', '  · 两个可见表面根部都包 PrivacyProvider（tab.ts / impact.ts），模式来自 state/privacyStore（内存，不持久化）')
   say('b', '  · tab header 的「隐私」按钮：data-testid=privacy-toggle，aria-pressed 跟随模式（harness: privacy-pressed=true）')
-  say('b', '  · 掩码走 T10 privacy/masks 单一实现：modal 标题 maskTitle、路径 maskPathFor、影响弹层命令 maskCommand；')
-  say('b', '    正文入口统一 shouldRenderContent(mode, expanded) 守卫（modal.test / privacy-wiring.test 断言）')
+  say('b', '  · 掩码走 T10 privacy/masks 单一实现：tab 会话标题 maskTitle、路径 maskPathFor；影响图标 T20 起不再有弹层，');
+  say('b', '    弹层内的命令/路径正文自然消失（计数仍只进 aria-label/title，不显示任何路径或命令正文）');
+  say('b', '    T32 起弹窗删除，正文入口不再由本插件渲染（shouldRenderContent 仅保留在 privacy/masks 供后续表面使用）')
   for (const line of passLines(entriesTests.out).filter((line) => line.includes('隐私'))) say('b', '    ' + line)
-  say('b', '  断言名: privacy-wiring.test.ts「隐私 store…」「弹窗隐私…」「隐私模式：列表行路径…」「tab SSR：隐私开关按下态…」')
+  say('b', '  断言名: privacy-wiring.test.ts「隐私 store…」「隐私：标题掩码…」「隐私模式：列表行路径…」「tab SSR：隐私开关按下态…」')
   say('b', '')
   say('b', '② 列表视图 —— 已接上')
-  say('b', '  · tab 工具条 list-toggle → 挂 FileListView / TurnListView（tab-list.png）；onSelect 点亮星图、onFocusInMap 清手动 viewport 回 fit')
+  say('b', '  · tab 工具条 list-toggle → 挂 FileListView / TurnListView（tab-list.png）；onSelect 选中文件、onFocusInMap 退出本轮视图')
   say('b', '  · 单一 aria-live：列表开时 Timeline 的播报文案置空（单测/截图断言 single-live-region + timeline-live-silenced）')
   for (const line of passLines(entriesTests.out).filter((line) => line.includes('列表'))) say('b', '    ' + line)
   say('b', '  断言名: privacy-wiring.test.ts「列表虚拟化…」+ harness tab-list 的 single-live-region / timeline-live-silenced')
   say('b', '')
   say('b', '③ reduced-motion —— 已接上')
-  say('b', '  · useReducedMotion() → MapView/Timeline 的 reducedMotion prop；JS 动效时长走 motionDuration（列表容器 transitionDuration）')
+  say('b', '  · useReducedMotion() → FileGraph/Timeline 的 reducedMotion prop；JS 动效时长走 motionDuration（列表容器 transitionDuration）')
   say('b', '  · harness（prefers-reduced-motion: reduce）: map-host data-reduced-motion=true；T08 的脉冲归零断言仍在 turns.txt')
   say('b', '')
   say('b', '④ 性能 —— 已接上')
@@ -516,7 +533,6 @@ try {
 const write = (name, body) => writeFileSync(resolve(WORKSPACE_ROOT, OUT_DIR, name), header.concat(body).join('\r\n') + '\r\n', 'utf8')
 write('tab.txt', lines.tab)
 write('impact.txt', lines.impact)
-write('modal.txt', lines.modal)
 write('cross.txt', lines.cross)
 write('entries.txt', lines.entries)
 write('t09b.txt', lines.b)

@@ -31,7 +31,7 @@ import { createTranslator } from '../../src/client/locale/index.ts'
 import { Inspector } from '../../src/client/ui/inspector/index.ts'
 import type { InspectorData } from '../../src/client/ui/inspector/index.ts'
 import { TurnStrip, buildTurnBlock, buildTurnGroups, select } from '../../src/client/ui/turns/index.ts'
-import { MapView } from '../../src/client/ui/map/index.ts'
+import { FileGraph } from '../../src/client/ui/map/index.ts'
 import {
   CWD,
   NOW,
@@ -51,7 +51,7 @@ async function fullChain(): Promise<{
   graph: WorkspaceGraph
   inspector: InspectorData
   turns: RelationTurn[]
-  rendered: { inspector: string; strip: string; map: string; edges: string }
+  rendered: { inspector: string; strip: string; map: string; mapDetail: string; edges: string }
 }> {
   const fixture = buildWorkspaceFixture()
   const pipeline = await runScanPipeline(fixture.persistence, fixture.sessions)
@@ -128,13 +128,30 @@ async function fullChain(): Promise<{
       now: NOW,
     }),
   )
+  // T31：左图是文件关系图（只画当前目录的文件）。两次渲染覆盖 src / docs 两个目录，
+  // 保证「数据真的进了 DOM」这条断言不被单一视图替换掉。
   const mapHtml = renderToStaticMarkup(
-    React.createElement(MapView, {
-      nodes: files,
+    React.createElement(FileGraph, {
+      files: files.filter((file) => file.path.startsWith('src/')),
       edges: finalized.edges,
+      mode: 'directory',
+      directoryKey: 'src',
+      directoryLabel: 'src',
       now: NOW,
       selectedPath: null,
-      selectedTurn: null,
+      locale: 'zh',
+    }),
+  )
+  const mapDetailHtml = renderToStaticMarkup(
+    React.createElement(FileGraph, {
+      files: files.filter((file) => file.path.startsWith('docs/')),
+      edges: finalized.edges,
+      mode: 'directory',
+      directoryKey: 'docs',
+      directoryLabel: 'docs',
+      now: NOW,
+      selectedPath: null,
+      locale: 'zh',
     }),
   )
   const edgeFingerprint = finalized.edges
@@ -147,7 +164,7 @@ async function fullChain(): Promise<{
     graph,
     inspector,
     turns,
-    rendered: { inspector: inspectorHtml, strip: stripHtml, map: mapHtml, edges: edgeFingerprint },
+    rendered: { inspector: inspectorHtml, strip: stripHtml, map: mapHtml, mapDetail: mapDetailHtml, edges: edgeFingerprint },
   }
 }
 
@@ -295,10 +312,16 @@ test('A50-2 链路一致：reducer 计数 = host 摘要 = 图节点/边 = 关系
   assert.equal(block.partial, false)
 
   // 8) 渲染：数据真的进了 DOM，且没有 undefined/NaN。
+  // T31：左图是文件关系图（只画当前目录文件；目录切换由卡片驱动）。
   const { rendered } = await fullChain()
   assert.ok(rendered.strip.includes('data-turn="1"'))
   assert.equal((rendered.strip.match(/data-turn="/g) ?? []).length, 3)
-  assert.equal((rendered.map.match(/data-node-path="/g) ?? []).length, 4)
+  assert.equal((rendered.map.match(/data-file-path="/g) ?? []).length, 2, 'src 目录图应只有 2 个文件节点')
+  assert.equal((rendered.map.match(/data-cluster-card="/g) ?? []).length, 0)
+  assert.ok(rendered.map.includes('data-graph-mode="directory"'))
+  assert.ok(rendered.map.includes('data-file-count="2"'))
+  assert.equal((rendered.mapDetail.match(/data-file-path="/g) ?? []).length, 2, 'docs 目录图应只有 2 个文件节点')
+  assert.equal((rendered.mapDetail.match(/data-cluster-card="/g) ?? []).length, 0)
   for (const [name, html] of Object.entries(rendered)) {
     if (name === 'edges') continue
     assert.ok(!html.includes('undefined'), name + ' 渲染出现 undefined')
@@ -348,6 +371,7 @@ test('A50-2 确定性：同一份合成事件跑两次，图/边指纹/渲染逐
   assert.equal(first.rendered.inspector, second.rendered.inspector)
   assert.equal(first.rendered.strip, second.rendered.strip)
   assert.equal(first.rendered.map, second.rendered.map)
+  assert.equal(first.rendered.mapDetail, second.rendered.mapDetail)
 })
 
 test('A50-2 关系引擎与 UI 共用同一份详情：轮次带块数与 detail.turns 对账', async () => {

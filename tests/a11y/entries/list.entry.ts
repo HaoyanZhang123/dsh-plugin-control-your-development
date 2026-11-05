@@ -1,4 +1,4 @@
-/*
+﻿/*
  * tests/a11y/entries/list.entry.ts —— 列表视图的真实浏览器夹具（A44-2 的键盘证据用）。
  *
  * 只做一件事：把 ListView 挂进页面，并把选中态接到 React state 上，
@@ -22,7 +22,7 @@ function node(index: number, path: string, name: string, ops: number): FileNode 
     path,
     name,
     dir: path.slice(0, path.lastIndexOf('/')),
-    family: index % 2 === 0 ? 'code' : 'doc',
+    family: index % 2 === 0 ? 'code' : 'text',
     firstAt: 1_700_000_000_000 + index * 1000,
     lastAt: 1_700_000_500_000 + index * 1000,
     reads: ops - 1,

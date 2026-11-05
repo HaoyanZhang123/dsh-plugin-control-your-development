@@ -1,12 +1,18 @@
 /*
- * tests/entries/impact.test.ts —— 「影响 N」三态 + 锚点去重 + popover 内容（06 A43-2）。
+ * tests/entries/impact.test.ts —— 「影响 N」三态 + 锚点去重 + 点击导航（06 A43-2；T20）。
+ *
+ * T20（2026-11-05 用户真机反馈）：点击图标**不再弹任何窗口**，而是 requestFocus + 切到「脉络」tab。
+ * 这里锁三件事：
+ * 1) 渲染出来的只有图标按钮（无 popover / dialog / aria-haspopup / aria-expanded）；
+ * 2) 三态仍可点，tooltip 语义不变；无影响 / 非锚点仍 hidden；
+ * 3) 点击落点：ready → turn；loading / unknown / streaming → session；用假 document 走真实导航路径
+ *    （SSR 不跑事件，因此把「点击动作」导出成函数，用假宿主 tab 断言它真的被点中）。
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import * as React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { createTranslator } from '../../src/client/locale/index.ts'
-import { ImpactPopover, ImpactAction, registerImpact, IMPACT_LIMITS } from '../../src/client/entries/impact.ts'
+import { ImpactAction, impactFocusTargetOf, openThreadlineForImpact, registerImpact } from '../../src/client/entries/impact.ts'
 import {
   decideImpact,
   impactAnchorOf,
@@ -16,10 +22,10 @@ import {
   turnOfMessage,
 } from '../../src/client/entries/impactModel.ts'
 import type { TurnDetail } from '../../src/shared/events/index.ts'
+import { activateThreadlineTab, activationFailure, clearFocus, peekFocus } from '../../src/client/state/viewFocus.ts'
 import { createFakeCtx } from './fake-ctx.ts'
+import { createTabDocument } from './fake-dom.ts'
 import { SESSION_ID, buildDetail, buildTurnWithoutFinal, buildTurns } from './fixtures.ts'
-
-const t = createTranslator('zh')
 
 /* ---------------- 注册参数 ---------------- */
 
@@ -128,77 +134,113 @@ function renderImpact(props: Record<string, unknown>): string {
   return renderToStaticMarkup(React.createElement(ImpactAction, { locale: 'zh', ...props }))
 }
 
-test('渲染：未加载/读取失败时图标仍在、可点（不再 aria-disabled），tooltip 用既有 key', () => {
+/** T20 的统一定性断言：渲染结果里不得出现任何窗口/弹层标记。 */
+function assertNoWindow(html: string, label: string): void {
+  assert.equal(html.includes('threadline-impact-popover'), false, label + '：不得再渲染 popover')
+  assert.equal(html.includes('role="dialog"'), false, label + '：不得有 dialog')
+  assert.equal(html.includes('aria-haspopup'), false, label + '：不得声明弹层')
+  assert.equal(html.includes('aria-expanded'), false, label + '：不得有展开态')
+  assert.equal(html.includes('data-threadline-impact-popover'), false, label + '：不得有 popover 标记')
+}
+
+test('渲染：未加载/读取失败/本轮仍在记录时图标仍在、可点、无弹层，tooltip 用既有 key', () => {
   const loadingHtml = renderImpact({ messageId: 'm-1b', sessionId: SESSION_ID, store: fakeStore(null) })
   assert.ok(loadingHtml.includes('threadline-impact-icon-btn'), '图标按钮必须可见（不是空白）')
-  // 2026-11-04 真机反馈「点不动」→ 未加载态也必须可点（点了弹如实说明 + 只读重新读取），不再是禁用态
+  // 2026-11-04 真机反馈「点不动」→ 未加载态也必须可点（点击直达 tab 的加载态 + 重新读取）
   assert.ok(!loadingHtml.includes('aria-disabled="true"'), '未加载态不许再禁用（用户要求可点）')
-  assert.ok(loadingHtml.includes('aria-haspopup="dialog"'))
   assert.ok(loadingHtml.includes('data-state="loading"'))
   assert.ok(loadingHtml.includes('正在读取本轮记录'), 'tooltip 应给 state.loadingDetail')
   assert.ok(loadingHtml.includes('<svg'), '内联 SVG 图标（不引第三方库）')
+  assertNoWindow(loadingHtml, 'loading')
 
   const errorHtml = renderImpact({ messageId: 'm-1b', sessionId: SESSION_ID, store: fakeStore(errorEntry()) })
   assert.ok(errorHtml.includes('data-state="unknown"'))
   assert.ok(errorHtml.includes('观测不到'), 'tooltip 应给 state.unknown')
   assert.ok(!errorHtml.includes('aria-disabled="true"'), '读取失败态也不许禁用')
+  assertNoWindow(errorHtml, 'unknown')
+
+  const streamingHtml = renderImpact({ messageId: 'm-zzz', sessionId: SESSION_ID, store: fakeStore(readyEntry()) })
+  assert.ok(streamingHtml.includes('data-state="streaming"'), 'live 会话未读全 → streaming（不隐藏）')
+  assert.ok(streamingHtml.includes('threadline-impact-icon-btn'))
+  assertNoWindow(streamingHtml, 'streaming')
 })
 
-test('渲染：有影响 → 图标按钮（D-25），aria-label 给完整影响计数、aria-haspopup/expanded 正确', () => {
+test('渲染：有影响 → 图标按钮（D-25），aria-label/title 给完整计数；无影响/非锚点仍 hidden', () => {
   const ready = renderImpact({ messageId: 'm-1b', sessionId: SESSION_ID, store: fakeStore(readyEntry()) })
   assert.ok(ready.includes('threadline-impact-icon-btn'))
   assert.ok(ready.includes('threadline-impact-root'), '宿主内嵌根 className（不在 .threadline-app 之内）')
   assert.ok(ready.includes('data-impact-count="5"'))
-  assert.ok(ready.includes('aria-haspopup="dialog"'))
-  assert.ok(ready.includes('aria-expanded="false"'))
+  assert.ok(ready.includes('data-state="ready"'))
   assert.match(ready, /aria-label="[^"]*3[^"]*1[^"]*1[^"]*"/, 'aria-label 应带文件/命令/子智能体计数')
+  assert.match(ready, /title="[^"]*3[^"]*1[^"]*1[^"]*"/, '说明性 tooltip 保留（title）')
   assert.equal(ready.includes('影响 0'), false)
+  assertNoWindow(ready, 'ready')
 
-  // 三态仍按 03 §2.2：无影响 / 非锚点 / 序列不可得 → 不渲染
+  // 三态仍按 03 §2.2：非锚点 / 无影响 / 序列不可得 → 不渲染
   assert.match(renderImpact({ messageId: 'm-1a', sessionId: SESSION_ID, store: fakeStore(readyEntry()) }), /data-threadline-impact-hidden="not-anchor"/)
   assert.match(renderImpact({ messageId: 'm-3a', sessionId: SESSION_ID, store: fakeStore(readyEntry('completed')) }), /data-threadline-impact-hidden="zero-impact"/)
   assert.match(renderImpact({ messageId: 'm-zzz', sessionId: SESSION_ID, store: fakeStore(readyEntry('completed')) }), /data-threadline-impact-hidden="no-turn"/)
 })
 
-test('popover 内容：文件 ≤8 / 命令 ≤3 / 子智能体 ≤3 +「还有 N 条」+ 两个动作 + 不显示正文', () => {
-  const detail = buildDetail()
-  const turn = detail.turns[0]
-  const many: TurnDetail = {
-    ...turn,
-    files: Array.from({ length: 11 }, (_, index) => ({ path: 'src/f' + String(index) + '.ts', ops: ['write'] as const, added: index, removed: 0 })),
-    commands: Array.from({ length: 5 }, (_, index) => ({
-      id: 'c-' + String(index),
-      tool: 'shell',
-      program: 'pnpm',
-      status: 'success' as const,
-      startedAt: 0,
-      durationMs: 1000,
-      text: 'pnpm test --secret-arg',
-    })),
-    subagents: ['a1', 'a2', 'a3', 'a4'],
+/* ---------------- T20：点击 = 导航到「脉络」tab（无窗口） ---------------- */
+
+test('点击落点：ready 带轮次；loading/unknown/streaming 只带会话；hidden 不落点', () => {
+  const ready = decideImpact({ messageId: 'm-1b', sessionId: SESSION_ID, detail: buildDetail(), status: 'ready' })
+  assert.deepEqual(impactFocusTargetOf(ready, SESSION_ID), { kind: 'turn', sessionId: SESSION_ID, turn: 1 }, 'ready 要聚焦该轮')
+
+  const loading = decideImpact({ messageId: 'm-1b', sessionId: SESSION_ID, detail: null, status: 'loading' })
+  assert.deepEqual(impactFocusTargetOf(loading, SESSION_ID), { kind: 'session', sessionId: SESSION_ID }, '加载中只带会话（tab 自己加载）')
+
+  const unknown = decideImpact({ messageId: 'm-1b', sessionId: SESSION_ID, detail: null, status: 'error' })
+  assert.deepEqual(impactFocusTargetOf(unknown, SESSION_ID), { kind: 'session', sessionId: SESSION_ID }, '失败态只带会话（tab 有重新读取）')
+
+  const streaming = decideImpact({ messageId: 'm-zzz', sessionId: SESSION_ID, detail: buildDetail(), status: 'ready' })
+  assert.deepEqual(impactFocusTargetOf(streaming, SESSION_ID), { kind: 'session', sessionId: SESSION_ID }, '正在记录只带会话')
+
+  const hidden = decideImpact({ messageId: '', sessionId: SESSION_ID, detail: buildDetail(), status: 'ready' })
+  assert.equal(impactFocusTargetOf(hidden, SESSION_ID), null, 'hidden 没有按钮，不落点')
+  assert.equal(impactFocusTargetOf(loading, ''), null, '没有 sessionId 不落点')
+})
+
+test('点击动作：requestFocus + 真的点中宿主「脉络」tab（ready→turn / loading→session）', () => {
+  clearFocus()
+  const doc = createTabDocument([{ text: '对话' }, { text: '脉络' }])
+  ;(globalThis as unknown as { document?: Document }).document = doc.document
+  try {
+    const ready = decideImpact({ messageId: 'm-1b', sessionId: SESSION_ID, detail: buildDetail(), status: 'ready' })
+    const turnTarget = impactFocusTargetOf(ready, SESSION_ID)
+    assert.ok(turnTarget !== null)
+    assert.equal(openThreadlineForImpact(turnTarget), true, '真实路径：activateThreadlineTab 点中假 tab')
+    assert.deepEqual(peekFocus(SESSION_ID), { kind: 'turn', sessionId: SESSION_ID, turn: 1 }, 'tab 切过去后能取到该轮')
+    assert.deepEqual(doc.clicked, ['脉络'], '只点「脉络」，不碰「对话」')
+
+    const loading = decideImpact({ messageId: 'm-1b', sessionId: SESSION_ID, detail: null, status: 'loading' })
+    const sessionTarget = impactFocusTargetOf(loading, SESSION_ID)
+    assert.ok(sessionTarget !== null)
+    assert.equal(openThreadlineForImpact(sessionTarget), true)
+    assert.deepEqual(peekFocus(SESSION_ID), { kind: 'session', sessionId: SESSION_ID }, '加载态落点是会话')
+    assert.deepEqual(doc.clicked, ['脉络', '脉络'])
+  } finally {
+    clearFocus()
+    delete (globalThis as unknown as { document?: Document }).document
   }
-  const html = renderToStaticMarkup(
-    React.createElement(ImpactPopover, {
-      turn: many,
-      counts: impactOf(many),
-      sessionId: SESSION_ID,
-      mode: 'metadata',
-      t,
-      onOpenTab: () => undefined,
-      onOpenModal: () => undefined,
-      onClose: () => undefined,
-    }),
-  )
-  assert.ok(html.includes('本轮影响 · T1'))
-  assert.ok(html.includes('在脉络中查看'))
-  assert.ok(html.includes('打开本次对话脉络'))
-  assert.ok(html.includes('还有 3 条'), '文件 11 条超过 8 → 还有 3 条')
-  assert.ok(html.includes('还有 2 条'), '命令 5 条超过 3 / 子智能体 4 条超过 3')
-  assert.ok(!html.includes('pnpm test --secret-arg'), '正文（命令全文）一律不显示')
-  assert.ok(!html.includes('先把 merge'), '不显示用户消息正文')
-  assert.equal((html.match(/data-row="file"/g) ?? []).length, IMPACT_LIMITS.files)
-  assert.equal((html.match(/data-row="command"/g) ?? []).length, IMPACT_LIMITS.commands)
-  assert.equal((html.match(/data-row="subagent"/g) ?? []).length, IMPACT_LIMITS.subagents)
+})
+
+test('点击动作：宿主 tab 还没挂载 → 返回 false 且记原因，focus 目标仍登记（用户手动切也能用）', () => {
+  clearFocus()
+  const doc = createTabDocument([{ text: '对话' }])
+  ;(globalThis as unknown as { document?: Document }).document = doc.document
+  try {
+    const target = impactFocusTargetOf(decideImpact({ messageId: 'm-1b', sessionId: SESSION_ID, detail: null, status: 'loading' }), SESSION_ID)
+    assert.ok(target !== null)
+    assert.equal(openThreadlineForImpact(target), false)
+    assert.equal(activationFailure(), 'tab-not-found')
+    assert.equal(activateThreadlineTab(doc.document), false)
+    assert.deepEqual(peekFocus(SESSION_ID), { kind: 'session', sessionId: SESSION_ID })
+  } finally {
+    clearFocus()
+    delete (globalThis as unknown as { document?: Document }).document
+  }
 })
 
 /* ---------------- 假 store ---------------- */

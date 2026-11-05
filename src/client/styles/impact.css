@@ -1,0 +1,72 @@
+/*
+ * impact.css —— 「影响 N」图标按钮（assistant-actions 表面；03 §7.2 / 06 A43-2）。
+ *
+ * T32（2026-11-05 notes/33 §1/§7）：/threadline 弹窗删除时，styles/modal.css 整份删除；
+ * 其中**仍被影响入口使用**的 3 组规则（内嵌根 reset / 图标按钮 / 图标本体）原样搬到这里，
+ * 不碰 base.css、不新增第二套注入路径（emit-styles 按 styles/*.css 目录自动收编本文件）。
+ *
+ * 纪律：
+ * - 只引 tokens.css 的 --tl-* 令牌（颜色一律走令牌；不写颜色字面量、不用 viewport media query、无 !important）；
+ * - 选择器全部挂 .threadline-impact-root（宿主内嵌根，**不在** .threadline-app 之内）；
+ * - 图标本体是描边（stroke=currentColor），这里只控 color / 尺寸，不改 fill。
+ */
+
+/* 内嵌根：去掉 tab 外壳几何，只用 inline-flex 容纳 24x24 按钮 */
+.threadline-impact-root {
+  display: inline-flex;
+  align-items: center;
+  inline-size: auto;
+  block-size: auto;
+  min-block-size: 0;
+  overflow: visible;
+  background: transparent;
+  position: relative;
+  box-sizing: border-box;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  text-align: start;
+}
+
+.threadline-impact-root *,
+.threadline-impact-root *::before,
+.threadline-impact-root *::after {
+  box-sizing: border-box;
+}
+
+/* 影响图标按钮（D-25：与宿主 action row 一致的图标按钮；无文字、无徽章） */
+.threadline-impact-root .threadline-impact-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 24px;
+  block-size: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--tl-radius-sm);
+  background: transparent;
+  /* 与宿主 action row 的图标同色深：默认 tertiary 档（比 secondary 浅），hover 才升到 secondary。
+     图标本体是描边（stroke=currentColor），因此这里只控 color，不改 fill。 */
+  color: var(--tl-fg-tertiary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.threadline-impact-root .threadline-impact-icon-btn:hover {
+  background: var(--tl-hover);
+  color: var(--tl-fg-secondary);
+}
+
+.threadline-impact-root .threadline-impact-icon-btn[aria-disabled='true'] {
+  color: var(--tl-fg-tertiary);
+  cursor: default;
+  opacity: 0.6;
+}
+
+.threadline-impact-root .threadline-impact-icon {
+  display: block;
+  inline-size: 16px;
+  block-size: 16px;
+  flex: 0 0 auto;
+}

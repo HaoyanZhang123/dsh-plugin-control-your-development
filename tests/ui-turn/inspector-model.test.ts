@@ -515,11 +515,11 @@ test('概览：图层开关位来自 03 §10 的默认表（不在这里另写�
   assert.equal(coSession?.weak, true)
 })
 
-test('概览：图例 6 项（族标签来自 locale key）', () => {
+test('概览：图例 5 项（族标签来自 locale key；33 §5 五类）', () => {
   const model = buildOverview(ctx())
   assert.deepEqual(
     model.legend.map((item) => item.label),
-    ['文档', '代码', '数据', '图片', '配置', '其它'],
+    ['文本', '代码', '数据', '媒体', '其它'],
   )
 })
 

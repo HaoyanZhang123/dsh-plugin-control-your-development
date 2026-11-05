@@ -1,4 +1,4 @@
-/*
+﻿/*
  * tests/ui-turn/fixtures.ts —— T08 的**确定性**夹具（合成数据，不含真实会话内容）。
  *
  * 用途：单测（node --test）与截图（tests/harness）共用同一份数据，保证"图上看到的"与"断言断的"
@@ -304,7 +304,7 @@ export function buildFiles(): Map<string, FileNode> {
     path: 'docs/facts/read-model.md',
     name: 'read-model.md',
     dir: 'docs/facts',
-    family: 'doc',
+    family: 'text',
     firstAt: BASE_TIME,
     lastAt: BASE_TIME + 3 * HOUR,
     reads: 5,

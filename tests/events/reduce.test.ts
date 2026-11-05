@@ -343,3 +343,155 @@ test('str_replace_editor / read_image / grep 的文件操作归约', () => {
   assert.deepEqual(byPath.get('src/hit2.ts')?.ops, ['search'])
   assert.equal(byPath.has('src'), false)
 })
+
+/* ------------------------------------------------------------------ *
+ * 33 §4 / §6：本轮删除命令计数（deleteCommands）
+ *
+ * 事实：DSH 没有删除文件工具、没有 delete 类事件，删除只出现在 shell 命令文本里。
+ * 因此只做**命令文本识别**：给该轮 +1，**不保存命令文本、不归属文件路径**，
+ * 拿不到（不是删除命令 / 轮次不可知）就缺省，不伪造 0。
+ * 实现改成「解析路径 / 解析 run_code 代码 / 记成文件已删除」都会在这些用例上红。
+ * ------------------------------------------------------------------ */
+
+/** 造一个单命令单轮的会话，返回该轮。 */
+function singleCommandTurn(tool: string, command: string) {
+  const result = reduce([
+    turnStart(1, T0),
+    toolCall('c1', tool, { command }, 1, T0 + 1),
+    toolResult('c1', 1, T0 + 2),
+    turnEnd(1, 'completed', T0 + 3),
+  ])
+  return result.detail.turns[0]
+}
+
+test('33§4 删除命令：rm / Remove-Item / del / rmdir / unlink / git rm 各计 1', () => {
+  const positives: Array<{ label: string; tool: string; command: string }> = [
+    { label: 'bash rm -rf', tool: 'bash', command: 'rm -rf dist' },
+    { label: 'bash rm 带参数', tool: 'bash', command: 'rm -f ./tmp/app.log' },
+    { label: 'pwsh Remove-Item', tool: 'pwsh', command: 'Remove-Item -Recurse -Force build' },
+    { label: 'pwsh remove-item 小写', tool: 'pwsh', command: 'remove-item bundle.js' },
+    { label: 'pwsh Remove-Item 带相对路径', tool: 'pwsh', command: 'Remove-Item .\\tmp\\out.log' },
+    { label: 'cmd del', tool: 'bash', command: 'cmd /c del build\\out.txt' },
+    { label: 'rmdir', tool: 'bash', command: 'rmdir /s /q dist' },
+    { label: 'unlink', tool: 'bash', command: 'unlink tmp/app.sock' },
+    { label: 'git rm', tool: 'bash', command: 'git rm --cached notes/old.md' },
+    { label: '链式 rm', tool: 'bash', command: 'cd dist && rm -rf ./*' },
+    { label: 'shell 工具', tool: 'shell', command: 'del C:\\temp\\a.txt' },
+  ]
+  for (const item of positives) {
+    const turn = singleCommandTurn(item.tool, item.command)
+    assert.equal(turn.deleteCommands, 1, item.label)
+    // 只计数：不因为命令里的路径多出文件节点（不归属路径）。
+    assert.equal(turn.files.length, 0, item.label)
+  }
+})
+
+test('33§4 删除命令：普通命令不计数，且字段缺省（不写 0、不伪造）', () => {
+  const negatives = [
+    'pnpm test',
+    'git status --short',
+    'echo hi',
+    'node tools/build.mjs',
+    'npm run alarm', // 含 rm 字符但没有词边界 → 不是 rm
+    'benrm data.txt', // 旧实现若用朴素的 /rm/ 就会误计
+    'grep -r format src',
+    'pnpm model:check', // 含 del 字符但不在词边界 → 不是 del
+    'git remote prune origin',
+    'git commit -m "rm old files"', // 引号里的“提到”不是删除命令（T33-verify M6）
+    'echo del', // 回显/示例文本，不在命令段开头
+    'echo Remove-Item', // 同上
+    'node -e "fs.rmSync(x)"', // 代码字符串不解析
+  ]
+  for (const command of negatives) {
+    const turn = singleCommandTurn('bash', command)
+    assert.equal(turn.deleteCommands, undefined, command)
+    assert.equal('deleteCommands' in turn, false, command)
+  }
+})
+
+test('33§4 删除命令：一条命令只计 1（多模式不重复），多轮各自独立计数', () => {
+  // `git rm -r a && rm -f b` 同时命中 git rm 与 rm，但只是一次调用 → 1。
+  const overlapping = singleCommandTurn('bash', 'git rm -r docs && rm -f tmp.log')
+  assert.equal(overlapping.deleteCommands, 1)
+
+  const result = reduce([
+    turnStart(1, T0),
+    toolCall('c1', 'bash', { command: 'rm -rf a' }, 1, T0 + 1),
+    toolResult('c1', 1, T0 + 2),
+    toolCall('c2', 'pwsh', { command: 'Remove-Item b' }, 1, T0 + 3),
+    toolResult('c2', 1, T0 + 4),
+    turnEnd(1, 'completed', T0 + 5),
+    turnStart(2, T0 + 6),
+    toolCall('c3', 'bash', { command: 'git rm c.md' }, 2, T0 + 7),
+    toolResult('c3', 2, T0 + 8),
+    turnEnd(2, 'completed', T0 + 9),
+    turnStart(3, T0 + 10),
+    toolCall('c4', 'bash', { command: 'pnpm test' }, 3, T0 + 11),
+    toolResult('c4', 3, T0 + 12),
+    turnEnd(3, 'completed', T0 + 13),
+  ])
+  assert.equal(result.detail.turns[0].deleteCommands, 2)
+  assert.equal(result.detail.turns[1].deleteCommands, 1)
+  assert.equal(result.detail.turns[2].deleteCommands, undefined)
+  // 会话级计数器不受影响（命令记录仍然只有 4 条）。
+  assert.equal(result.detail.counts.commands, 4)
+})
+
+test('33§4 删除命令只计数：不保存命令文本、不归属路径（命令记录被限掉时也不泄漏）', () => {
+  const command = 'Remove-Item -Recurse -Force C:\\very\\secret\\report.xlsx'
+  const result = reduce(
+    [
+      turnStart(1, T0),
+      toolCall('c1', 'pwsh', { command }, 1, T0 + 1),
+      toolResult('c1', 1, T0 + 2),
+      turnEnd(1, 'completed', T0 + 3),
+    ],
+    { limits: { maxCommands: 0 } },
+  )
+  const turn = result.detail.turns[0]
+  assert.equal(turn.deleteCommands, 1)
+  assert.deepEqual(turn.commands, []) // 命令记录被上限裁掉
+  assert.equal(turn.files.length, 0) // 命令里的路径不算文件操作
+  const json = JSON.stringify(turn)
+  assert.equal(json.includes('secret'), false, '命令路径泄漏进 turn')
+  assert.equal(json.includes('report.xlsx'), false, '命令路径泄漏进 turn')
+  assert.equal(json.includes('Remove-Item'), false, '命令文本泄漏进 turn')
+  assert.equal(json.includes('"deleteCommands":1'), true)
+})
+
+test('33§4 删除命令：轮次不可知时不计数（不猜归属），命令仍留在 unassigned', () => {
+  // 没有 turn/start，tool/call 也不带 data.turn → turn = null。
+  const result = reduce([
+    ev('tool/call', { callId: 'c1', name: 'bash', arguments: JSON.stringify({ command: 'rm -rf x' }) }, T0 + 1),
+    ev(
+      'tool/result',
+      { message: { id: 'r-c1', role: 'tool', isError: false, toolCallId: 'c1', source: { kind: 'tool', callId: 'c1' }, content: [{ type: 'text', text: 'ok' }] } },
+      T0 + 2,
+    ),
+  ])
+  assert.equal(result.detail.turns.length, 0)
+  assert.equal(result.detail.unassigned?.commands.length, 1)
+  assert.equal(JSON.stringify(result.detail).includes('deleteCommands'), false)
+})
+
+test('33§4 删除命令：不解析 run_code 的代码字符串；PTC 嵌套 shell 命令计 1（不双计）', () => {
+  // root `run_code` 的 args.code 里出现 rm 文本 → 不当删除命令（绝不解析代码字符串）。
+  const codeOnly = reduce([
+    turnStart(1, T0),
+    toolCall('c1', 'run_code', { code: "await fs.rm('src/x.ts')" }, 1, T0 + 1),
+    toolResult('c1', 1, T0 + 2),
+    turnEnd(1, 'completed', T0 + 3),
+  ])
+  assert.equal(codeOnly.detail.turns[0].deleteCommands, undefined)
+
+  // PTC：root run_code（code 文本含 rm）+ 嵌套 bash（command 是 rm）→ 只计 1。
+  const ptc = reduce([
+    turnStart(1, T0),
+    toolCall('root-1', 'run_code', { code: "await tools.bash({ command: 'rm -rf out' })" }, 1, T0 + 1),
+    ptcStart('root-1', 'sub-1', 'bash', { command: 'rm -rf out' }, T0 + 3),
+    ptcResult('sub-1', T0 + 4),
+    toolResult('root-1', 1, T0 + 5),
+    turnEnd(1, 'completed', T0 + 6),
+  ])
+  assert.equal(ptc.detail.turns[0].deleteCommands, 1)
+})

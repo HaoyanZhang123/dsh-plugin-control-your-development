@@ -1,9 +1,10 @@
-/*
+﻿/*
  * tests/entries/tab.test.ts —— 「脉络」tab 的注册参数 + focus 一次性消费（06 A43-1 / A43-4）。
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { registerTab, ThreadlineTabView } from '../../src/client/entries/tab.ts'
+import { registerTab, ThreadlineTabView, graphEmptyStateOf } from '../../src/client/entries/tab.ts'
+import { createTranslator } from '../../src/client/locale/index.ts'
 import { consumeFocusRequest, parseFocusToken, requestFocus, takeFocus, pendingFocusCount, selectionOfFocus, focusTokenOf } from '../../src/client/state/selection.ts'
 import { createFakeCtx } from './fake-ctx.ts'
 import { SESSION_ID } from './fixtures.ts'
@@ -103,4 +104,29 @@ test('跨入口 focus 桥：requestFocus 后 takeFocus 取走并清空（不持�
   assert.deepEqual(target, { kind: 'file', sessionId: SESSION_ID, path: 'src/b.ts' })
   assert.equal(takeFocus(SESSION_ID), null, '取走后必须清空')
   assert.equal(pendingFocusCount(), 0)
+})
+
+test('地图空态文案：观测不到 / 无记录 / 有对话无文件操作 三者区分（03 §4.5）', () => {
+  const t = createTranslator('zh')
+  // host 不可用 → 观测不到（即使有文件数据也不该说"没有文件操作"）
+  assert.deepEqual(
+    graphEmptyStateOf({ degradeKind: 'hostUnavailable', hasFiles: false, hasSessions: false }, t),
+    { title: '观测不到工作区记录' },
+  )
+  assert.deepEqual(
+    graphEmptyStateOf({ degradeKind: 'capability-missing', hasFiles: true, hasSessions: true }, t),
+    { title: '观测不到工作区记录' },
+  )
+  // 扫描失败（failed）但没有文件：用 state.unknown（观测不到），不说成"没有记录"。
+  assert.deepEqual(graphEmptyStateOf({ degradeKind: 'failed', hasFiles: false, hasSessions: true }, t), { title: '观测不到' })
+  // 有文件 → 不显示空态
+  assert.equal(graphEmptyStateOf({ degradeKind: 'none', hasFiles: true, hasSessions: true }, t), undefined)
+  // 无文件但有会话 → 有对话记录，但没有文件操作
+  assert.deepEqual(graphEmptyStateOf({ degradeKind: 'none', hasFiles: false, hasSessions: true }, t), {
+    title: '有对话记录，但没有文件操作',
+  })
+  // 完全没有记录 → 这个工作区还没有可读的记录
+  assert.deepEqual(graphEmptyStateOf({ degradeKind: 'none', hasFiles: false, hasSessions: false }, t), {
+    title: '这个工作区还没有可读的记录',
+  })
 })

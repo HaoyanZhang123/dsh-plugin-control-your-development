@@ -42,7 +42,7 @@ import { createTranslator } from '../../src/client/locale/index.ts'
 import { THREADLINE_CSS } from '../../src/client/styles/index.ts'
 import { Inspector } from '../../src/client/ui/inspector/index.ts'
 import type { InspectorData } from '../../src/client/ui/inspector/index.ts'
-import { MapView } from '../../src/client/ui/map/index.ts'
+import { FileGraph } from '../../src/client/ui/map/index.ts'
 import {
   TurnStrip,
   buildScopeOptions,
@@ -335,9 +335,9 @@ test('N-12 窄容器：只用容器查询、不产生页面级横向滚动', () 
 
 test('N-13 reduced-motion：不播放动画/脉冲', async () => {
   const { graph } = await chain()
-  const base = { nodes: sortedFiles(graph), edges: [], now: NOW, selectedPath: null, selectedTurn: null }
-  const reduced = renderToStaticMarkup(React.createElement(MapView, { ...base, reducedMotion: true }))
-  const normal = renderToStaticMarkup(React.createElement(MapView, { ...base, reducedMotion: false }))
+  const base = { files: sortedFiles(graph), mode: 'directory' as const, directoryKey: 'src', directoryLabel: 'src', edges: [], now: NOW, selectedPath: null, locale: 'zh' as const }
+  const reduced = renderToStaticMarkup(React.createElement(FileGraph, { ...base, reducedMotion: true }))
+  const normal = renderToStaticMarkup(React.createElement(FileGraph, { ...base, reducedMotion: false }))
   assert.ok(reduced.includes('data-reduced-motion="true"'))
   assert.ok(normal.includes('data-reduced-motion="false"'))
   assert.ok(THREADLINE_CSS.includes('prefers-reduced-motion: reduce'))

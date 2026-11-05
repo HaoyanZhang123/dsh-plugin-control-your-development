@@ -1,4 +1,4 @@
-/*
+﻿/*
  * tests/a11y/fixtures.ts —— T10 的合成数据（与 T07/T08 的同口径字段，但不依赖他们的夹具）。
  *
  * 全部为**合成数据**：路径是编造的、会话 id 是编造的、没有真实用户内容（03 §12.3 隐私纪律）。
@@ -35,7 +35,7 @@ export function fileNode(overrides: Partial<FileNode> & { path: string }): FileN
 /** 三个文件：顶层目录不同，便于验证"隐私模式只剩 basename"。 */
 export const FILES: FileNode[] = [
   fileNode({ path: 'src/client/ui/shell/Shell.ts', name: 'Shell.ts', dir: 'src/client/ui/shell', family: 'code', ops: 18 }),
-  fileNode({ path: 'notes/31-交接/03-产品与交互规格.md', name: '03-产品与交互规格.md', dir: 'notes/31-交接', family: 'doc', ops: 9 }),
+  fileNode({ path: 'notes/31-交接/03-产品与交互规格.md', name: '03-产品与交互规格.md', dir: 'notes/31-交接', family: 'text', ops: 9 }),
   fileNode({ path: 'data/fixture.json', name: 'fixture.json', dir: 'data', family: 'data', ops: 2 }),
 ]
 

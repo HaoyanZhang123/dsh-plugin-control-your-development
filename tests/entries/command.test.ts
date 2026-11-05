@@ -1,18 +1,29 @@
 /*
- * tests/entries/command.test.ts —— `/threadline` 命令 + 弹窗入口（06 A43-3 / A43-4）。
+ * tests/entries/command.test.ts —— `/threadline` 命令（06 A43-3 / A43-4；T32 新契约）。
  *
- * 覆盖：
+ * T32（2026-11-05 notes/33 §1/§7）：**弹窗已删除**。命令触发（菜单 pick / Enter）不再 openModal，
+ * 而是 `requestFocus({ kind: 'session' })` + `activateThreadlineTab()`，跳到「脉络」tab。
+ *
+ * 本文件锁：
  * - `inputTriggers.registerSource` 的参数（trigger/name/order）与候选过滤（leading / query）；
  * - `matchEnter` 精确命中 `/threadline` 与 `/脉络`，其它输入不认领；
- * - `onPick` 打开该会话的弹窗（内存 store）；
- * - `conversation.input.overlay` 槽注册参数；disposer 进 ctx.effect（卸载撤销）；
- * - inputTriggers 缺失只 warn、不崩，弹窗入口仍然注册。
+ * - onPick / matchEnter = 导航（用假宿主 tab 断言真的被点中；focus 目标为会话）；
+ * - **不再注册** `conversation.input.overlay`（slot 注册数 0），命令模块也不再导出任何弹窗符号；
+ * - inputTriggers 缺失只 warn、不崩。
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { COMMAND_NAME, COMMAND_TOKENS, registerCommand, type InputTriggerSource } from '../../src/client/entries/command.ts'
-import { closeModal, getModalState, openModalCount, resetModalStore } from '../../src/client/ui/modal/store.ts'
+import * as commandModule from '../../src/client/entries/command.ts'
+import {
+  COMMAND_NAME,
+  COMMAND_TOKENS,
+  openThreadlineForCommand,
+  registerCommand,
+  type InputTriggerSource,
+} from '../../src/client/entries/command.ts'
+import { clearFocus, peekFocus, pendingFocusCount, requestFocus } from '../../src/client/state/viewFocus.ts'
 import { createFakeCtx, createFakeInputTriggers } from './fake-ctx.ts'
+import { createTabDocument } from './fake-dom.ts'
 import { SESSION_ID } from './fixtures.ts'
 
 function sourceOf(sources: Array<Record<string, unknown>>): InputTriggerSource {
@@ -22,7 +33,6 @@ function sourceOf(sources: Array<Record<string, unknown>>): InputTriggerSource {
 }
 
 test('命令注册参数：trigger "/" / name "threadline" / order 1（菜单 label「脉络」）', async () => {
-  resetModalStore()
   const triggers = createFakeInputTriggers()
   const fake = createFakeCtx({ services: { inputTriggers: triggers.service } })
   assert.equal(registerCommand(fake.ctx), true)
@@ -39,7 +49,6 @@ test('命令注册参数：trigger "/" / name "threadline" / order 1（菜单 la
 })
 
 test('候选过滤：只在行首触发；query 不匹配就不出现', async () => {
-  resetModalStore()
   const triggers = createFakeInputTriggers()
   const fake = createFakeCtx({ services: { inputTriggers: triggers.service } })
   registerCommand(fake.ctx)
@@ -50,8 +59,7 @@ test('候选过滤：只在行首触发；query 不匹配就不出现', async ()
   assert.equal((await source.candidates({}, { query: '', position: 'inline' })).length, 0)
 })
 
-test('matchEnter 精确命中 /threadline 与 /脉络；其它整行一律不认领', async () => {
-  resetModalStore()
+test('matchEnter：精确命中 /threadline 与 /脉络；其它整行一律不认领', async () => {
   const triggers = createFakeInputTriggers()
   const fake = createFakeCtx({ services: { inputTriggers: triggers.service } })
   registerCommand(fake.ctx)
@@ -69,47 +77,80 @@ test('matchEnter 精确命中 /threadline 与 /脉络；其它整行一律不认
   assert.equal(await source.matchEnter({ sessionId: SESSION_ID }, '  /threadline  '), 'handled')
 })
 
-test('onPick / matchEnter 打开该会话弹窗（内存 store，不持久化）', async () => {
-  resetModalStore()
+test('matchEnter / onPick = 导航：requestFocus(session) + 点中假宿主「脉络」tab（不开窗）', async () => {
+  clearFocus()
   const triggers = createFakeInputTriggers()
   const fake = createFakeCtx({ services: { inputTriggers: triggers.service } })
   registerCommand(fake.ctx)
   const source = sourceOf(triggers.sources)
+  const doc = createTabDocument([{ text: '对话' }, { text: '脉络' }])
+  ;(globalThis as unknown as { document?: Document }).document = doc.document
+  try {
+    await source.matchEnter({ sessionId: SESSION_ID }, '/threadline')
+    assert.deepEqual(peekFocus(SESSION_ID), { kind: 'session', sessionId: SESSION_ID }, 'Enter 落点为会话级 focus')
+    assert.deepEqual(doc.clicked, ['脉络'], '真的点中「脉络」，不碰「对话」')
 
-  await source.matchEnter({ sessionId: SESSION_ID }, '/threadline')
-  assert.equal(getModalState(SESSION_ID).open, true)
-  assert.equal(openModalCount(), 1)
+    clearFocus()
+    assert.equal(source.onPick({ session: { sessionId: SESSION_ID }, candidate: { name: COMMAND_NAME } }), 'handled')
+    assert.deepEqual(peekFocus(SESSION_ID), { kind: 'session', sessionId: SESSION_ID }, 'onPick 落点同为会话级 focus')
+    assert.deepEqual(doc.clicked, ['脉络', '脉络'])
 
-  closeModal(SESSION_ID)
-  assert.equal(getModalState(SESSION_ID).open, false)
-
-  source.onPick({ session: { sessionId: SESSION_ID } })
-  assert.equal(getModalState(SESSION_ID).open, true, 'onPick 也要打开弹窗')
-  resetModalStore()
+    // 不是我们的 candidate：交还给宿主，不导航（不抢别人的 pick）
+    clearFocus()
+    assert.equal(source.onPick({ session: { sessionId: SESSION_ID }, candidate: { name: 'context' } }), undefined)
+    assert.equal(peekFocus(SESSION_ID), null)
+    assert.deepEqual(doc.clicked, ['脉络', '脉络'], '非本命令不触发 tab 点击')
+  } finally {
+    clearFocus()
+    delete (globalThis as unknown as { document?: Document }).document
+  }
 })
 
-test('弹窗入口注册：name / id / order 20，disposer 进 ctx.effect', () => {
-  resetModalStore()
+test('openThreadlineForCommand：会话 id 两种上下文都能取到；空 sessionId 仍切 tab（不落 focus）', () => {
+  clearFocus()
+  const doc = createTabDocument([{ text: '脉络' }])
+  ;(globalThis as unknown as { document?: Document }).document = doc.document
+  try {
+    assert.equal(openThreadlineForCommand(SESSION_ID), true)
+    assert.deepEqual(peekFocus(SESSION_ID), { kind: 'session', sessionId: SESSION_ID })
+
+    clearFocus()
+    // 嵌套 session.sessionId 的取法由 contextSessionId 覆盖（这里直接验证导出的动作函数本身）
+    openThreadlineForCommand('')
+    assert.equal(pendingFocusCount(), 0, '空 sessionId 不登记 focus')
+    assert.deepEqual(doc.clicked, ['脉络', '脉络'], '没有 sessionId 也要把用户送到 tab')
+
+    // 同一会话只保留最后一个目标（不排队）
+    requestFocus({ kind: 'session', sessionId: SESSION_ID })
+    requestFocus({ kind: 'session', sessionId: SESSION_ID })
+    assert.equal(pendingFocusCount(), 1)
+  } finally {
+    clearFocus()
+    delete (globalThis as unknown as { document?: Document }).document
+  }
+})
+
+test('T32：不再注册 conversation.input.overlay（slot 0 条），命令模块不导出任何弹窗符号', () => {
   const triggers = createFakeInputTriggers()
   const fake = createFakeCtx({ services: { inputTriggers: triggers.service } })
   registerCommand(fake.ctx)
-  const entry = fake.registration('conversation.input.overlay')
-  assert.ok(entry !== undefined)
-  assert.equal(entry.name, 'conversation.input.overlay')
-  assert.equal(entry.options.id, 'threadline-modal')
-  assert.equal(entry.options.order, 20)
-  assert.ok(fake.effectLabels.some((label) => label.includes('/threadline')))
-  assert.ok(fake.effectLabels.some((label) => label.includes('input overlay')))
+
+  assert.deepEqual(fake.entries, [], '命令入口不再注册任何 slot（弹窗走 conversation.input.overlay 的旧路径已删）')
+  assert.equal(fake.registration('conversation.input.overlay'), undefined)
+  assert.ok(fake.effectLabels.some((label) => label.includes('/threadline')), 'registerSource 的 disposer 仍进 ctx.effect')
+
+  const modalExports = Object.keys(commandModule).filter((name) => /Modal|Overlay|modal/i.test(name))
+  assert.deepEqual(modalExports, [], '命令模块不再有 ThreadlineOverlay/OverlaySlotProps 等弹窗导出')
 
   fake.disposeAll()
-  assert.deepEqual(fake.disposedSlots, ['conversation.input.overlay'])
+  assert.deepEqual(fake.disposedSlots, [], '没有 slot 需要撤销')
   assert.deepEqual(triggers.disposed, ['threadline'], 'registerSource 的 disposer 必须被调用')
 })
 
-test('inputTriggers 缺失：只 warn、不崩，弹窗入口仍然注册', () => {
-  resetModalStore()
+test('inputTriggers 缺失：只 warn、不崩，也不注册任何 slot', () => {
   const fake = createFakeCtx()
   assert.doesNotThrow(() => registerCommand(fake.ctx))
+  assert.equal(registerCommand(fake.ctx), false, '没注册到 trigger source 时返回 false')
   assert.ok(fake.logs.some((line) => line.level === 'warn' && line.message.includes('inputTriggers')))
-  assert.ok(fake.registration('conversation.input.overlay') !== undefined)
+  assert.equal(fake.entries.length, 0)
 })

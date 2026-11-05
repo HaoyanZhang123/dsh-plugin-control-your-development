@@ -20,7 +20,7 @@
 }
 
 /* 令牌层：tab 根 + 两个宿主内嵌根共享（D-27/D-28） */
-:is(.threadline-app, .threadline-impact-root, .threadline-modal-root) {
+:is(.threadline-app, .threadline-impact-root) {
 
   /* —— 表面 —— */
   --tl-bg: var(--dsw-alias-bg-base, #808080);
@@ -54,6 +54,10 @@
   --tl-warn-label: var(--dsw-alias-state-warn-label, #808080);
   --tl-success: var(--dsw-alias-state-success-primary, #808080);
   --tl-idle: var(--dsw-alias-state-idle-primary, #808080);
+  /* 33 §4 本轮状态：读 / 写+行 / 写−行（只用于状态文字与图例，不单独承载信息） */
+  --tl-status-read: var(--dsw-alias-label-tertiary, #808080);
+  --tl-status-add: var(--dsw-alias-state-success-primary, #808080);
+  --tl-status-del: var(--dsw-alias-state-error-primary, #808080);
 
   /* —— 交互态 —— */
   --tl-hover: var(--dsw-alias-interactive-bg-hover, #80808014);
@@ -104,15 +108,15 @@
 
 /* reduced-motion：关闭脉冲、生长、平滑过渡（03 §15 / 06 N-13）。这是唯一的 viewport media query。 */
 @media (prefers-reduced-motion: reduce) {
-  :is(.threadline-app, .threadline-impact-root, .threadline-modal-root) {
+  :is(.threadline-app, .threadline-impact-root) {
     --tl-dur-fast: 0ms;
     --tl-dur-base: 0ms;
     --tl-dur-slow: 0ms;
   }
 
-  :is(.threadline-app, .threadline-impact-root, .threadline-modal-root) *,
-  :is(.threadline-app, .threadline-impact-root, .threadline-modal-root) *::before,
-  :is(.threadline-app, .threadline-impact-root, .threadline-modal-root) *::after {
+  :is(.threadline-app, .threadline-impact-root) *,
+  :is(.threadline-app, .threadline-impact-root) *::before,
+  :is(.threadline-app, .threadline-impact-root) *::after {
     animation-duration: 0ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0ms !important;

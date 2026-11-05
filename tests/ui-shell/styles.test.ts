@@ -95,12 +95,13 @@ test('每个选择器都挂 .threadline-app 前缀（卸载即干净，不污染
       if (selector === '') continue
       // 允许的前缀（都落在本插件自己的子树上，不会污染宿主）：
       //   .threadline-app                       —— tab 根
-      //   :is(.threadline-app, …impact-root, …modal-root) —— 三者共享的令牌/通用组件
+      //   :is(.threadline-app, …impact-root)   —— 两者共享的令牌/通用组件（T31：modal 根已删除）
       //   .threadline-impact-root / .threadline-modal-root —— 两个宿主内嵌根（T13b 起用，样式挂在各自根下）
       //   .threadline-surface-host              —— D-30 的宿主区域标记容器
       // 真正的宿主级样式（要命中 .threadline-app 之外）只允许在 surface.css，由专门测试守着。
       const allowed = [
         '.threadline-app',
+        ':is(.threadline-app, .threadline-impact-root)',
         ':is(.threadline-app, .threadline-impact-root, .threadline-modal-root)',
         '.threadline-impact-root',
         '.threadline-modal-root',

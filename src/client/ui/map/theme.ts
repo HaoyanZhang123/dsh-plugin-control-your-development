@@ -1,82 +1,76 @@
 /*
- * map/theme.ts —— 星图的视觉映射（03 §4.1 / §13）。
+ * map/theme.ts —— 文件关系图的视觉映射（33 §3/§4/§5）。
  *
  * 纪律：
- * - 颜色**只**引用 tokens.css 的 --tl-*（13.1：组件里不写颜色字面量）；
- * - 6 个文件族用 6 个低饱和令牌色，且颜色不单独承载信息：图例/工具提示同时给文字；
- * - 星图容器的极轻背景网格由 CSS 画，不引入渐变/发光（13.3）。
+ * - 颜色**只**引用 tokens.css 的 --tl-*（不在组件里写颜色字面量）；
+ * - 5 个文件大类用 5 个低饱和令牌色，且颜色不单独承载信息：图例/标签/状态文字同时给；
+ * - 状态色（读/写+/写−）也走令牌；「首见」用强调色；
+ * - 星图旧概念（簇/缩放/网格）已删除：这里只剩文件级图需要的数据属性与常量。
  */
 import type { FileFamily } from '../../../shared/events/index.ts'
 import type { RelationType } from '../../../shared/relations/index.ts'
-import type { MessageKey } from '../../locale/index.ts'
 
-/** 文件族的稳定顺序（图例按它排；与 T06 `Legend` 的 kind 对齐）。 */
-export const FILE_FAMILIES: readonly FileFamily[] = ['doc', 'code', 'data', 'image', 'config', 'other']
+/** 文件大类的稳定顺序（图例按它排；33 §5）。 */
+export const FILE_FAMILIES: readonly FileFamily[] = ['text', 'code', 'data', 'media', 'other']
 
-/**
- * 文件族 → 令牌色。
- * 与 T06 `base.css` 的 `.threadline-swatch[data-kind=...]` 一一对应（同一套语义），
- * 这样图例（T06）和星图（T07）不会出现"同一个族两种颜色"。
- */
+/** 文件大类 → 令牌色（33 §5 表；与 base.css 的 swatch 语义一致）。 */
 export const FAMILY_COLOR: Readonly<Record<FileFamily, string>> = {
-  doc: 'var(--tl-fg-tertiary)',
+  text: 'var(--tl-fg-secondary)',
   code: 'var(--tl-accent)',
   data: 'var(--tl-warn)',
-  image: 'var(--tl-success)',
-  config: 'var(--tl-fg-caption)',
-  other: 'var(--tl-idle)',
+  media: 'var(--tl-success)',
+  other: 'var(--tl-fg-caption)',
 }
 
-/** 文件族 → locale key（03 §16；Lead 2026-11-04 补齐的 6 条 fileFamily.*）。 */
-export const FAMILY_MESSAGE_KEY: Readonly<Record<FileFamily, MessageKey>> = {
-  doc: 'fileFamily.doc',
+/**
+ * 文件大类 → locale key。
+ * 注意：与 03 §16 的 fileFamily.* 一一对应；配置已并入文本、图片/音视频并入媒体。
+ */
+export const FAMILY_MESSAGE_KEY: Readonly<Record<FileFamily, 'fileFamily.text' | 'fileFamily.code' | 'fileFamily.data' | 'fileFamily.media' | 'fileFamily.other'>> = {
+  text: 'fileFamily.text',
   code: 'fileFamily.code',
   data: 'fileFamily.data',
-  image: 'fileFamily.image',
-  config: 'fileFamily.config',
+  media: 'fileFamily.media',
   other: 'fileFamily.other',
 }
 
-/** 关系层的线条语义（CSS 类名后缀 + 线型）。 */
-export interface LayerStyle {
-  /** 线色（令牌）。 */
-  stroke: string
-  /** 虚线？ */
-  dashed: boolean
-  /** 不透明度（结构层更淡，避免抢节点）。 */
-  opacity: number
-}
-
-export const LAYER_STYLE: Readonly<Record<RelationType, LayerStyle>> = {
-  structure: { stroke: 'var(--tl-fg-caption)', dashed: false, opacity: 0.45 },
-  coTurn: { stroke: 'var(--tl-fg-secondary)', dashed: true, opacity: 0.7 },
-  coSession: { stroke: 'var(--tl-fg-tertiary)', dashed: true, opacity: 0.5 },
-  sequence: { stroke: 'var(--tl-warn)', dashed: false, opacity: 0.85 },
-  reference: { stroke: 'var(--tl-link)', dashed: false, opacity: 0.85 },
-}
-
-/** 关系层 → locale key（03 §16）。 */
-export const LAYER_LABEL_KEY: Readonly<Record<RelationType, string>> = {
-  structure: 'relations.structure',
-  coTurn: 'relations.coTurn',
-  coSession: 'relations.coSession',
-  sequence: 'relations.sequence',
-  reference: 'relations.reference',
-}
-
-/** 星图的 DOM 数据属性名（测试/截图断言只认这些，不猜类名）。 */
-export const MAP_DATA = {
-  root: 'data-tl-map',
-  node: 'data-node-path',
-  cluster: 'data-cluster-key',
-  edge: 'data-edge-id',
-  label: 'data-label-for',
-  legend: 'data-tl-legend',
-  zoom: 'data-zoom',
+/** 本轮文件状态标记（33 §4）：只允许读 / 写 +行 / 写 −行 / 首见。 */
+export const STATUS_COLOR = {
+  read: 'var(--tl-status-read)',
+  writeAdd: 'var(--tl-status-add)',
+  writeDel: 'var(--tl-status-del)',
+  firstSeen: 'var(--tl-accent)',
 } as const
 
-/** 星图缩放范围（03 §4.3：0.4×–3×）。 */
-export const MAP_ZOOM = { min: 0.4, max: 3, step: 1.25 } as const
+/** 细节/目录图的节点上限（33 §3 + Lead 2026-11-05 复审：目录默认收到 40，避免"毛线球"）。 */
+export const GRAPH_LIMITS = { directory: 40, turn: 200 } as const
 
-/** 星图 SVG 容器类名（方便宿主/门禁按类名定位，不暴露内部结构）。 */
-export const MAP_CLASS = 'tl-map' as const
+/**
+ * 边上限（33 §3：只取两端在当前集合内的边；仍要防止"一墙线"）。
+ * 目录图不画结构边（同目录本身没有信息量），轮次图保留跨目录结构边；按权重取 top N。
+ */
+export const GRAPH_EDGE_LIMITS = { directory: 120, turn: 160 } as const
+
+/**
+ * 默认画标签的节点数（Lead 2026-11-05 复审：目录图只给 top N 画标签，其余 hover 看）。
+ * 选中/悬停永远额外画。
+ */
+export const GRAPH_LABEL_LIMITS = { directory: 14, turn: 30 } as const
+
+/** 关系层的绘制顺序（结构最底，时序/引用最上；与 relations.ts 的 LAYER_ORDER 一致）。 */
+export const GRAPH_LAYER_ORDER: readonly RelationType[] = ['structure', 'coSession', 'coTurn', 'reference', 'sequence']
+
+/** 图的 DOM 数据属性（测试/截图断言只认这些，不猜类名）。 */
+export const GRAPH_DATA = {
+  root: 'data-tl-graph',
+  node: 'data-file-path',
+  edge: 'data-edge-id',
+  label: 'data-label-for',
+  status: 'data-turn-status',
+  mode: 'data-graph-mode',
+  directory: 'data-graph-directory',
+  truncated: 'data-graph-truncated',
+} as const
+
+/** 图容器类名（宿主/门禁按类名定位）。 */
+export const GRAPH_CLASS = 'tl-graph' as const

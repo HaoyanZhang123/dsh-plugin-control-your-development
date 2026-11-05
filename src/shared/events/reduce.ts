@@ -36,6 +36,19 @@ const COMMAND_TOOLS = new Set(['bash', 'pwsh', 'run_code', 'shell'])
 /** 文件类工具（04 §3.4）。 */
 const FILE_TOOLS = new Set(['read', 'read_image', 'write', 'edit', 'str_replace_editor', 'grep', 'glob'])
 
+/**
+ * 删除动作模式（33 §4/§6）。
+ *
+ * 事实（33 §4：2026-11-05 核查 989 会话 / 88,554 tool calls）：DSH **没有删除文件工具**，
+ * 也没有 delete 类事件，删除只出现在 shell 命令文本里。所以这里只做**命令文本识别**：
+ * 只计数，不保存命令文本、不解析/归属文件路径（文件级「已删除」不可证，33 §4）。
+ *
+ * `\brm\b` 的词边界天然排除 `benrm` / `alarm` / `format` 这类只是包含 rm 字符的词。
+ */
+// 只认**命令段开头**的删除动作（或 cmd/pwsh -c 包装后的开头），避免把
+// `git commit -m "rm old"` / `echo del` 里的“提到”误当成“执行”（T33-verify M6）。
+const DELETE_COMMAND_PATTERN = /(?:^|[\n;|&])\s*(?:(?:cmd|powershell|pwsh)(?:\.exe)?\s+(?:\/c|-command|-c)\s+)?(?:sudo\s+)?(?:rm|del|rmdir|unlink|remove-item)\b|(?:^|[\n;|&])\s*git\s+rm\b/i
+
 interface TurnFileAcc {
   path: string
   key: string
@@ -62,6 +75,8 @@ interface TurnAcc {
   errors: number
   toolCalls: number
   toolFailures: number
+  /** 33 §4：本轮命令文本里识别到的删除动作条数（只计数，不存文本、不归属路径）。 */
+  deleteCommands: number
   messageIds: string[]
   finalMessageId?: string
   userText?: string
@@ -212,6 +227,25 @@ function commandTextOf(name: string, args: Record<string, unknown> | undefined, 
   return truncateText(trimmed, LIMITS.command)
 }
 
+/**
+ * 命令文本是否是删除动作（33 §4）。
+ *
+ * 只读 `args.command`：`run_code` 的 `args.code` 是代码字符串，**绝不解析**（10 §1/§2：
+ * 不猜）；拿不到 command 就当「不是删除命令」，记 0，不伪造。
+ */
+function isDeleteCommand(args: Record<string, unknown> | undefined): boolean {
+  const command = asString(args?.command)
+  if (command === undefined || command.trim() === '') return false
+  return DELETE_COMMAND_PATTERN.test(command)
+}
+
+/** 本轮 deleteCommands +1；轮次不可知时不计（不猜归属，33 §4）。 */
+function countDeleteCommand(turn: TurnAcc | undefined, args: Record<string, unknown> | undefined): void {
+  if (turn === undefined) return
+  if (!isDeleteCommand(args)) return
+  turn.deleteCommands += 1
+}
+
 function newTurn(n: number, start: number): TurnAcc {
   return {
     n,
@@ -223,6 +257,7 @@ function newTurn(n: number, start: number): TurnAcc {
     errors: 0,
     toolCalls: 0,
     toolFailures: 0,
+    deleteCommands: 0,
     messageIds: [],
   }
 }
@@ -645,17 +680,22 @@ export function reduceSession(
         }
         const n = asNumber(data.turn)
         state.toolCalls += 1
+        const args = parseArguments(data.arguments)
         state.calls.set(callId, {
           callId,
           name,
           turn: n ?? null,
           startedAt: at,
-          args: parseArguments(data.arguments),
+          args,
           sub: false,
           finalized: false,
         })
         const turn = turnOf(state, n ?? state.currentTurn)
-        if (turn !== undefined) turn.toolCalls += 1
+        if (turn !== undefined) {
+          turn.toolCalls += 1
+          // 33 §4：命令类工具的删除动作只在这里计数（root 调用的 command 文本）。
+          if (COMMAND_TOOLS.has(name)) countDeleteCommand(turn, args)
+        }
         break
       }
       case 'tool/result': {
@@ -695,17 +735,23 @@ export function reduceSession(
         // 04 §3.4 规则 2：PTC 的 turn 用 root 映射；映射不到 = null，不猜。
         const turnNumber = rootCall?.turn ?? parentCall?.turn ?? null
         state.toolCalls += 1
+        const subArgs = parseArguments(data.arguments)
         state.calls.set(subCallId, {
           callId: subCallId,
           name,
           turn: turnNumber,
           startedAt: at,
-          args: parseArguments(data.arguments),
+          args: subArgs,
           sub: true,
           finalized: false,
         })
         const turn = turnNumber === null ? undefined : state.turns.get(turnNumber)
-        if (turn !== undefined) turn.toolCalls += 1
+        if (turn !== undefined) {
+          turn.toolCalls += 1
+          // 33 §4：PTC 嵌套的 shell 命令同样计数；root `run_code` 的 code 字符串不解析，
+          // 所以同一次删除不会被计两次（root 没有 command 参数）。
+          if (COMMAND_TOOLS.has(name)) countDeleteCommand(turn, subArgs)
+        }
         break
       }
       case 'tool/ptc-dispatch': {
@@ -867,6 +913,8 @@ export function reduceSession(
     }
     if (turn.end !== undefined) turnDetail.end = turn.end
     if (turn.endKind !== undefined) turnDetail.endKind = turn.endKind
+    // 33 §4/§6：可选字段，只在 ≥1 时写（缺省 = 0/不可知，不伪造）。
+    if (turn.deleteCommands > 0) turnDetail.deleteCommands = turn.deleteCommands
     if (turn.finalMessageId !== undefined) turnDetail.finalMessageId = turn.finalMessageId
     if (turn.userText !== undefined) turnDetail.userText = turn.userText
     if (turn.assistantText !== undefined) turnDetail.assistantText = turn.assistantText
