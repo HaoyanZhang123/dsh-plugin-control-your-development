@@ -258,10 +258,10 @@ try {
           // T33 / 2.0：左图 = 文件关系图；右栏 = 目录卡片两列；无检查器。
           { label: 'rail-has-cards', code: 'document.querySelectorAll("[data-directory-card]").length >= 1', equals: true },
           { label: 'rail-card-count-matches', code: 'Number(document.querySelector("[data-directory-rail]").getAttribute("data-card-count")) === document.querySelectorAll("[data-directory-card]").length', equals: true },
-          { label: 'graph-mode-directory', code: 'document.querySelector("[data-tl-graph]").getAttribute("data-graph-mode")', equals: 'directory' },
+          { label: 'graph-mode-overview', code: 'document.querySelector("[data-tl-graph]").getAttribute("data-graph-mode")', equals: 'overview' },
           { label: 'graph-has-file-nodes', code: 'document.querySelectorAll("[data-file-path]").length >= 1', equals: true },
-          { label: 'graph-directory-set', code: '(document.querySelector("[data-tl-graph]").getAttribute("data-graph-directory") || "").length > 0', equals: true },
-          { label: 'graph-node-limit', code: 'Number(document.querySelector("[data-tl-graph]").getAttribute("data-node-count")) <= 40', equals: true },
+          { label: 'graph-cluster-set', code: 'Number(document.querySelector("[data-tl-graph]").getAttribute("data-cluster-count")) >= 1', equals: true },
+          { label: 'graph-node-limit', code: 'Number(document.querySelector("[data-tl-graph]").getAttribute("data-node-count")) <= 140', equals: true },
           { label: 'no-inspector', code: 'document.querySelectorAll("[data-inspector-kind], [data-inspector], .threadline-inspector").length', equals: 0 },
           { label: 'turn-strip-scoped', code: 'document.querySelectorAll("[role=option]").length', equals: 3 },
           { label: 'coverage-pill-text', code: 'document.querySelector("[data-testid=coverage-pill]").textContent.length > 0', equals: true },
@@ -271,6 +271,25 @@ try {
       },
     },
     'tab',
+  )
+
+
+  /* T38 / P0：指定轮次 detail 慢 → loading，不能显示 0 文件 / 假空态 */
+  await capture(
+    {
+      query: 'view=tab&detail=slow&focus=turn:3',
+      outPng: OUT_DIR + '/tab-loading.png',
+      label: 'tab-loading',
+      assert: {
+        contains: [{ selector: '[data-testid="graph"]' }, { selector: '.tl-graph-loading' }],
+        absent: [{ selector: '[data-testid="graph-empty"]' }],
+        expr: [
+          { label: 'loading-text', code: '(function(){var el=document.querySelector(".tl-graph-loading");return el!==null&&el.textContent.indexOf("正在")>=0})()', equals: true },
+        ],
+      },
+    },
+    'tab',
+    'P0：轮次 detail loading 显示正在读取，不是 0 文件的假空态',
   )
 
   /* T21：点目录卡片 → 文件细节（只渲染焦点目录的 SVG 节点；旧「tab 默认就是节点」的证据改到这里） */
@@ -295,8 +314,9 @@ try {
         ],
         expr: [
           { label: 'card-selected-matches-graph', code: '(function(){var c=document.querySelector("[data-directory-card][data-selected=true]");var g=document.querySelector("[data-tl-graph]");return !!c && !!g && g.getAttribute("data-graph-directory")===c.getAttribute("data-directory-card")})()', equals: true },
-          { label: 'graph-still-directory-mode', code: 'document.querySelector("[data-tl-graph]").getAttribute("data-graph-mode")', equals: 'directory' },
+          { label: 'graph-still-overview-mode', code: 'document.querySelector("[data-tl-graph]").getAttribute("data-graph-mode")', equals: 'overview' },
           { label: 'graph-has-nodes-after-switch', code: 'document.querySelectorAll("[data-file-path]").length >= 1', equals: true },
+          { label: 'graph-expanded-cluster', code: 'Number(document.querySelector("[data-tl-graph]").getAttribute("data-node-count")) >= 3', equals: true },
           { label: 'only-one-selected-card', code: 'document.querySelectorAll("[data-directory-card][data-selected=true]").length', equals: 1 },
         ],
       },

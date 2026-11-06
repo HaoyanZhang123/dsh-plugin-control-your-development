@@ -18,9 +18,12 @@ import type { FileNode, FileFamily, TurnDetail } from '../../../shared/events/in
 import { caseKey, type GraphEdge } from '../../../shared/relations/index.ts'
 import { createTranslator, DEFAULT_LOCALE, type Locale, type Translator } from '../../locale/index.ts'
 import { EmptyState } from '../common/index.ts'
+import type { DirectoryCard } from '../rail/directories.ts'
 import { estimateTextWidth, GRAPH_LABEL_FONT_PX, GRAPH_STATUS_FONT_PX, placeLabels, type LabelCandidate, type OccupiedBox } from './labels.ts'
 import { layoutFileGraph, type GraphLayout, type GraphLayoutNode, type GraphMode, type GraphSourceFile } from './graphLayout.ts'
-import { FAMILY_COLOR, FAMILY_MESSAGE_KEY, FILE_FAMILIES, GRAPH_CLASS, GRAPH_DATA, GRAPH_EDGE_LIMITS, GRAPH_LABEL_LIMITS, STATUS_COLOR } from './theme.ts'
+import { aggregateEdgePairs, type EdgePair } from './overview.ts'
+import { OverviewMap } from './OverviewMap.ts'
+import { FAMILY_COLOR, FAMILY_MESSAGE_KEY, FILE_FAMILIES, GRAPH_CLASS, GRAPH_DATA, GRAPH_EDGE_LIMITS, GRAPH_LABEL_LIMITS, RELATION_MESSAGE_KEY, STATUS_COLOR } from './theme.ts'
 import type { FileTurnStatus, TurnStatusSnapshot } from '../turns/status.ts'
 
 const h = React.createElement
@@ -32,11 +35,19 @@ export interface FileGraphTurn {
 }
 
 export interface FileGraphProps {
-  /** 当前集合的全部文件（目录 = 该目录文件；轮次 = 该轮文件）。 */
+  /** 当前集合的全部文件（overview = 全部文件；目录 = 该目录文件；轮次 = 该轮文件）。 */
   files: readonly FileNode[]
   /** 产品级边（内部会按"两端都在当前集合内"过滤后绘制）。 */
   edges?: readonly GraphEdge[]
   mode: GraphMode
+  /** T35：overview 的目录卡片（topFiles 只有 3 个；文件全集仍走 files）。 */
+  cards?: readonly DirectoryCard[]
+  /** T35：overview 的悬浮目录（展开 top12、其他 dim）。 */
+  hoveredDirectoryKey?: string | null
+  /** T35：overview 的 pin 目录（点击卡片 pin/收起；点空白清）。 */
+  focusedDirectoryKey?: string | null
+  onHoverDirectory?: (key: string | null) => void
+  onFocusDirectory?: (key: string | null) => void
   /** 目录键（'' = 根目录）；turn 视图用于副标题回退。 */
   directoryKey: string
   /** 目录展示标签（根目录传 locale map.rootCluster）。 */
@@ -56,9 +67,14 @@ export interface FileGraphProps {
   now: number
   locale?: Locale
   reducedMotion?: boolean
-  /** 空态文案覆盖（缺省 state.emptyFiles）。 */
+  /** 空态文案覆盖（缺省 state.emptyFiles；turn 用 graph.emptyTurn）。 */
   emptyTitle?: string
   testId?: string
+  /** T35：加载中显示骨架/加载文案，不显示 0 文件假空态。 */
+  loading?: boolean
+  loadingLabel?: string
+  /** T35：例如“基于已加载 N 个会话”，显示在图尾。 */
+  coverageNote?: string
 }
 
 const GRAPH_STAGE_HEIGHT = 460
@@ -82,18 +98,6 @@ function turnStatusLabel(status: TurnDetail['status'], t: Translator): string {
   return t('session.unknown')
 }
 
-/** 某一层的线型/颜色语义（CSS 里按 data-layer 给色；这里只给透明度与宽度）。 */
-function edgeOpacity(edge: GraphEdge, options: { mode: GraphMode; focusKey: string | null; statusKeys: ReadonlySet<string> | null }): number {
-  const fromKey = caseKey(edge.from)
-  const toKey = caseKey(edge.to)
-  const touched = options.statusKeys === null || options.statusKeys.has(fromKey) || options.statusKeys.has(toKey)
-  // 默认弱边更淡（避免"一墙线"）；focus 时才加深相关边。
-  const base = options.mode === 'turn' && !touched ? 0.08 : edge.type === 'structure' ? 0.28 : 0.42
-  if (options.focusKey === null) return base
-  if (fromKey === options.focusKey || toKey === options.focusKey) return Math.min(1, base + 0.4)
-  return Math.min(base, 0.1)
-}
-
 function statusParts(status: FileTurnStatus | undefined, t: Translator): Array<{ key: string; text: string; color: string }> {
   if (status === undefined) return []
   const parts: Array<{ key: string; text: string; color: string }> = []
@@ -104,13 +108,53 @@ function statusParts(status: FileTurnStatus | undefined, t: Translator): Array<{
   return parts
 }
 
-/** 文件关系图。 */
+/** 文件关系图：overview（星图总览）/ 目录 / 轮次三种表面。 */
 export function FileGraph(props: FileGraphProps): React.ReactElement {
+  if (props.mode === 'overview') {
+    return h(OverviewMap, {
+      files: props.files,
+      edges: props.edges,
+      mode: 'overview',
+      directoryKey: props.directoryKey,
+      directoryLabel: props.directoryLabel,
+      cards: props.cards,
+      hoveredDirectoryKey: props.hoveredDirectoryKey,
+      focusedDirectoryKey: props.focusedDirectoryKey,
+      onHoverDirectory: props.onHoverDirectory,
+      onFocusDirectory: props.onFocusDirectory,
+      selectedPath: props.selectedPath,
+      onSelectFile: props.onSelectFile,
+      onOpenFile: props.onOpenFile,
+      onHoverFile: props.onHoverFile,
+      now: props.now,
+      locale: props.locale,
+      reducedMotion: props.reducedMotion,
+      emptyTitle: props.emptyTitle,
+      testId: props.testId,
+      loading: props.loading,
+      loadingLabel: props.loadingLabel,
+      coverageNote: props.coverageNote,
+    })
+  }
+  return h(DetailGraph, props as DetailGraphProps)
+}
+
+type DetailGraphProps = FileGraphProps & { mode: 'directory' | 'turn' }
+
+/** 目录/轮次的文件关系图（33 §3；T31 表面，保持 harness 兼容）。 */
+function DetailGraph(props: DetailGraphProps): React.ReactElement {
   const locale: Locale = props.locale ?? DEFAULT_LOCALE
   const t: Translator = React.useMemo(() => createTranslator(locale), [locale])
   const stageRef = React.useRef<HTMLDivElement | null>(null)
   const [size, setSize] = React.useState<{ width: number; height: number }>({ width: 0, height: 0 })
   const [hoverPath, setHoverPath] = React.useState<string | null>(null)
+  const [hoverEdgePairKey, setHoverEdgePairKey] = React.useState<string | null>(null)
+  const [pinnedEdgePairKey, setPinnedEdgePairKey] = React.useState<string | null>(null)
+  // 初次挂载不播放入场动画（截图/SSR 稳定）；只有"轮次/目录切换"这一帧才加过渡。
+  const viewKey = props.mode + ':' + props.directoryKey + ':' + String(props.turn?.turn.n ?? '')
+  const previousViewKey = React.useRef<string | null>(null)
+  const viewChanged = previousViewKey.current !== null && previousViewKey.current !== viewKey
+  if (previousViewKey.current === null || viewChanged) previousViewKey.current = viewKey
 
   React.useEffect(() => {
     const element = stageRef.current
@@ -214,34 +258,46 @@ export function FileGraph(props: FileGraphProps): React.ReactElement {
     const edges = props.edges ?? []
     const statusKeys = props.mode === 'turn' ? new Set(statusByKey.keys()) : null
     // 目录图：不画同目录结构边（没有信息量），其余关系边按权重取 top 120，避免"空图"或"蜘蛛网"。
-    const result: Array<{ edge: GraphEdge; from: GraphLayoutNode; to: GraphLayoutNode }> = []
+    const nodeFiltered: GraphEdge[] = []
     for (const edge of edges) {
       // 目录图里所有节点同目录：结构边（同目录）没有信息量，只画共现/引用等关系，避免"蜘蛛网"。
       if (props.mode === 'directory' && edge.type === 'structure') continue
       const from = nodeByKey.get(caseKey(edge.from))
       const to = nodeByKey.get(caseKey(edge.to))
       if (from === undefined || to === undefined) continue
-      result.push({ edge, from, to })
+      nodeFiltered.push(edge)
     }
-    // 稳定顺序：关系层优先（引用/时序/共现 > 结构）→ 权重降序 → 边 id（截图可复现）。
-    const layerPriority = (type: string): number => {
-      if (type === 'reference') return 0
-      if (type === 'sequence') return 1
-      if (type === 'coTurn') return 2
-      if (type === 'coSession') return 3
-      return 4
-    }
-    const weightOf = (edge: GraphEdge): number => (typeof edge.weight === 'number' ? edge.weight : 0)
-    result.sort((left, right) => {
-      const layer = layerPriority(left.edge.type) - layerPriority(right.edge.type)
-      if (layer !== 0) return layer
-      const weight = weightOf(right.edge) - weightOf(left.edge)
-      if (weight !== 0) return weight
-      return left.edge.id < right.edge.id ? -1 : left.edge.id > right.edge.id ? 1 : 0
+    // T35：同一对文件的多条关系合并成一条视觉线（pair 聚合），按聚合权重取 top N。
+    const pairs = aggregateEdgePairs(nodeFiltered)
+    const limited = pairs.slice(0, props.mode === 'directory' ? GRAPH_EDGE_LIMITS.directory : GRAPH_EDGE_LIMITS.turn)
+    const result = limited.flatMap((pair) => {
+      const from = nodeByKey.get(caseKey(pair.from))
+      const to = nodeByKey.get(caseKey(pair.to))
+      return from === undefined || to === undefined ? [] : [{ pair, from, to }]
     })
-    const limit = GRAPH_EDGE_LIMITS[props.mode]
-    return { list: result.slice(0, limit), total: result.length, statusKeys }
+    return { list: result, total: pairs.length, statusKeys }
   }, [props.edges, props.mode, nodeByKey, statusByKey])
+
+  /** 边浮层：hover 或 点击固定 的 pair（T35 §4）。 */
+  const activeEdgePair = React.useMemo(() => {
+    const key = pinnedEdgePairKey ?? hoverEdgePairKey
+    if (key === null) return null
+    return visibleEdges.list.find((item) => item.pair.key === key)?.pair ?? null
+  }, [pinnedEdgePairKey, hoverEdgePairKey, visibleEdges])
+  const activeEdgePairEdges = React.useMemo(() => {
+    if (activeEdgePair === null) return []
+    const ids = new Set(activeEdgePair.ids)
+    return (props.edges ?? []).filter((edge) => ids.has(edge.id))
+  }, [activeEdgePair, props.edges])
+  const activeEdgePairGroups = React.useMemo(() => {
+    const groups = new Map<string, { labelKey: typeof RELATION_MESSAGE_KEY[keyof typeof RELATION_MESSAGE_KEY]; texts: string[] }>()
+    for (const edge of activeEdgePairEdges) {
+      const existing = groups.get(edge.type) ?? { labelKey: RELATION_MESSAGE_KEY[edge.type], texts: [] }
+      if (existing.texts.length < 4 && !existing.texts.includes(edge.evidence.text)) existing.texts.push(edge.evidence.text)
+      groups.set(edge.type, existing)
+    }
+    return [...groups.entries()].sort((left, right) => left[0].localeCompare(right[0]))
+  }, [activeEdgePairEdges])
 
   const backToDirectory = (): void => {
     props.onExitTurn?.()
@@ -265,9 +321,13 @@ export function FileGraph(props: FileGraphProps): React.ReactElement {
   }
 
   const subtitle =
-    props.mode === 'turn' && props.turn !== null && props.turn !== undefined
-      ? 'T' + String(props.turn.turn.n) + ' · ' + String(layout.total) + ' ' + t('inspector.file')
-      : props.directoryLabel + ' · ' + String(layout.total) + ' ' + t('inspector.file')
+    props.loading === true
+      ? props.mode === 'turn'
+        ? t('graph.loadingTurn', { n: props.turn?.turn.n ?? '' })
+        : t('graph.loading')
+      : props.mode === 'turn' && props.turn !== null && props.turn !== undefined
+        ? 'T' + String(props.turn.turn.n) + ' · ' + String(layout.total) + ' ' + t('inspector.file')
+        : props.directoryLabel + ' · ' + String(layout.total) + ' ' + t('inspector.file')
 
   const summary = props.mode === 'turn' && props.turn !== null && props.turn !== undefined ? props.turn.status.summary : null
   const deleteText =
@@ -380,7 +440,52 @@ export function FileGraph(props: FileGraphProps): React.ReactElement {
     return elements
   })
 
+  // T35 §4：边 hover/点击固定的 evidence 浮层（不是旧检查器）。
+  const edgeEvidencePanel =
+    activeEdgePair === null
+      ? null
+      : h(
+          'div',
+          { className: 'tl-graph-evidence', [GRAPH_DATA.evidence]: 'edge', role: 'dialog', 'aria-label': t('graph.evidenceTitle') },
+          h(
+            'div',
+            { className: 'tl-graph-evidence-head' },
+            h('b', { className: 'tl-graph-evidence-title' }, t('graph.evidenceTitle')),
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'tl-graph-evidence-close',
+                'aria-label': t('ui.close'),
+                onClick: () => {
+                  setPinnedEdgePairKey(null)
+                  setHoverEdgePairKey(null)
+                },
+              },
+              '×',
+            ),
+          ),
+          h('div', { className: 'tl-graph-evidence-path' }, activeEdgePair.from + ' ↔ ' + activeEdgePair.to),
+          h(
+            'div',
+            { className: 'tl-graph-evidence-meta' },
+            h('span', null, t('graph.fileRelations', { n: activeEdgePair.count })),
+            ...activeEdgePair.typeList.map((type) => h('span', { key: type, 'data-evidence-type': type }, t(RELATION_MESSAGE_KEY[type]))),
+          ),
+          activeEdgePairGroups.length === 0
+            ? h('p', { className: 'tl-graph-evidence-empty' }, t('state.unknown'))
+            : activeEdgePairGroups.map(([type, group]) =>
+                h(
+                  'div',
+                  { key: type, className: 'tl-graph-evidence-group', 'data-evidence-type': type },
+                  h('span', { className: 'tl-graph-evidence-type' }, t(group.labelKey)),
+                  ...group.texts.map((text, index) => h('p', { key: index, className: 'tl-graph-evidence-text' }, text)),
+                ),
+              ),
+        )
+
   const empty = props.files.length === 0
+  const emptyTitle = props.emptyTitle ?? (props.mode === 'turn' ? t('graph.emptyTurn') : t('state.emptyFiles'))
   return h(
     'div',
     {
@@ -391,6 +496,7 @@ export function FileGraph(props: FileGraphProps): React.ReactElement {
       'data-node-count': layout.shown,
       'data-file-count': layout.total,
       'data-reduced-motion': props.reducedMotion === true ? 'true' : 'false',
+      'data-animate': viewChanged ? 'true' : 'false',
       'data-testid': props.testId,
     },
     h(
@@ -455,12 +561,20 @@ export function FileGraph(props: FileGraphProps): React.ReactElement {
     h(
       'div',
       { className: 'tl-graph-stage', ref: stageRef, 'data-graph-stage': 'true' },
-      empty
-        ? h(EmptyState, { title: props.emptyTitle ?? t('state.emptyFiles'), mark: '◌', testId: 'graph-empty' })
-        : h(
+      props.loading === true
+        ? h(
+            'div',
+            { className: 'tl-graph-loading', role: 'status', [GRAPH_DATA.loading]: 'true' },
+            h('span', { className: 'tl-graph-loading-dot', 'aria-hidden': true }),
+            h('span', null, props.loadingLabel ?? (props.mode === 'turn' ? t('graph.loadingTurn', { n: props.turn?.turn.n ?? '' }) : t('graph.loading'))),
+          )
+        : empty
+          ? h(EmptyState, { title: emptyTitle, mark: '◌', testId: 'graph-empty' })
+          : h(
             'svg',
             {
               className: 'tl-graph-svg',
+              key: 'svg:' + props.mode + ':' + props.directoryKey + ':' + String(props.turn?.turn.n ?? ''),
               viewBox: '0 0 ' + String(layout.width) + ' ' + String(layout.height),
               preserveAspectRatio: 'xMidYMid meet',
               role: 'group',
@@ -470,26 +584,67 @@ export function FileGraph(props: FileGraphProps): React.ReactElement {
               onKeyDown: onStageKeyDown,
             },
             h('rect', { x: 0, y: 0, width: 1, height: 1, fill: 'transparent', 'data-graph-background': 'true' }),
-            ...visibleEdges.list.map(({ edge, from, to }) =>
-              h('line', {
-                key: 'e:' + edge.id,
-                className: 'tl-graph-edge',
-                [GRAPH_DATA.edge]: edge.id,
-                'data-layer': edge.type,
-                'data-edge-from': edge.from,
-                'data-edge-to': edge.to,
-                x1: from.x,
-                y1: from.y,
-                x2: to.x,
-                y2: to.y,
-                strokeWidth: edge.type === 'structure' ? 1 : 1.2,
-                strokeDasharray: edge.type === 'coTurn' || edge.type === 'coSession' ? '3 4' : undefined,
-                opacity: edgeOpacity(edge, { mode: props.mode, focusKey, statusKeys: visibleEdges.statusKeys }),
-              }),
-            ),
+            ...visibleEdges.list.flatMap(({ pair, from, to }) => {
+              const touchingFocus =
+                focusKey !== null && (caseKey(pair.from) === focusKey || caseKey(pair.to) === focusKey)
+              const opacity =
+                focusKey === null
+                  ? pair.typeList.includes('structure')
+                    ? 0.28
+                    : 0.42
+                  : touchingFocus
+                    ? 0.85
+                    : 0.08
+              const badge = pair.typeList.length > 1
+              const elements: React.ReactElement[] = [
+                h('line', {
+                  key: 'e:' + pair.key,
+                  className: 'tl-graph-edge',
+                  [GRAPH_DATA.edge]: pair.key,
+                  [GRAPH_DATA.edgePair]: pair.key,
+                  [GRAPH_DATA.edgeTypes]: pair.typeList.join('|'),
+                  'data-layer': pair.typeList[pair.typeList.length - 1],
+                  'data-edge-from': pair.from,
+                  'data-edge-to': pair.to,
+                  'data-edge-count': pair.count,
+                  x1: from.x,
+                  y1: from.y,
+                  x2: to.x,
+                  y2: to.y,
+                  strokeWidth: pair.typeList.includes('structure') ? 1 : 1.2,
+                  strokeDasharray: pair.typeList.includes('coTurn') || pair.typeList.includes('coSession') ? '3 4' : undefined,
+                  opacity,
+                  onPointerEnter: () => setHoverEdgePairKey(pair.key),
+                  onPointerLeave: () => setHoverEdgePairKey(null),
+                  onClick: (event: React.MouseEvent) => {
+                    event.stopPropagation()
+                    setPinnedEdgePairKey((value) => (value === pair.key ? null : pair.key))
+                  },
+                }),
+              ]
+              if (badge) {
+                elements.push(
+                  h(
+                    'text',
+                    {
+                      key: 'eb:' + pair.key,
+                      className: 'tl-edge-badge',
+                      x: (from.x + to.x) / 2,
+                      y: (from.y + to.y) / 2 - 3,
+                      textAnchor: 'middle',
+                      'data-edge-badge': pair.key,
+                    },
+                    h('title', null, pair.typeList.map((type) => t(RELATION_MESSAGE_KEY[type])).join(' · ')),
+                    '+' + String(pair.typeList.length - 1),
+                  ),
+                )
+              }
+              return elements
+            }),
             ...nodeElements,
             ...labelElements,
           ),
+      edgeEvidencePanel,
     ),
     h(
       'div',
@@ -508,7 +663,10 @@ export function FileGraph(props: FileGraphProps): React.ReactElement {
       layout.truncated
         ? h('span', { className: 'tl-graph-note', [GRAPH_DATA.truncated]: 'true' }, t('map.truncatedNodes', { shown: layout.shown, total: layout.total }))
         : null,
-      nodeKeys.size === 0 && !empty ? h('span', { className: 'tl-graph-note' }, t('state.unknown')) : null,
+      nodeKeys.size === 0 && !empty && props.loading !== true ? h('span', { className: 'tl-graph-note' }, t('state.unknown')) : null,
+      props.coverageNote !== undefined && props.coverageNote !== ''
+        ? h('span', { className: 'tl-graph-note', [GRAPH_DATA.coverage]: 'true' }, props.coverageNote)
+        : null,
     ),
   )
 }

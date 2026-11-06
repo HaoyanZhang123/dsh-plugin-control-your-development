@@ -20,8 +20,11 @@ import {
 import { caseKey } from '../../src/shared/relations/index.ts'
 import {
   FOCUS_DIM_OPACITY,
+  aggregateEdgePairs,
+  filterEdgesByTypes,
   nodeOpacity,
   prepareEdges,
+  relationTypeCounts,
   selectVisibleEdges,
   neighborKeysOf,
   RELATION_LEGEND_ORDER,
@@ -229,4 +232,47 @@ test('收口确定性：同一份 rawEdges 两次 prepareEdges 结果逐条一�
     finalizeGraph(dataset.edges).edges.map((edge) => edge.id),
     finalizeGraph(dataset.edges).edges.map((edge) => edge.id),
   )
+})
+
+/* ================================================================== *
+ * T35：pair 聚合 / 关系类型过滤（视觉线合并 + chip 过滤）
+ * ================================================================== */
+
+test('T35 pair 聚合：合并后的条数守恒、pair 数 ≤ 边数、两次聚合逐字段一致', () => {
+  const prepared = prepareEdges(makeDataset().rawEdges).edges
+  const pairs = aggregateEdgePairs(prepared)
+  assert.ok(pairs.length > 0)
+  assert.ok(pairs.length <= prepared.length)
+  assert.equal(
+    pairs.reduce((sum, pair) => sum + pair.count, 0),
+    prepared.length,
+    '聚合不能丢边（count 之和 = 原始边数）',
+  )
+  const ids = pairs.flatMap((pair) => pair.ids).sort()
+  assert.deepEqual(ids, prepared.map((edge) => edge.id).sort())
+  assert.deepEqual(aggregateEdgePairs(prepared), pairs)
+  for (const pair of pairs) {
+    assert.equal(new Set(pair.ids).size, pair.ids.length, '同一对文件不能重复收同一条边')
+    assert.ok(pair.typeList.length >= 1)
+  }
+})
+
+test('T35 类型计数与过滤：计数之和 = 边数；过滤只留所选类型且不改变顺序', () => {
+  const prepared = prepareEdges(makeDataset().rawEdges).edges
+  const counts = relationTypeCounts(prepared)
+  assert.equal(
+    counts.reduce((sum, item) => sum + item.count, 0),
+    prepared.length,
+  )
+  assert.ok(counts.length >= 1)
+  const only = new Set([counts[0].type])
+  const filtered = filterEdgesByTypes(prepared, only)
+  assert.ok(filtered.length > 0)
+  assert.equal(filtered.every((edge) => edge.type === counts[0].type), true)
+  assert.deepEqual(
+    filtered.map((edge) => edge.id),
+    prepared.filter((edge) => edge.type === counts[0].type).map((edge) => edge.id),
+    '过滤保持原顺序',
+  )
+  assert.equal(filterEdgesByTypes(prepared, null).length, prepared.length)
 })

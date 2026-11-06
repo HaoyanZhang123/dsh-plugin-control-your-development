@@ -43,19 +43,30 @@ export const STATUS_COLOR = {
 } as const
 
 /** 细节/目录图的节点上限（33 §3 + Lead 2026-11-05 复审：目录默认收到 40，避免"毛线球"）。 */
-export const GRAPH_LIMITS = { directory: 40, turn: 200 } as const
+export const GRAPH_LIMITS = { overview: 0, directory: 40, turn: 200 } as const
 
 /**
  * 边上限（33 §3：只取两端在当前集合内的边；仍要防止"一墙线"）。
  * 目录图不画结构边（同目录本身没有信息量），轮次图保留跨目录结构边；按权重取 top N。
  */
-export const GRAPH_EDGE_LIMITS = { directory: 120, turn: 160 } as const
+export const GRAPH_EDGE_LIMITS = { overview: 0, directory: 120, turn: 160 } as const
 
 /**
  * 默认画标签的节点数（Lead 2026-11-05 复审：目录图只给 top N 画标签，其余 hover 看）。
- * 选中/悬停永远额外画。
+ * 选中/悬停永远额外画。overview 的标签由 overview.ts 控制（0 = 不适用）。
  */
-export const GRAPH_LABEL_LIMITS = { directory: 14, turn: 30 } as const
+export const GRAPH_LABEL_LIMITS = { overview: 0, directory: 14, turn: 30 } as const
+
+/** 关系层 → locale key（总览/浮层展示用；文案唯一来源仍是 locale）。 */
+export const RELATION_MESSAGE_KEY: Readonly<
+  Record<RelationType, 'relations.structure' | 'relations.coTurn' | 'relations.coSession' | 'relations.sequence' | 'relations.reference'>
+> = {
+  structure: 'relations.structure',
+  coTurn: 'relations.coTurn',
+  coSession: 'relations.coSession',
+  sequence: 'relations.sequence',
+  reference: 'relations.reference',
+}
 
 /** 关系层的绘制顺序（结构最底，时序/引用最上；与 relations.ts 的 LAYER_ORDER 一致）。 */
 export const GRAPH_LAYER_ORDER: readonly RelationType[] = ['structure', 'coSession', 'coTurn', 'reference', 'sequence']
@@ -70,6 +81,16 @@ export const GRAPH_DATA = {
   mode: 'data-graph-mode',
   directory: 'data-graph-directory',
   truncated: 'data-graph-truncated',
+  /** T35：目录簇 / 目录级弱关系 / pair 聚合 / 关系类型 / 证据浮层 / 关系过滤 chip。 */
+  cluster: 'data-cluster-key',
+  dirEdge: 'data-dir-edge',
+  edgePair: 'data-edge-pair',
+  edgeTypes: 'data-edge-types',
+  evidence: 'data-graph-evidence',
+  filter: 'data-relation-filter',
+  reset: 'data-graph-reset',
+  loading: 'data-graph-loading',
+  coverage: 'data-coverage-note',
 } as const
 
 /** 图容器类名（宿主/门禁按类名定位）。 */

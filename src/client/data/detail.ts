@@ -67,6 +67,10 @@ export interface DetailStore {
   /** 清空全部缓存。 */
   clear(): void
   /**
+   * 只读计数器（T37 可观测性；**只有数字与错误码**，不含路径/正文，可直接进诊断/测试）。
+   */
+  readonly stats: DetailStoreStats
+  /**
    * 设置/清除默认 cwd（T13e）：共享 store 的调用方（impact / command / tab / warmup）
    * 只需给一次归属，后续 `request` 自动带上；cwd 变化会清空旧缓存（不同工作区不可复用）。
    */
@@ -82,6 +86,25 @@ export interface DetailStore {
   subscribe(listener: (sessionId: string, entry: DetailEntry) => void): () => void
   /** 释放：中止在途请求、清空缓存与订阅。 */
   dispose(): void
+}
+
+/**
+ * 详情缓存计数器（T37）：用来回答「tab 打开时到底命中缓存还是又发了一次 `/detail`」。
+ * 只含数字与该错误的 code —— 不含 sessionId / 路径 / 正文。
+ */
+export interface DetailStoreStats {
+  /** `request()` 调用次数。 */
+  requests: number
+  /** 命中已就绪缓存（未发请求）的次数。 */
+  hits: number
+  /** 复用同会话在途请求的次数（未发新请求）。 */
+  deduped: number
+  /** 真正发出 `/detail` 的次数。 */
+  fetches: number
+  /** 失败次数。 */
+  errors: number
+  /** 最近一次失败的错误码（不含正文/路径）。 */
+  lastErrorCode?: string
 }
 
 /** 构造选项。 */
@@ -121,6 +144,13 @@ export function createDetailStore(options: DetailStoreOptions): DetailStore {
   let abort: AbortController | undefined
   let disposed = false
   let defaultCwd = normalizeCwd(options.cwd)
+  /** 计数器（T37 可观测性）：只有数字/错误码，不落路径或正文。 */
+  const stats: DetailStoreStats = { requests: 0, hits: 0, deduped: 0, fetches: 0, errors: 0 }
+
+  const recordError = (code: string | undefined): void => {
+    stats.errors += 1
+    if (code !== undefined) stats.lastErrorCode = code
+  }
 
   const notify = (entry: DetailEntry): void => {
     for (const listener of listeners) {
@@ -197,6 +227,7 @@ export function createDetailStore(options: DetailStoreOptions): DetailStore {
       // T13e：cwd 只来自调用方（options）或已显式设置的默认值；不做任何推断。
       const cwd = normalizeCwd(requested?.cwd) || defaultCwd
       if (cwd !== '') body.cwd = cwd
+      stats.fetches += 1
       const result = await postJson(options.fetch, 'detail', body, abort.signal)
 
       if (disposed || generation !== requestGeneration) {
@@ -211,6 +242,7 @@ export function createDetailStore(options: DetailStoreOptions): DetailStore {
           result.failure.kind === 'route'
             ? result.failure.error
             : { code: 'threadline/internal', message: result.failure.message }
+        recordError(error.code)
         const failed: DetailEntry = {
           sessionId,
           status: 'error',
@@ -229,6 +261,7 @@ export function createDetailStore(options: DetailStoreOptions): DetailStore {
 
       const session = asRecord(result.value.session) as unknown as SessionDetail | undefined
       if (session === undefined || typeof session.id !== 'string') {
+        recordError('threadline/internal')
         const malformed: DetailEntry = {
           sessionId,
           status: 'error',
@@ -270,7 +303,9 @@ export function createDetailStore(options: DetailStoreOptions): DetailStore {
 
   const store: DetailStore = {
     request(sessionId: string, requested?: DetailRequestOptions): Promise<DetailEntry> {
+      stats.requests += 1
       if (disposed || typeof sessionId !== 'string' || sessionId === '') {
+        recordError('threadline/bad-request')
         return Promise.resolve({
           sessionId: typeof sessionId === 'string' ? sessionId : '',
           status: 'error',
@@ -284,11 +319,15 @@ export function createDetailStore(options: DetailStoreOptions): DetailStore {
       }
       const cached = entries.get(sessionId)
       if (shouldReuse(cached, requested)) {
+        stats.hits += 1
         touch(cached)
         return Promise.resolve(cached)
       }
       const pending = inflight.get(sessionId)
-      if (pending !== undefined) return pending
+      if (pending !== undefined) {
+        stats.deduped += 1
+        return pending
+      }
       const promise = run(sessionId, requested).finally(() => {
         inflight.delete(sessionId)
       })
@@ -312,6 +351,9 @@ export function createDetailStore(options: DetailStoreOptions): DetailStore {
     },
     clear(): void {
       entries.clear()
+    },
+    get stats(): DetailStoreStats {
+      return { ...stats }
     },
     setDefaultCwd(nextCwd: string | undefined): void {
       const normalized = normalizeCwd(nextCwd)

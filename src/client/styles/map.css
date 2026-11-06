@@ -341,3 +341,357 @@
 :is(.threadline-app, .threadline-impact-root) .tl-graph[data-reduced-motion='true'] .tl-fnode-core {
   transition: none;
 }
+
+/* ================================================================
+ * 星图总览（T35，脉络 1.1 默认左图）
+ * 目录簇 + 聚合弱边 + 关系类型过滤 + 图内证据浮层 + 拖动/重置
+ * ================================================================ */
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-block-end: 1px solid var(--tl-border-weak);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-filter-hint {
+  color: var(--tl-fg-caption);
+  font-size: var(--tl-fs-caption);
+  margin-inline-end: 2px;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-block-size: 22px;
+  padding: 2px 8px;
+  border: 1px solid var(--tl-border-weak);
+  border-radius: var(--tl-radius-pill);
+  background: transparent;
+  color: var(--tl-fg-secondary);
+  font: inherit;
+  font-size: var(--tl-fs-caption);
+  cursor: pointer;
+  transition: background var(--tl-dur-base) ease, border-color var(--tl-dur-base) ease, color var(--tl-dur-base) ease;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-filter:hover {
+  background: var(--tl-hover);
+  color: var(--tl-fg);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-filter[aria-pressed='true'] {
+  border-color: var(--tl-accent);
+  color: var(--tl-fg);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-filter-count {
+  color: var(--tl-fg-caption);
+  font-variant-numeric: tabular-nums;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-filter[aria-pressed='true'] .tl-graph-filter-count {
+  color: var(--tl-accent);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-ocluster {
+  cursor: pointer;
+  transition: opacity var(--tl-dur-base) ease;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-ocluster[data-dim='true'] {
+  opacity: 0.4;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-ocluster-box {
+  fill: var(--tl-hover);
+  fill-opacity: 0.35;
+  stroke: var(--tl-border-weak);
+  stroke-width: 1;
+  stroke-dasharray: 3 5;
+  transition: fill var(--tl-dur-base) ease, fill-opacity var(--tl-dur-base) ease, stroke var(--tl-dur-base) ease, stroke-width var(--tl-dur-base) ease;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-ocluster[data-expanded='true'] .tl-ocluster-box {
+  fill: var(--tl-surface-raised);
+  fill-opacity: 0.55;
+  stroke: var(--tl-accent);
+  stroke-width: 1.5;
+  stroke-dasharray: none;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-ocluster[data-focused='true'] .tl-ocluster-box {
+  stroke: var(--tl-accent);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-ocluster-label {
+  fill: var(--tl-fg);
+  font-size: 11px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-ocluster-meta {
+  fill: var(--tl-fg-caption);
+  font-size: 9px;
+  pointer-events: none;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-ocluster-more {
+  fill: var(--tl-fg-tertiary);
+  font-size: 9px;
+  pointer-events: none;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-ofile {
+  cursor: grab;
+  transition: opacity var(--tl-dur-base) ease;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-ofile[data-dim='true'] {
+  opacity: 0.35;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-ofile[data-dragging='true'] {
+  cursor: grabbing;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-ofile-core {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform var(--tl-dur-base) ease, fill-opacity var(--tl-dur-base) ease, stroke var(--tl-dur-base) ease, filter var(--tl-dur-base) ease;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-ofile:hover .tl-ofile-core,
+:is(.threadline-app, .threadline-impact-root) .tl-ofile[data-selected='true'] .tl-ofile-core {
+  transform: scale(1.45);
+  filter: drop-shadow(0 0 3px var(--tl-accent));
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-ofile-label {
+  fill: var(--tl-fg-secondary);
+  font-size: 9.5px;
+  paint-order: stroke;
+  stroke: var(--tl-surface);
+  stroke-width: 1.5px;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-dir-edge {
+  stroke: var(--tl-border-strong);
+  pointer-events: stroke;
+  transition: opacity var(--tl-dur-base) ease, stroke var(--tl-dur-base) ease;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-dir-edge:hover {
+  stroke: var(--tl-accent);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-edge-badge {
+  fill: var(--tl-fg-tertiary);
+  font-size: 9px;
+  paint-order: stroke;
+  stroke: var(--tl-surface);
+  stroke-width: 2px;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-evidence {
+  position: absolute;
+  inset-block-end: 10px;
+  inset-inline-end: 10px;
+  inline-size: min(340px, calc(100% - 20px));
+  max-block-size: 72%;
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--tl-border);
+  border-radius: var(--tl-radius-md);
+  background: var(--tl-surface-raised);
+  box-shadow: var(--tl-shadow-2);
+  transition: opacity var(--tl-dur-base) ease, transform var(--tl-dur-base) ease;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-evidence-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-evidence-title {
+  color: var(--tl-fg);
+  font-size: var(--tl-fs-body);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-evidence-close {
+  inline-size: 22px;
+  block-size: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--tl-radius-sm);
+  background: transparent;
+  color: var(--tl-fg-tertiary);
+  font: inherit;
+  cursor: pointer;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-evidence-close:hover {
+  background: var(--tl-hover);
+  color: var(--tl-fg);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-evidence-path {
+  margin-block-start: 4px;
+  color: var(--tl-fg);
+  font-family: var(--tl-mono);
+  font-size: var(--tl-fs-caption);
+  overflow-wrap: anywhere;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-evidence-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-block-start: 6px;
+  color: var(--tl-fg-caption);
+  font-size: var(--tl-fs-caption);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-evidence-group {
+  margin-block-start: 8px;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-evidence-type {
+  color: var(--tl-fg-secondary);
+  font-size: var(--tl-fs-caption);
+  font-weight: 600;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-evidence-text {
+  margin: 2px 0 0 8px;
+  color: var(--tl-fg-caption);
+  font-size: var(--tl-fs-caption);
+  overflow-wrap: anywhere;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-evidence-empty {
+  margin: 6px 0 0;
+  color: var(--tl-fg-caption);
+  font-size: var(--tl-fs-caption);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  block-size: 100%;
+  color: var(--tl-fg-secondary);
+  font-size: var(--tl-fs-body);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-loading-dot {
+  inline-size: 8px;
+  block-size: 8px;
+  border-radius: 50%;
+  background: var(--tl-accent);
+  animation: threadline-graph-pulse 1.2s ease-in-out infinite;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-reset {
+  margin-inline-start: auto;
+  padding: 2px 8px;
+  border: 1px solid var(--tl-border-weak);
+  border-radius: var(--tl-radius-pill);
+  background: transparent;
+  color: var(--tl-fg-secondary);
+  font: inherit;
+  font-size: var(--tl-fs-caption);
+  cursor: pointer;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-reset:hover {
+  background: var(--tl-hover);
+  color: var(--tl-fg);
+}
+
+@keyframes threadline-graph-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :is(.threadline-app, .threadline-impact-root) .tl-ocluster,
+  :is(.threadline-app, .threadline-impact-root) .tl-ocluster-box,
+  :is(.threadline-app, .threadline-impact-root) .tl-ofile,
+  :is(.threadline-app, .threadline-impact-root) .tl-ofile-core,
+  :is(.threadline-app, .threadline-impact-root) .tl-dir-edge,
+  :is(.threadline-app, .threadline-impact-root) .tl-graph-evidence {
+    transition: none;
+  }
+
+  :is(.threadline-app, .threadline-impact-root) .tl-graph-loading-dot {
+    animation: none;
+  }
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph[data-reduced-motion='true'] .tl-ocluster,
+:is(.threadline-app, .threadline-impact-root) .tl-graph[data-reduced-motion='true'] .tl-ocluster-box,
+:is(.threadline-app, .threadline-impact-root) .tl-graph[data-reduced-motion='true'] .tl-ofile,
+:is(.threadline-app, .threadline-impact-root) .tl-graph[data-reduced-motion='true'] .tl-ofile-core,
+:is(.threadline-app, .threadline-impact-root) .tl-graph[data-reduced-motion='true'] .tl-dir-edge,
+:is(.threadline-app, .threadline-impact-root) .tl-graph[data-reduced-motion='true'] .tl-graph-evidence {
+  transition: none;
+}
+
+/* T35 对比度与过渡：浅色主题下簇框用 sunken 层，避免白底白框；展开/轮次切换 180-240ms 淡入缩放 */
+:is(.threadline-app, .threadline-impact-root) .tl-ocluster-box {
+  fill: var(--tl-surface-sunken);
+  stroke: var(--tl-border);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-ocluster[data-expanded='true'] .tl-ocluster-box {
+  fill: var(--tl-surface-raised);
+  stroke: var(--tl-accent);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph[data-animate='true'] .tl-ocluster-box-wrap {
+  animation: threadline-ocluster-in var(--tl-dur-base) ease;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph[data-animate='true'] .tl-graph-svg {
+  animation: threadline-graph-fade var(--tl-dur-slow) ease;
+}
+
+@keyframes threadline-graph-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes threadline-ocluster-in {
+  from { opacity: 0.4; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :is(.threadline-app, .threadline-impact-root) .tl-ocluster-box-wrap,
+  :is(.threadline-app, .threadline-impact-root) .tl-graph-svg {
+    animation: none;
+  }
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph[data-reduced-motion='true'] .tl-ocluster-box-wrap,
+:is(.threadline-app, .threadline-impact-root) .tl-graph[data-reduced-motion='true'] .tl-graph-svg {
+  animation: none;
+}
+
+
+:is(.threadline-app, .threadline-impact-root) .tl-ofile-halo {
+  pointer-events: none;
+  transition: fill-opacity var(--tl-dur-fast) ease;
+}

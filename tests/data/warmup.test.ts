@@ -19,10 +19,12 @@ import {
   ensureWarmupForDetail,
   getWarmupState,
   isWarmupActive,
+  prefetchSessionDetail,
   registerWarmupDetailStore,
   scopeFromWarmup,
   threadlineWorkspaceKey,
   warmupDetailTargets,
+  warmupDiagnostics,
 } from '../../src/client/data/warmup.ts'
 import type { WarmupSession } from '../../src/client/data/warmup.ts'
 import {
@@ -30,6 +32,7 @@ import {
   NOW,
   createFakeClock,
   createFakeFetch,
+  createGate,
   detailPayload,
   progress,
   snapshotPayload,
@@ -304,4 +307,132 @@ test('T13e warmupDetailTargets：running 优先、最近活动补位、去重', 
   assert.equal(new Set(targets.map((target) => target.id)).size, targets.length)
   const oneRecent = warmupDetailTargets(snapshot, SESSIONS, { recentLimit: 1 })
   assert.deepEqual(oneRecent.map((target) => target.id), ['s-run', 's-recent'])
+})
+
+/* ------------------------------------------------------------------ *
+ * T37 · 按需 detail 预取（聊天页 / impact 入口；35 §2.1）
+ *
+ * 目标：tab 打开时**命中缓存**，且重复调用不重复请求；失败不反复打（按 updatedAt 退避）。
+ * ------------------------------------------------------------------ */
+
+test('T37 prefetchSessionDetail 幂等：同一 updatedAt 连调 3 次只发 1 次 /detail', async () => {
+  const h = harness()
+  const results = await Promise.all([
+    prefetchSessionDetail(h.store, { sessionId: 's-run', updatedAt: NOW, cwd: CWD }),
+    prefetchSessionDetail(h.store, { sessionId: 's-run', updatedAt: NOW, cwd: CWD }),
+    prefetchSessionDetail(h.store, { sessionId: 's-run', updatedAt: NOW, cwd: CWD }),
+  ])
+  assert.equal(h.fake.callsOf('detail').length, 1, '在途只发一次')
+  assert.equal(h.store.peek('s-run')?.status, 'ready')
+  assert.equal(results[0]?.status, 'ready')
+
+  // 已经就绪 + 同一 updatedAt：再调也只命中缓存（去重发生在预取层，不发请求）
+  await prefetchSessionDetail(h.store, { sessionId: 's-run', updatedAt: NOW, cwd: CWD })
+  assert.equal(h.fake.callsOf('detail').length, 1)
+  assert.equal(h.store.stats.fetches, 1, '只有第一次真正发了请求')
+  const diag = warmupDiagnostics()
+  assert.equal(diag.detailRequests, 1)
+  assert.equal(diag.detailDeduped >= 3, true, '第 2/3/4 次都在预取层被去重')
+})
+
+test('T37 prefetchSessionDetail：会话推进（updatedAt 变）才重拉，body 带 cwd', async () => {
+  const h = harness()
+  await prefetchSessionDetail(h.store, { sessionId: 's-run', updatedAt: NOW, cwd: CWD })
+  const first = h.fake.callsOf('detail')[0]
+  assert.equal(first.body.sessionId, 's-run')
+  assert.equal(first.body.cwd, CWD)
+  // updatedAt 是**客户端判新旧用**的，不上行（host 协议没有这个字段）
+  assert.equal('updatedAt' in first.body, false)
+
+  await prefetchSessionDetail(h.store, { sessionId: 's-run', updatedAt: NOW + 1_000, cwd: CWD })
+  const calls = h.fake.callsOf('detail')
+  assert.equal(calls.length, 2, 'updatedAt 变了才重拉')
+  assert.equal(h.store.peek('s-run')?.updatedAt, NOW + 1_000, '缓存记住新的 updatedAt 供 UI 判新旧')
+})
+
+test('T37 prefetchSessionDetail 在途去重：并发调用不重复 /detail', async () => {
+  const h = harness()
+  const gate = createGate()
+  h.fake.on('detail', async (body) => {
+    await gate.wait()
+    return detailPayload({ id: String(body.sessionId), updatedAt: NOW })
+  })
+  const first = prefetchSessionDetail(h.store, { sessionId: 's-run', updatedAt: NOW, cwd: CWD })
+  const second = prefetchSessionDetail(h.store, { sessionId: 's-run', updatedAt: NOW, cwd: CWD })
+  await h.clock.flush()
+  assert.equal(h.fake.callsOf('detail').length, 1)
+  gate.openAll()
+  const [a, b] = await Promise.all([first, second])
+  assert.equal(a?.status, 'ready')
+  assert.equal(b !== undefined, true)
+  assert.equal(h.fake.callsOf('detail').length, 1)
+  assert.equal(warmupDiagnostics().detailDeduped >= 1, true)
+})
+
+test('T37 prefetchSessionDetail 归属未知不猜：无 cwd / 空 sessionId 不发请求；有默认 cwd 才发', async () => {
+  const h = harness()
+  const store = createDetailStore({ fetch: h.fake.fetch, now: h.clock.now })
+  assert.equal(await prefetchSessionDetail(store, { sessionId: 's-1' }), undefined)
+  assert.equal(await prefetchSessionDetail(store, { sessionId: '', cwd: CWD }), undefined)
+  assert.equal(await prefetchSessionDetail(store, { sessionId: '   ', cwd: CWD }), undefined)
+  assert.equal(h.fake.callsOf('detail').length, 0, '不猜归属 → 不发请求')
+
+  store.setDefaultCwd(CWD)
+  const entry = await prefetchSessionDetail(store, { sessionId: 's-1' })
+  assert.equal(entry?.status, 'ready')
+  assert.equal(h.fake.callsOf('detail')[0].body.cwd, CWD)
+  store.dispose()
+})
+
+test('T37 prefetchSessionDetail 失败按 updatedAt 退避（不因每次渲染/轮询反复打）', async () => {
+  const h = harness()
+  h.fake.on('detail', () => ({ ok: false, error: { code: 'threadline/session-unreadable', message: 'broken' } }))
+  const first = await prefetchSessionDetail(h.store, { sessionId: 's-run', updatedAt: NOW, cwd: CWD })
+  assert.equal(first?.status, 'error')
+  const diag = warmupDiagnostics()
+  assert.equal(diag.detailErrors, 1)
+  assert.equal(diag.lastErrorCode, 'threadline/session-unreadable')
+
+  // 同一 updatedAt：命中失败退避，不再发请求
+  await prefetchSessionDetail(h.store, { sessionId: 's-run', updatedAt: NOW, cwd: CWD })
+  assert.equal(h.fake.callsOf('detail').length, 1)
+  // updatedAt 变了：允许再试一次
+  await prefetchSessionDetail(h.store, { sessionId: 's-run', updatedAt: NOW + 1, cwd: CWD })
+  assert.equal(h.fake.callsOf('detail').length, 2)
+  // 显式 refresh（用户点「重新读取」）：绕过退避
+  await prefetchSessionDetail(h.store, { sessionId: 's-run', updatedAt: NOW + 1, cwd: CWD, refresh: true })
+  assert.equal(h.fake.callsOf('detail').length, 3)
+})
+
+test('T37 预取与 tab 共享同一份缓存：预热过的会话，tab 再请求 0 新增 /detail', async () => {
+  const h = harness()
+  const key = threadlineWorkspaceKey('ws-main', CWD)
+  ensure(h, key)
+  // 等预热把 running/最近会话预取完（文案：打开 tab 即现成）
+  for (let i = 0; i < 6; i += 1) await h.clock.flush()
+  assert.equal(h.fake.callsOf('detail').length > 0, true, '预热应该已经预取了 detail')
+  const before = h.fake.callsOf('detail').length
+  const hitsBefore = h.store.stats.hits
+
+  // 模拟 tab 打开：同一个 store、同一会话行 updatedAt
+  await h.store.request('s-run', { cwd: CWD, updatedAt: NOW })
+  assert.equal(h.fake.callsOf('detail').length, before, 'tab 打开应命中缓存，不再发 /detail')
+  assert.equal(h.store.stats.hits > hitsBefore, true)
+})
+
+test('T37 warmupDiagnostics 只暴露数字/错误码（不含 sessionId 或路径）', async () => {
+  const h = harness()
+  await prefetchSessionDetail(h.store, { sessionId: 's-run', updatedAt: NOW, cwd: CWD })
+  const diag = warmupDiagnostics()
+  const text = JSON.stringify(diag)
+  assert.equal(text.includes('s-run'), false, '诊断里不许有 sessionId')
+  assert.equal(text.includes(CWD), false, '诊断里不许有路径')
+  assert.equal(text.includes('src/'), false)
+  assert.deepEqual(Object.keys(diag).sort(), [
+    'activeWorkspaces',
+    'detailDeduped',
+    'detailErrors',
+    'detailRequests',
+    'prefetched',
+  ])
 })

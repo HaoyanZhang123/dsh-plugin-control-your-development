@@ -29,6 +29,8 @@ import { BASE_TIME, SESSION_ID, buildDetail, buildSummaries } from './fixtures.t
 const h = React.createElement
 const params = new URLSearchParams(location.search)
 const view = params.get('view') ?? 'tab'
+const slowDetail = params.get('detail') === 'slow'
+const focus = params.get('focus')
 const detail = buildDetail()
 const summary = buildSummaries()[0]
 
@@ -127,6 +129,11 @@ const fetchImpl = (input: string, init?: { body?: string }): Promise<{ ok: boole
     )
   }
   if (url.endsWith('/detail')) {
+    if (slowDetail) {
+      return new Promise((resolve) => {
+        window.setTimeout(() => resolve(response({ ok: true, session: detail })), 10_000)
+      })
+    }
     return Promise.resolve(response({ ok: true, session: detail }))
   }
   return Promise.reject(new Error('unexpected route: ' + url))
@@ -228,6 +235,7 @@ function App(): React.ReactElement {
       locale: 'zh',
       // 截图走"引用层不可观测"分支：真机多数情况下拿不到 remote.workspaceFiles（T13 复核）
       referenceLayer: disabledReferenceLayer('no-remote'),
+      ...(focus === null ? {} : { viewRequest: { view: 'threadline', focus }, completeViewRequest: () => undefined }),
       testId: 'threadline-tab',
     }),
   )

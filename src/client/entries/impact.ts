@@ -151,7 +151,7 @@ function ImpactBody(props: ImpactActionProps): React.ReactElement | null {
   const sessions = readSnapshot<{
     current?: string
     ids?: readonly string[]
-    byId?: Record<string, { running?: boolean } | undefined>
+    byId?: Record<string, { running?: boolean; updatedAt?: number } | undefined>
   }>(props.useSessions)
   /**
    * sessionId 兜底链（T13c）：
@@ -171,6 +171,16 @@ function ImpactBody(props: ImpactActionProps): React.ReactElement | null {
         ? sessions.current
         : runningSessionId
   const messageId = typeof props.messageId === 'string' ? props.messageId : ''
+  /**
+   * 当前会话行的 updatedAt（T37）：详情缓存用它判新旧。
+   * 拿不到就是「未知」——不猜、不传，缓存行为退回旧口径（不会因为猜错而疯狂重拉）。
+   */
+  const sessionUpdatedAt = ((): number | undefined => {
+    if (sessionId === '') return undefined
+    const value = sessions?.byId?.[sessionId]?.updatedAt
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return undefined
+    return value
+  })()
   const store = props.store ?? getDetailStore(props.fetch ?? defaultFetch())
   // T13e：只点图标也要能用 —— 带上工作区 cwd（host 冷读归属校验）+ 预热上下文（同 key 幂等）。
   const workspacesSnapshot = readSnapshot<never>(props.useWorkspaces)
@@ -184,7 +194,12 @@ function ImpactBody(props: ImpactActionProps): React.ReactElement | null {
           cwd: detailCwd,
           sessions: scope.sessions as unknown as readonly WarmupSession[],
         }
-  const entry = useThreadlineDetail(store, sessionId === '' || messageId === '' ? null : sessionId, {
+  const entry = useThreadlineDetail(store, sessionId === '' ? null : sessionId, {
+    // T37（35 §2.1）：聊天页就是 detail 的**预热面**。
+    // - 不再要求 messageId：没有 messageId（图标 hidden）也要把当前会话 detail 拉起来；
+    // - 带上会话行 updatedAt：缓存按它判新旧，会话推进（T4 完成）后自动重拉，
+    //   避免把"聊天页早先读到的半截 detail"当成本轮结论（首屏假 0 / 空图的根因之一）。
+    ...(sessionUpdatedAt === undefined ? {} : { updatedAt: sessionUpdatedAt }),
     ...(detailCwd === undefined ? {} : { cwd: detailCwd }),
     ...(warmup === undefined ? {} : { warmup }),
     fetch,

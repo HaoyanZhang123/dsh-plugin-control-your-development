@@ -126,6 +126,18 @@
   line-height: var(--tl-lh-tight);
 }
 
+/* 关系摘要（T36）：单独一行、与 meta 同档弱色；长文案 ellipsis（title 有全量），不改变卡片其它结构 */
+:is(.threadline-app, .threadline-impact-root) .tl-rail-card-relations {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--tl-fg-tertiary);
+  font-size: var(--tl-fs-meta-sm);
+  line-height: var(--tl-lh-tight);
+  font-variant-numeric: tabular-nums;
+}
+
 /* 5 段文件大类构成条：段宽 = 该类文件数（空类不画；颜色之外还有图例文字） */
 :is(.threadline-app, .threadline-impact-root) .tl-rail-card-mix {
   display: flex;

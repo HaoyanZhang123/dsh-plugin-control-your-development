@@ -182,3 +182,53 @@ test('A20-2 dispose 中止在途请求，后续 request 返回错误而不是挂
   assert.equal(after.status, 'error')
   store.dispose()
 })
+
+/* ------------------------------------------------------------------ *
+ * T37 · 可观测计数器（回答「tab 打开到底命中缓存，还是又发了一次 /detail」）
+ * ------------------------------------------------------------------ */
+
+test('T37 stats：请求/命中/在途复用/真实请求分开计数（只有数字与错误码）', async () => {
+  const fake = createFakeFetch()
+  const gate = createGate()
+  fake.on('detail', async (body) => {
+    await gate.wait()
+    return detailPayload({ id: String(body.sessionId), updatedAt: NOW })
+  })
+  const store = createDetailStore({ fetch: fake.fetch, now: () => NOW })
+
+  // 并发两次同一会话：1 次真实请求 + 1 次在途复用
+  const first = store.request('s-1', { updatedAt: NOW })
+  const second = store.request('s-1', { updatedAt: NOW })
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  gate.openAll()
+  await Promise.all([first, second])
+  let stats = store.stats
+  assert.equal(stats.requests, 2)
+  assert.equal(stats.fetches, 1)
+  assert.equal(stats.deduped, 1)
+  assert.equal(stats.hits, 0)
+  assert.equal('lastErrorCode' in stats, false)
+
+  // 同一 updatedAt 再要一次：命中缓存（tab 打开命中缓存的证据）
+  await store.request('s-1', { updatedAt: NOW })
+  stats = store.stats
+  assert.equal(stats.hits, 1)
+  assert.equal(stats.fetches, 1)
+  assert.equal(JSON.stringify(stats).includes('s-1'), false, '计数器不含 sessionId')
+  store.dispose()
+})
+
+test('T37 stats：失败只记错误码，不记路径/正文', async () => {
+  const fake = createFakeFetch()
+  fake.on('detail', () => ({ ok: false, error: { code: 'threadline/session-unreadable', message: 'broken' } }))
+  const store = createDetailStore({ fetch: fake.fetch, now: () => NOW })
+  const entry = await store.request('s-path/secret.ts', { cwd: '/x/y/secret' })
+  assert.equal(entry.status, 'error')
+  const stats = store.stats
+  assert.equal(stats.errors, 1)
+  assert.equal(stats.lastErrorCode, 'threadline/session-unreadable')
+  const text = JSON.stringify(stats)
+  assert.equal(text.includes('secret'), false)
+  assert.equal(text.includes('/x/y'), false)
+  store.dispose()
+})

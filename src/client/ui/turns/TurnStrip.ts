@@ -37,6 +37,11 @@ export interface TurnStripProps {
   preview: Selection | null
   /** hover 关联高亮（例如悬停某文件时，它被哪些轮次碰过）。 */
   relatedKeys?: ReadonlySet<string> | null
+  /**
+   * 轮次关系条数（T36，P2）：键 = `selectionKey(turn:...)`，值 = 该轮文件之间的关系数。
+   * 省略 / 0 = 不渲染关系徽标（不改变现有标记布局）。
+   */
+  relationCountByKey?: ReadonlyMap<string, number> | null
   onPreview: (target: Selection | null) => void
   onSelect: (target: Selection) => void
   onDoubleClick?: (target: Selection) => void
@@ -162,12 +167,22 @@ export function TurnStrip(props: TurnStripProps): React.ReactElement {
             })
             const index = candidates.findIndex((candidate) => sameSelection(candidate, model.selection))
             const isSelected = sameSelection(model.selection, props.selected)
+            const relationCount = props.relationCountByKey?.get(selectionKey(model.selection)) ?? 0
             return React.createElement(TurnBlock, {
               key: selectionKey(model.selection),
               model,
               selected: isSelected,
               preview: !isSelected && sameSelection(model.selection, props.preview),
               related: props.relatedKeys !== null && props.relatedKeys !== undefined && props.relatedKeys.has(selectionKey(model.selection)),
+              ...(relationCount > 0
+                ? {
+                    relation: {
+                      count: relationCount,
+                      label: t('turns.relations', { n: relationCount }),
+                      tip: t('turns.relationsTip'),
+                    },
+                  }
+                : {}),
               focusable: index >= 0 && index === tabbableIndex,
               onPreview: (target) => props.onPreview(target === null ? null : target.selection),
               onSelect: (target) => props.onSelect(target.selection),

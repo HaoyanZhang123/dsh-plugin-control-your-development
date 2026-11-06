@@ -91,6 +91,6 @@ export {
   urlHost,
 } from './privacy.ts'
 
-export { TurnBlock, type TurnBlockProps } from './TurnBlock.ts'
+export { TurnBlock, type TurnBlockProps, type TurnRelationHint } from './TurnBlock.ts'
 export { TurnStrip, type TurnStripProps } from './TurnStrip.ts'
 export { SessionSelector, type SessionSelectorProps } from './SessionSelector.ts'

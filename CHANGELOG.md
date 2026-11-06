@@ -9,6 +9,36 @@
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-07
+
+用户第 12 轮反馈：首屏假空态、滚轮不分区、图不够可读/可交互。P0–P2 一起做。
+
+### 新增 | Added
+
+- **默认总览星图**：左图默认显示全部目录簇（右卡全部目录；每簇 top3 + `+N` 聚合），不再只显示单目录；
+  簇间只画目录级弱关系，hover/点击簇再展开 top12 文件，避免数千节点蜘蛛网。
+- **确定性有机布局**：目录簇轻量碰撞/螺旋排布 + 簇内黄金角；无第三方依赖、固定 seed；节点可拖动（pointer capture，内存态），双击/按钮重置。
+- **交互联动**：卡片/簇 hover 展开、节点放大/光晕/相连边提亮、无关 dim；轮次切换 180–240ms 过渡；reduced-motion 直接切换。
+- **关系可解释**：同一对文件多条关系按 pair 聚合为一条视觉线 + 类型徽标；关系类型 chip 计数可过滤；边/文件点击显示 evidence 浮层；图尾显示已加载会话覆盖。
+- **目录卡关系摘要**：与多少其它目录相关 + top partner；**轮次块关系徽标**：本轮文件之间关系数。
+- 新 locale：`graph.*` / `rail.*` / `turns.relations*` 17 条（147 条 key）。
+
+### 修复 | Fixed
+
+- **首屏假 0/假空态**：detail 三态（loading / ready 0 文件 / error）接入；loading 显示骨架和「T{n} 正在读取」，不把 undefined 画成 0；
+  会话行 `updatedAt` 变化会重拉 detail，聊天页/impact 入口提早预热当前会话；无 messageId 也至少启动 warmup。
+- **滚轮分区**：桌面 ≥960 左右两栏各自滚动（shell/页面不滚），滚轮按指针所在栏；header/Now 固定；左列取消 sticky；<960 回退单页滚动+堆叠。
+- **tab 默认焦点**：直接点 tab 默认总览，不再先恢复旧轮次；显式 impact/命令 focus 才落到轮次，且先显示加载骨架。
+
+### 验证 | Verified
+
+- `pnpm run typecheck` / `pnpm run build`（两次逐字节一致）/ `pnpm test` **591/591** / `emit-styles --check` 全 EXIT 0。
+- `TL_TASK=T38 node tests/ui-map/run-t07.mjs` EXIT 0：1440 总览/焦点展开/轮次/1200/900/800/980、双栏独立滚动、**真实 wheel 分区**、**真实拖动**、
+  点卡片 pin/收起、轮次进出、Esc。
+- `node tests/entries/run-t09.mjs` EXIT 0：tab 总览、**慢 detail loading 不显示 0 文件**、impact 导航、无 dialog/popover。
+- `smoke/run_all_checks.py` PASS 7 / FAIL 0 / SKIP 0。
+- 证据：`output/_verify/threadline/T35/`（星图）、`T36/`（布局/关系卡）、`T37/`（首屏数据）、`T38-check/`（总装门禁）。
+
 ## [1.0.0] - 2026-11-06
 
 用户第 9 轮反馈：版式重构为「左文件关系图 + 右两列目录卡片」，删除 `/threadline` 弹窗与检查器。

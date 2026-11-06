@@ -1,8 +1,9 @@
 /*
- * rail.test.ts —— 右栏目录卡片（33 §2/§4）：纯聚合 + 静态渲染。
+ * rail.test.ts —— 右栏目录卡片（33 §2/§4；T36 关系摘要）：纯聚合 + 静态渲染。
  *
  * 覆盖：全部 nodes 参与、确定性排序、5 类构成、top3、本轮徽章、选中/变淡、
- * 两列网格类名、长目录名 title、空态。
+ * 两列网格类名、长目录名 title、空态；
+ * T36：buildDirectoryRelationSummary（跨目录共现/引用、无关系不出现、排序确定性）+ SSR 关系摘要节点。
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -10,14 +11,17 @@ import * as React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import {
   buildDirectoryCards,
+  buildDirectoryRelationSummary,
   compareDirectoryCards,
   defaultDirectoryKey,
+  DIRECTORY_RELATION_TYPES,
   DIRECTORY_TOP_FILES,
   directoryCardsSummary,
   directoryKeyOf,
   DirectoryRail,
   FILE_FAMILIES,
 } from '../../src/client/ui/rail/index.ts'
+import { createEdge } from '../../src/shared/relations/index.ts'
 import { makeFiles, NOW, REAL_DIRS } from './fixtures.ts'
 
 const h = React.createElement
@@ -215,6 +219,109 @@ test('20 目录真实规模夹具：卡片数 = 顶层目录数 + 根目录（�
   const cards = buildDirectoryCards(makeFiles({ count: 200, dirs: REAL_DIRS }))
   assert.equal(cards.length, REAL_DIRS.length + 1)
   assert.equal(cards.reduce((sum, card) => sum + card.count, 0), 200)
+})
+
+/* ---------------- T36：目录关系摘要（跨目录共现/引用） ---------------- */
+
+function relationNodes() {
+  return [file('src/a.ts'), file('src/d.ts'), file('docs/b.md'), file('skills/c.md')]
+}
+
+function relationEdges() {
+  const coTurn = (from: string, to: string, options: { confirmed?: boolean } = {}) =>
+    createEdge({
+      type: 'coTurn',
+      from,
+      to,
+      evidence: { kind: 'coTurn', samples: [{ sessionId: 's1', turn: 1 }], count: 1, text: 'coTurn' },
+      ...(options.confirmed === undefined ? {} : { confirmed: options.confirmed }),
+    })
+  return [
+    // src × docs：两条共现边（src/a、src/d 都与 docs/b 共现）
+    coTurn('src/a.ts', 'docs/b.md'),
+    coTurn('src/d.ts', 'docs/b.md'),
+    // src × skills：一条引用边
+    createEdge({
+      type: 'reference',
+      from: 'src/a.ts',
+      to: 'skills/c.md',
+      evidence: { kind: 'reference', line: 3, raw: './c.md', target: 'skills/c.md', resolved: true, text: 'ref' },
+    }),
+    // 同目录内部：不算"目录之间的关系"
+    coTurn('src/a.ts', 'src/d.ts'),
+    // 未确认引用/共现：默认不计
+    coTurn('src/a.ts', 'docs/b.md', { confirmed: false }),
+    // 默认层之外的 structure 边：不计
+    createEdge({ type: 'structure', from: 'src/a.ts', to: 'docs/b.md', evidence: { kind: 'structure', dir: 'src', text: 'st' } }),
+    // 端点不在 cards 里：不猜、不造卡片
+    coTurn('ghost/x.ts', 'src/a.ts'),
+  ]
+}
+
+test('关系摘要：跨目录共现+引用计数、同目录/未确认/structure/未知端点都不计', () => {
+  const cards = buildDirectoryCards(relationNodes())
+  const summary = buildDirectoryRelationSummary(cards, relationEdges())
+  assert.deepEqual([...summary.keys()].sort(), ['docs', 'skills', 'src'])
+  assert.deepEqual(summary.get('src'), {
+    partners: 2,
+    relations: 3,
+    topPartner: { key: 'docs', count: 2 },
+  })
+  assert.deepEqual(summary.get('docs'), { partners: 1, relations: 2, topPartner: { key: 'src', count: 2 } })
+  assert.deepEqual(summary.get('skills'), { partners: 1, relations: 1, topPartner: { key: 'src', count: 1 } })
+  assert.equal(summary.has('ghost'), false)
+  // 同一份输入两次结果相同（纯函数，确定性）
+  assert.deepEqual(buildDirectoryRelationSummary(cards, relationEdges()), summary)
+})
+
+test('关系摘要：选项——未确认可选、层可覆盖、无关系为空 map', () => {
+  const cards = buildDirectoryCards(relationNodes())
+  const withUnconfirmed = buildDirectoryRelationSummary(cards, relationEdges(), { includeUnconfirmed: true })
+  assert.deepEqual(withUnconfirmed.get('src'), { partners: 2, relations: 4, topPartner: { key: 'docs', count: 3 } })
+  assert.deepEqual(withUnconfirmed.get('docs'), { partners: 1, relations: 3, topPartner: { key: 'src', count: 3 } })
+
+  const referenceOnly = buildDirectoryRelationSummary(cards, relationEdges(), { types: ['reference'] })
+  assert.deepEqual([...referenceOnly.keys()].sort(), ['skills', 'src'])
+  assert.deepEqual(referenceOnly.get('src'), { partners: 1, relations: 1, topPartner: { key: 'skills', count: 1 } })
+
+  assert.equal(DIRECTORY_RELATION_TYPES.includes('structure'), false)
+  assert.equal(buildDirectoryRelationSummary(cards, []).size, 0)
+})
+
+test('关系摘要 SSR：有关系才渲染节点（meta 行内、弱色），无关系/空 map 不渲染', () => {
+  const nodes = relationNodes()
+  const relationByKey = buildDirectoryRelationSummary(buildDirectoryCards(nodes), relationEdges())
+  const html = renderRail({ nodes, relationByKey })
+  assert.ok(html.includes('class="tl-rail-card-relations"'))
+  assert.equal(cutCount(html, 'data-role="rail-relations"'), 3, '三张卡都有关系')
+  assert.ok(html.includes('data-relations="3"'), 'src 的关系条数')
+  assert.ok(html.includes('data-related-dirs="2"'), 'src 的关系目录数')
+  assert.ok(html.includes('data-top-partner="docs"') && html.includes('data-top-count="2"'))
+  assert.ok(html.includes('关系 3'), 'title 里给边数（locale key rail.relations）')
+  assert.ok(html.includes('与 2 个目录相关'), '可见文案给关系目录数（rail.relatedDirs）')
+  assert.ok(html.includes('docs · 2'), 'top partner 名称/计数走 rail.topRelated')
+  assert.ok(/title="关系 3 · 与 2 个目录相关 · docs · 2"/.test(html), '关系节点的 title 给全量摘要')
+
+  // 无关系 / 空 map：一个关系节点都不出现（卡片高度不变）
+  const plain = renderRail({ nodes })
+  assert.equal(plain.includes('tl-rail-card-relations'), false)
+  assert.equal(plain.includes('data-role="rail-relations"'), false)
+  const emptyMap = renderRail({ nodes, relationByKey: new Map() })
+  assert.equal(emptyMap.includes('data-role="rail-relations"'), false)
+})
+
+test('关系摘要：根目录 partner 用 locale 的「根目录」，不裸显空键', () => {
+  const nodes = [file('README.md'), file('src/a.ts')]
+  const cards = buildDirectoryCards(nodes)
+  const edge = createEdge({
+    type: 'coTurn',
+    from: 'README.md',
+    to: 'src/a.ts',
+    evidence: { kind: 'coTurn', samples: [{ sessionId: 's1', turn: 2 }], count: 1, text: 'coTurn' },
+  })
+  const html = renderRail({ nodes, relationByKey: buildDirectoryRelationSummary(cards, [edge]) })
+  assert.ok(html.includes('根目录 · 1'), '根目录键用 map.rootCluster 展示')
+  assert.ok(html.includes('data-top-partner=""'), '数据结构仍保留空键（UI 层本地化）')
 })
 
 function cutCount(html: string, needle: string): number {

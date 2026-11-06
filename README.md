@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/images/threadline-cover.png" alt="Threadline 2.0: file relation map on the left, two columns of directory cards on the right, turn status and hover linking" width="100%">
+  <img src="assets/images/threadline-cover.png" alt="Threadline 1.1: all directory clusters at once, two independent scroll panes, relation evidence and draggable nodes" width="100%">
 </p>
 
 <h1 align="center">Threadline · 脉络</h1>
@@ -10,7 +10,7 @@
   <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white" alt="React 18"></a>
   <a href="https://github.com/deepseek-ai/deepseek-harness"><img src="https://img.shields.io/badge/DeepSeek%20Harness-plugin-4B6BFB" alt="DeepSeek Harness plugin"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green" alt="License MIT"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.0.0-blue" alt="Version 1.0.0"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.1.0-blue" alt="Version 1.1.0"></a>
 </p>
 
 ## Overview
@@ -25,13 +25,17 @@ Typical use: you come back to a long session, or hand a workspace to someone els
 
 ## Features
 
-- **File relation map (left)** — the most active directory of the current session by default. Pick any directory card to switch; pick a turn to switch to the files touched by that turn across directories. Deterministic radial layout, no pan/zoom, no cluster boxes, no grid. Node colour = five file families (text / code / data / media / other).
-- **Directory cards (right, two columns)** — name, file count, current-turn badge, operations / last activity, five-family bar, top 3 active files. Same screen as the map, one page scroll; stacks below 960px.
-- **Turn status only from recorded facts** — `read N`, `write +A / −D lines`, `first seen`; file-level deletion/creation is not provable and is not shown. The summary bar is fixed to one line: `read N · write +A/−D lines · first seen F · deletes C` (full wording in the tooltip).
-- **Two-way hover linking** — hover a card to preview its directory; hover a node to highlight its directory card and related turns; hover a turn to preview that turn's files and highlight related cards. Hover only previews; it never changes the click selection or scroll position.
+- **Overview star map by default** — all directory clusters (every directory card; top 3 files each + `+N`), not single-directory drill-down.
+  Only directory-level weak relations are drawn by default; hover/click a card or cluster to expand its top 12 files and avoid a 3,000-node hairball.
+- **Two independent scroll panes** — the wheel scrolls the left pane only over the left pane and the right pane only over the right pane; the page/shell does not scroll; below 960px it falls back to one page scroll with stacked sections.
+- **Interactive nodes** — hover scales/glows the node, brightens connected edges and dims unrelated ones; drag nodes (in-memory only; double-click or Reset restores); 180–240ms transitions on turn changes.
+- **Explainable relations** — multiple relations between the same file pair merge into one line with type badges; relation-type chips show counts and filter; click a file/edge for an evidence popover; the footer shows loaded-session coverage. Co-occurrence is not dependency; weight is count only.
+- **Directory relation summary / turn relation badge** — cards show how many other directories they relate to and the top partner; turn blocks show the number of relations among that turn's files.
+- **Turn status only from recorded facts** — `read N`, `write +A / −D lines`, `first seen`; file-level add/delete is not provable and is not shown. The summary bar is fixed to one line, full wording in the tooltip.
 - **Per-turn impact icon** — under a finished assistant message; click jumps to the Threadline tab and focuses that turn, with no dialog.
-- **`/threadline` command** — a shortcut to the tab (focuses the current session); the old dialog is gone.
-- **Privacy mode / list view / progressive load / honest by design** — unchanged from 1.0: paths and titles can be masked; file and turn tables are keyboard-accessible; unloaded, failed and unobserved are labelled instead of replaced with 0 or an empty state.
+- **`/threadline` command** — a shortcut to the tab; no dialog, no fourth entry.
+- **Loading does not lie** — a skeleton plus “Loading files for T{n}…” while detail is pending; “no file operations” only after ready with zero files.
+- **Privacy mode / list view / progressive load / permanently read-only** — paths and titles can be masked; keyboard reachable; unloaded, failed and unobserved are labelled.
 
 ## Installation
 
@@ -40,13 +44,13 @@ Requirements: DeepSeek Harness **0.2.2-rc.1** or newer, on a desktop or web prof
 Install it as a DSH plugin from npm:
 
 ```text
-Plugin manager → Add plugin → dsh-plugin-control-your-development@1.0.0
+Plugin manager → Add plugin → dsh-plugin-control-your-development@1.1.0
 ```
 
 Or install into a profile directly:
 
 ```bash
-dsh plugin add dsh-plugin-control-your-development@1.0.0 --profile desktop
+dsh plugin add dsh-plugin-control-your-development@1.1.0 --profile desktop
 ```
 
 Then reload the page (client code) or restart DSH (host code).
@@ -55,19 +59,24 @@ Then reload the page (client code) or restart DSH (host code).
 
 ## Usage
 
-Open a conversation and pick the **Threadline** tab next to chat / trajectory. The tab fills the conversation area and scrolls on its own; the composer is hidden while you are in it and returns when you leave.
+Open a conversation and pick the **Threadline** tab next to chat / trajectory. The tab fills the conversation area; the left and right panes scroll independently.
 
 <p align="center">
-  <img src="assets/images/threadline-map.png" alt="Threadline 2.0: file relation map on the left, two directory card columns on the right, one page scroll" width="100%">
+  <img src="assets/images/threadline-map.png" alt="Threadline 1.1: all directory clusters and two directory card columns; two independent scroll panes" width="100%">
 </p>
 
-- The left map shows the current directory; pick another directory card to switch, or a turn block to switch to that turn's file map with status.
-- Hovering a card, node or turn previews and cross-highlights; clicking pins the selection; leaving the whole tab restores it.
+- See every directory cluster by default; hover/click a directory card or a cluster in the map to expand its files; click to pin.
+- Click a file node for relations; click relation-type chips to filter; drag nodes to arrange; double-click or “Reset layout” restores.
+- Click a turn to see its files, read/written lines, first-seen and relations; click again or Esc to return to the overview.
 - The timeline plays the workspace back in time; ranges are **today / 7 days / 30 days / all**.
 - `/threadline` jumps to the tab; the per-turn impact icon jumps and focuses that turn.
 
 <p align="center">
-  <img src="assets/images/threadline-turn.png" alt="Turn view: read / written-line / first-seen status and delete-command count" width="100%">
+  <img src="assets/images/threadline-focus.png" alt="A directory cluster expanded to its top 12 files; other clusters dimmed" width="100%">
+</p>
+
+<p align="center">
+  <img src="assets/images/threadline-turn.png" alt="Turn view: read / written-line / first-seen status and relation types" width="100%">
 </p>
 
 Threadline only reads the workspace the current session belongs to. Sessions from other workspaces, profiles or machines are not aggregated.
@@ -89,7 +98,7 @@ plugin/
 
 ## Releases
 
-Current release: **panel plugin v1.0.0** (stable).
+Current release: **panel plugin v1.1.0** (stable).
 
 See [CHANGELOG.md](CHANGELOG.md) for what changed in each version, and the [Releases](https://github.com/HaoyanZhang123/dsh-plugin-control-your-development/releases) page for installable versions.
 

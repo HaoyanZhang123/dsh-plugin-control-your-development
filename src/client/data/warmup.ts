@@ -20,7 +20,7 @@ import { createDataController } from './controller.ts'
 import type { ControllerSnapshot, DataController, TimerApi } from './controller.ts'
 import { createEmptyGraph } from './merge.ts'
 import { degradeNone } from './degrade.ts'
-import type { DetailStore } from './detail.ts'
+import type { DetailEntry, DetailStore } from './detail.ts'
 import type { FetchLike } from './http.ts'
 
 /** 预热需要的最小会话行（`SessionSummary` / `ScopeSession` 都结构兼容）。 */
@@ -88,6 +88,125 @@ interface WarmupEntry {
 /** 模块级单例：一个工作区键 = 一个预热。 */
 const warmups = new Map<string, WarmupEntry>()
 let registeredDetailStore: DetailStore | null = null
+
+/* ------------------------------------------------------------------ *
+ * T37：按需 detail 预取（页面级预热之外，入口/hover 也能尽早要数据）
+ * ------------------------------------------------------------------ */
+
+/** 预取计数器（只有数字与错误码；不含 sessionId / 路径 / 正文）。 */
+interface WarmupCounters {
+  requests: number
+  deduped: number
+  errors: number
+  lastErrorCode: string
+}
+
+const counters: WarmupCounters = { requests: 0, deduped: 0, errors: 0, lastErrorCode: '' }
+/** sessionId → 上次失败的 updatedAt（同一 updatedAt 不反复重试；成功/换代后清除）。 */
+const failedAttempts = new Map<string, number>()
+
+/** `prefetchSessionDetail` 的输入。 */
+export interface SessionDetailPrefetchOptions {
+  /** 目标会话。 */
+  sessionId: string
+  /** 会话行 `updatedAt`：给了才能判新旧（相同则命中缓存、不重复请求）。 */
+  updatedAt?: number
+  /** 工作区 cwd（host cold-read 归属校验）；缺省用 store 默认 cwd；两者都空则不猜、不发请求。 */
+  cwd?: string
+  /** 强制刷新（旧行为：即使缓存 same updatedAt 也重拉）。预取默认 false。 */
+  refresh?: boolean
+}
+
+/** 预取诊断（T37 可观测性；数字/错误码，可直接进测试或诊断面板）。 */
+export interface WarmupDiagnostics {
+  /** 当前活动预热（按工作区）数量。 */
+  activeWorkspaces: number
+  /** 最近一次预取覆盖的会话数（所有活动预热之和）。 */
+  prefetched: number
+  /** 经本模块**实际发出**的 detail 请求次数。 */
+  detailRequests: number
+  /** 被去重的次数（缓存命中 / 在途复用 / 同 updatedAt 失败退避）。 */
+  detailDeduped: number
+  /** 失败次数。 */
+  detailErrors: number
+  /** 最近一次失败的错误码（不含正文/路径）。 */
+  lastErrorCode?: string
+}
+
+/**
+ * 预取一个会话的 detail（**幂等**：同一 updatedAt 不重复请求；在途只复用不发第二次）。
+ *
+ * 用途（35 §2.1）：聊天页 / impact 入口 / hover 轮次卡片。与 tab 共享同一个 store，
+ * 所以 tab 打开时能直接命中缓存（`store.stats.hits` 可验证）。
+ *
+ * 只读：只调 `store.request`（POST 同源 `/detail`），不写存储、不碰 DOM。
+ * 拿不到 cwd（归属未知）时**不猜**——返回 undefined，不发请求。
+ */
+export function prefetchSessionDetail(
+  store: DetailStore,
+  options: SessionDetailPrefetchOptions,
+): Promise<DetailEntry | undefined> {
+  const sessionId = typeof options?.sessionId === 'string' ? options.sessionId.trim() : ''
+  if (sessionId === '') return Promise.resolve(undefined)
+  const cwd = normalizeWarmupCwd(options.cwd ?? store.defaultCwd)
+  if (cwd === '') return Promise.resolve(undefined)
+  const rawUpdatedAt = options.updatedAt
+  const updatedAt =
+    typeof rawUpdatedAt === 'number' && Number.isFinite(rawUpdatedAt) && rawUpdatedAt >= 0 ? rawUpdatedAt : undefined
+  const cached = store.peek(sessionId)
+  if (cached !== undefined) {
+    if (cached.status === 'loading') {
+      counters.deduped += 1
+      return Promise.resolve(cached)
+    }
+    if (cached.status === 'ready' && options.refresh !== true && (updatedAt === undefined || cached.updatedAt === updatedAt)) {
+      failedAttempts.delete(sessionId)
+      counters.deduped += 1
+      return Promise.resolve(cached)
+    }
+    // 同一 updatedAt 已经失败过：不因每次渲染/每次轮询反复打（等 updatedAt 变或调用方显式 refresh）。
+    if (cached.status === 'error' && options.refresh !== true && updatedAt !== undefined && failedAttempts.get(sessionId) === updatedAt) {
+      counters.deduped += 1
+      return Promise.resolve(cached)
+    }
+  }
+  counters.requests += 1
+  const pending = store.request(sessionId, {
+    cwd,
+    ...(updatedAt === undefined ? {} : { updatedAt }),
+    ...(options.refresh === true ? { refresh: true } : {}),
+  })
+  void pending
+    .then((entry) => {
+      if (entry.status === 'error') {
+        counters.errors += 1
+        counters.lastErrorCode = entry.error?.code ?? 'threadline/internal'
+        if (updatedAt !== undefined) failedAttempts.set(sessionId, updatedAt)
+        return
+      }
+      failedAttempts.delete(sessionId)
+    })
+    .catch(() => {
+      counters.errors += 1
+      counters.lastErrorCode = 'threadline/internal'
+    })
+  return pending
+}
+
+/** 当前预取/预热诊断（数字与错误码；不含 paths/正文）。 */
+export function warmupDiagnostics(): WarmupDiagnostics {
+  let prefetched = 0
+  for (const entry of warmups.values()) prefetched += entry.prefetched.length
+  const diagnostics: WarmupDiagnostics = {
+    activeWorkspaces: warmups.size,
+    prefetched,
+    detailRequests: counters.requests,
+    detailDeduped: counters.deduped,
+    detailErrors: counters.errors,
+  }
+  if (counters.lastErrorCode !== '') diagnostics.lastErrorCode = counters.lastErrorCode
+  return diagnostics
+}
 
 /** 页面可见性（预热默认值；不写任何存储）。 */
 function documentVisibility(): 'visible' | 'hidden' {
@@ -224,12 +343,15 @@ function prefetch(entry: WarmupEntry, snapshot: ControllerSnapshot): void {
       continue
     }
     entry.requested.set(target.id, target.updatedAt)
-    // refresh: true —— 预热目的就是"打开即有最新数据"；去重靠上面的 requested（每 updatedAt 一次）。
-    void store.request(target.id, { cwd: entry.cwd, updatedAt: target.updatedAt, refresh: true }).catch(() => undefined)
+    // 单一执行路径：预取也走 `prefetchSessionDetail`（去重 / 失败退避 / 计数都在那一处）。
+    // refresh: true —— 预热目的就是"打开即有最新数据"；重复请求由上面的 requested 与
+    // prefetchSessionDetail 的加载态/错误退避挡住。
+    void prefetchSessionDetail(store, { sessionId: target.id, updatedAt: target.updatedAt, cwd: entry.cwd, refresh: true })
   }
 }
 
 function attachDetailStore(entry: WarmupEntry, store: DetailStore | null): void {
+  if (registeredDetailStore !== store) failedAttempts.clear()
   entry.detailStore = store
   if (store === null) return
   if (entry.cwd !== '') store.setDefaultCwd(entry.cwd)
@@ -396,6 +518,7 @@ export function activeWarmupKeys(): string[] {
 
 /** 注册共享的详情缓存（state/detailStore 创建 store 后调用一次），预热预取才能复用它。 */
 export function registerWarmupDetailStore(store: DetailStore | null): void {
+  if (registeredDetailStore !== store) failedAttempts.clear()
   registeredDetailStore = store
   if (store === null) return
   for (const entry of warmups.values()) attachDetailStore(entry, store)
@@ -406,6 +529,11 @@ export function disposeAllWarmups(): void {
   for (const entry of Array.from(warmups.values())) disposeEntry(entry)
   warmups.clear()
   registeredDetailStore = null
+  failedAttempts.clear()
+  counters.requests = 0
+  counters.deduped = 0
+  counters.errors = 0
+  counters.lastErrorCode = ''
 }
 
 /** `ensureWarmupForDetail` 的输入。 */

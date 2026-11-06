@@ -7,7 +7,7 @@
  * T13e：创建后把实例注册给 `data/warmup`，让页面级预热与三个入口共享同一份缓存
  * （否则预热取到的 detail 在弹窗里看不到，会重复请求）。内存态，无持久化。
  */
-import { createDetailStore, registerWarmupDetailStore, type DetailStore, type FetchLike } from '../data/index.ts'
+import { createDetailStore, registerWarmupDetailStore, type DetailStore, type DetailStoreStats, type FetchLike } from '../data/index.ts'
 
 let current: DetailStore | null = null
 let currentFetch: FetchLike | null = null
@@ -34,4 +34,14 @@ export function disposeDetailStore(): void {
 /** 当前是否有 store（测试/诊断用）。 */
 export function hasDetailStore(): boolean {
   return current !== null
+}
+
+/**
+ * 共享 store 的只读计数器（T37 可观测性；**只有数字与最近错误码**，不含 sessionId/路径/正文）。
+ *
+ * 用途：回答「tab 打开时到底命中了缓存，还是又发了一次 `/detail`」——真机排查与测试都用它，
+ * 不需要打任何路径/正文日志。
+ */
+export function detailStoreStats(): DetailStoreStats | undefined {
+  return current?.stats
 }

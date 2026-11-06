@@ -54,12 +54,26 @@ function Marker(props: { marker: TurnMarker; mode: 'icon' | 'count' }): React.Re
   )
 }
 
+/**
+ * 轮次关系提示（T36，P2）：本轮文件之间的关系条数。
+ * 只显示计数徽标 + tooltip，不改变状态/文件/命令标记的布局（与标记同一行，空间不足时被裁掉）。
+ */
+export interface TurnRelationHint {
+  count: number
+  /** 已本地化的「{n} 关系」。 */
+  label: string
+  /** 已本地化的 tooltip（turns.relationsTip）。 */
+  tip: string
+}
+
 export interface TurnBlockProps {
   model: TurnBlockModel
   selected: boolean
   preview: boolean
   /** hover 联动高亮（例如悬停的文件属于该轮）。 */
   related?: boolean
+  /** 关系条数提示（可选；0 / 省略 = 不渲染）。 */
+  relation?: TurnRelationHint
   focusable: boolean
   onPreview?: (model: TurnBlockModel | null) => void
   onSelect?: (model: TurnBlockModel) => void
@@ -70,6 +84,7 @@ export interface TurnBlockProps {
 
 export function TurnBlock(props: TurnBlockProps): React.ReactElement {
   const { model } = props
+  const relation = props.relation !== undefined && props.relation.count > 0 ? props.relation : undefined
   const style: React.CSSProperties = { '--tl-turn-w': String(model.widthPx) + 'px' } as React.CSSProperties
   return e(
     'div',
@@ -77,7 +92,7 @@ export function TurnBlock(props: TurnBlockProps): React.ReactElement {
       className: 'threadline-turn-block',
       role: 'option',
       'aria-selected': props.selected ? 'true' : 'false',
-      'aria-label': model.ariaLabel,
+      'aria-label': relation === undefined ? model.ariaLabel : model.ariaLabel + ' · ' + relation.label,
       title: model.tooltip,
       tabIndex: props.focusable ? 0 : -1,
       'data-testid': props.testId ?? 'turn-block',
@@ -130,6 +145,18 @@ export function TurnBlock(props: TurnBlockProps): React.ReactElement {
             '+' + String(model.hiddenMarkers),
           )
         : null,
+      relation === undefined
+        ? null
+        : e(
+            'span',
+            {
+              className: 'threadline-turn-relations',
+              'data-role': 'turn-relations',
+              'data-relations': String(relation.count),
+              title: relation.tip,
+            },
+            relation.label,
+          ),
     ),
     // 「本轮仍在记录」：未结束轮次的显式标注（06 N-16），不伪造完整
     model.partial ? e('span', { className: 'threadline-turn-partial' }, model.partialLabel) : null,

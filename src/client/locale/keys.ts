@@ -137,6 +137,23 @@ export type MessageKey =
   | "turnStatus.firstSeen"
   | "turnStatus.deleteCommands"
   | "turnStatus.deleteShort"
+  | "turns.relationsTip"
+  | "turns.relations"
+  | "rail.topRelated"
+  | "rail.relatedDirs"
+  | "rail.relations"
+  | "graph.filterHint"
+  | "graph.fileRelations"
+  | "graph.evidenceTitle"
+  | "graph.moreFiles"
+  | "graph.dragHint"
+  | "graph.resetLayout"
+  | "graph.coverage"
+  | "graph.emptyTurn"
+  | "graph.loadingTurn"
+  | "graph.loading"
+  | "graph.overviewSubtitle"
+  | "graph.overviewHint"
   | "turnStatus.unknown"
   | "turnStatus.markRead"
   | "turnStatus.markWriteAdd"
@@ -278,6 +295,23 @@ export const MESSAGE_KEYS: readonly MessageKey[] = [
   "turnStatus.firstSeen",
   "turnStatus.deleteCommands",
   "turnStatus.deleteShort",
+  "turns.relationsTip",
+  "turns.relations",
+  "rail.topRelated",
+  "rail.relatedDirs",
+  "rail.relations",
+  "graph.filterHint",
+  "graph.fileRelations",
+  "graph.evidenceTitle",
+  "graph.moreFiles",
+  "graph.dragHint",
+  "graph.resetLayout",
+  "graph.coverage",
+  "graph.emptyTurn",
+  "graph.loadingTurn",
+  "graph.loading",
+  "graph.overviewSubtitle",
+  "graph.overviewHint",
   "turnStatus.unknown",
   "turnStatus.markRead",
   "turnStatus.markWriteAdd",

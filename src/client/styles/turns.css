@@ -238,6 +238,18 @@
   line-height: 1;
 }
 
+/* 关系徽标（T36，P2）：与标记同一行、同一档弱色；只在有值时渲染，不新增行高 */
+.threadline-app .threadline-turn-relations {
+  flex: 0 0 auto;
+  max-inline-size: 100%;
+  overflow: hidden;
+  color: var(--tl-fg-tertiary);
+  font-size: 8px;
+  line-height: 1;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
 /* 「本轮仍在记录」：未结束轮次的显式标注（06 N-16），不伪造完整 */
 .threadline-app .threadline-turn-partial {
   flex: 0 0 auto;

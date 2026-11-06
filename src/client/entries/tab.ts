@@ -16,7 +16,10 @@
 import * as React from 'react'
 import { createTranslator, DEFAULT_LOCALE, type Locale, type Translator } from '../locale/index.ts'
 import {
+  detailLoadingOf,
+  detailViewOf,
   isScannableScope,
+  turnDetailOf,
   useThreadlineData,
   useThreadlineDetail,
   useWorkspaceScope,
@@ -37,7 +40,7 @@ import {
 import { ErrorBoundary, ThreadlineShell, type RangeKey } from '../ui/shell/index.ts'
 import { Button, Chip, ProgressPill } from '../ui/common/index.ts'
 import { FileGraph } from '../ui/map/index.ts'
-import { DIRECTORY_TOP_FILES, buildDirectoryCards, defaultDirectoryKey, directoryKeyOf } from '../ui/rail/index.ts'
+import { DIRECTORY_TOP_FILES, buildDirectoryCards, buildDirectoryRelationSummary, directoryKeyOf } from '../ui/rail/index.ts'
 import { DirectoryRail } from '../ui/rail/index.ts'
 import { Timeline, visiblePathsAt, type TimeRange } from '../ui/timeline/index.ts'
 import {
@@ -241,10 +244,10 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
   const [listViewport, setListViewport] = React.useState(420)
   const [playing, setPlaying] = React.useState(false)
   const [playhead, setPlayhead] = React.useState<number | null>(null)
+  // 1.1：directoryKey 是「点击 pin 的目录簇」；总览始终存在，没有默认目录。
   const [directoryKey, setDirectoryKey] = React.useState<string | null>(null)
   const [hoverDirectory, setHoverDirectory] = React.useState<string | null>(null)
   const [hoverPath, setHoverPath] = React.useState<string | null>(null)
-  const directoryPickedRef = React.useRef(false)
   const [now, setNow] = React.useState<number>(() => props.now ?? Date.now())
   const [reference, setReference] = React.useState<ReferenceResolutionView | null>(null)
   const listRef = React.useRef<HTMLDivElement | null>(null)
@@ -294,13 +297,23 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
   const selectionSessionId =
     effective.kind === 'turn' || effective.kind === 'session' ? effective.sessionId : sessionId
   const detailCwd = scannable ? scope.cwd : undefined
+  const rowUpdatedAtOf = (id: string): number | undefined => {
+    const row = scope.sessions.find((session) => session.id === id)
+    return row === undefined ? undefined : row.updatedAt
+  }
+  const currentRowUpdatedAt = rowUpdatedAtOf(sessionId)
+  const selectionRowUpdatedAt = rowUpdatedAtOf(selectionSessionId)
   const currentEntry = useThreadlineDetail(store, sessionId === '' ? null : sessionId, {
+    ...(currentRowUpdatedAt === undefined ? {} : { updatedAt: currentRowUpdatedAt }),
     ...(detailCwd === undefined ? {} : { cwd: detailCwd }),
   })
   const activeEntry = useThreadlineDetail(
     store,
     selectionSessionId === '' || selectionSessionId === sessionId ? null : selectionSessionId,
-    { ...(detailCwd === undefined ? {} : { cwd: detailCwd }) },
+    {
+      ...(selectionRowUpdatedAt === undefined ? {} : { updatedAt: selectionRowUpdatedAt }),
+      ...(detailCwd === undefined ? {} : { cwd: detailCwd }),
+    },
   )
   const currentDetail = currentEntry?.detail ?? null
 
@@ -345,10 +358,6 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
   )
   const nodes = React.useMemo(() => Array.from(data.graph.files.values()), [data.graph.files])
   // 默认目录 = **当前会话**里文件操作最多的目录（33 §4.1）；工作区其它会话不参与第一眼。
-  const defaultDirectory = React.useMemo(
-    () => defaultDirectoryKey(nodes, sessionId, { rootLabel: t('map.rootCluster'), topFiles: DIRECTORY_TOP_FILES }),
-    [nodes, sessionId, t],
-  )
   const fileIndex = React.useMemo(() => {
     const map = new Map<string, FileNode>()
     for (const file of nodes) {
@@ -429,8 +438,7 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
       applyFocus(result.target)
       if (result.target.kind === 'file') {
         setDirectoryKey(result.target.path.indexOf('/') <= 0 ? '' : result.target.path.slice(0, result.target.path.indexOf('/')))
-        directoryPickedRef.current = true
-      }
+        }
     }
   }, [props.viewRequest, props.completeViewRequest, sessionId, applyFocus])
 
@@ -443,35 +451,8 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
     if (selection.kind === 'file') {
       const slash = selection.path.indexOf('/')
       setDirectoryKey(slash <= 0 ? '' : selection.path.slice(0, slash))
-      directoryPickedRef.current = true
     }
   }, [sessionId, applyFocus])
-
-  // 默认目录：当前会话里文件操作最多的目录；没有会话数据时退回全工作区 totalOps 第一。
-  React.useEffect(() => {
-    if (directoryPickedRef.current) return
-    if (nodes.length === 0) return
-    let chosen: string | null = null
-    if (currentDetail !== null) {
-      const scores = new Map<string, number>()
-      for (const turn of currentDetail.turns) {
-        for (const touch of turn.files) {
-          const slash = touch.path.indexOf('/')
-          const key = slash <= 0 ? '' : touch.path.slice(0, slash)
-          scores.set(key, (scores.get(key) ?? 0) + touch.ops.length)
-        }
-      }
-      let best = -1
-      for (const [key, score] of scores) {
-        if (score > best || (score === best && chosen !== null && key < chosen)) {
-          best = score
-          chosen = key
-        }
-      }
-    }
-    if (chosen === null) chosen = defaultDirectory === '' ? null : defaultDirectory
-    if (chosen !== null) setDirectoryKey(chosen)
-  }, [nodes, currentDetail, defaultDirectory, t])
 
   React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -541,8 +522,7 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
       if (row !== undefined) {
         const slash = row.path.indexOf('/')
         setDirectoryKey(slash <= 0 ? '' : row.path.slice(0, slash))
-        directoryPickedRef.current = true
-      }
+        }
       setListView('off')
     },
     [selectFromList, fileRows],
@@ -590,12 +570,22 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
     return turn === undefined ? [] : turn.files.map((file) => file.path)
   }, [effective, details])
 
-  /* ---------------- 本轮视图（文件 + 状态） ---------------- */
-  const activeTurn: TurnDetail | null = React.useMemo(() => {
-    if (effective.kind !== 'turn') return null
-    const detail = details.get(effective.sessionId)
-    return detail?.turns.find((item) => item.n === effective.turn) ?? null
-  }, [effective, details])
+  /* ---------------- 详情三态 + 本轮视图（文件 + 状态） ---------------- */
+  const activeView = React.useMemo(
+    () =>
+      selectionSessionId === sessionId
+        ? detailViewOf(currentEntry, { ...(currentRowUpdatedAt === undefined ? {} : { updatedAt: currentRowUpdatedAt }) })
+        : detailViewOf(activeEntry, { ...(selectionRowUpdatedAt === undefined ? {} : { updatedAt: selectionRowUpdatedAt }) }),
+    [selectionSessionId, sessionId, currentEntry, currentRowUpdatedAt, activeEntry, selectionRowUpdatedAt],
+  )
+  const turnTarget = effective.kind === 'turn' ? effective : null
+  const turnView = React.useMemo(
+    () => (turnTarget === null ? null : turnDetailOf(activeView, turnTarget.turn)),
+    [turnTarget, activeView],
+  )
+  // 只有错误态才丢弃可画数据；loading 时保留旧轮次（图会盖骨架，不显示 0）。
+  const activeTurn: TurnDetail | null = turnView?.turn ?? null
+  const turnLoading = turnView?.status === 'loading'
   const turnStatus = React.useMemo(
     () => (activeTurn === null ? null : turnFileStatusOf(activeTurn, data.graph.files)),
     [activeTurn, data.graph.files],
@@ -604,27 +594,19 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
     () => buildDirectoryCards(nodes, { rootLabel: t('map.rootCluster'), currentTurnPaths }),
     [nodes, currentTurnPaths, t],
   )
-  const resolvedDirectoryKey = React.useMemo(() => {
-    if (directoryKey !== null && directoryCards.some((card) => card.key === directoryKey)) return directoryKey
-    return defaultDirectory
-  }, [directoryKey, directoryCards, defaultDirectory])
-  // hover 预览目录（不改变已固定选择）：右卡悬停 = 左图临时切到该目录。
+  // 1.1：directoryKey = 点击 pin 的目录；默认不 pin，总览显示全部目录。
+  const focusedDirectoryKey = React.useMemo(() => {
+    if (directoryKey === null) return null
+    return directoryCards.some((card) => card.key === directoryKey) ? directoryKey : null
+  }, [directoryKey, directoryCards])
   const hoveredDirectoryKey = React.useMemo(() => {
     if (hoverDirectory === null) return null
     return directoryCards.some((card) => card.key === hoverDirectory) ? hoverDirectory : null
   }, [hoverDirectory, directoryCards])
-  const graphDirectoryKey = hoveredDirectoryKey ?? resolvedDirectoryKey
+  const graphDirectoryKey = focusedDirectoryKey ?? ''
   const directoryLabel = React.useMemo(
-    () => (graphDirectoryKey === '' ? t('map.rootCluster') : graphDirectoryKey),
-    [graphDirectoryKey, t],
-  )
-  const directoryFiles = React.useMemo(
-    () => nodes.filter((node) => {
-      const slash = node.path.indexOf('/')
-      const key = slash <= 0 ? '' : node.path.slice(0, slash)
-      return key === resolvedDirectoryKey
-    }),
-    [nodes, resolvedDirectoryKey],
+    () => (focusedDirectoryKey === null ? t('map.overview') : focusedDirectoryKey === '' ? t('map.rootCluster') : focusedDirectoryKey),
+    [focusedDirectoryKey, t],
   )
   const turnFiles = React.useMemo(() => {
     if (activeTurn === null) return []
@@ -640,12 +622,27 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
     for (const file of turnFiles) keys.add(directoryKeyOf(file.path))
     return keys
   }, [turnFiles])
-  const hoveredDirectoryFiles = React.useMemo(
-    () => (hoveredDirectoryKey === null ? directoryFiles : nodes.filter((node) => directoryKeyOf(node.path) === hoveredDirectoryKey)),
-    [nodes, hoveredDirectoryKey, directoryFiles],
+  const mode2: 'overview' | 'turn' = turnTarget === null ? 'overview' : 'turn'
+  const graphFiles = mode2 === 'turn' ? turnFiles : nodes
+  const directoryRelations = React.useMemo(
+    () => buildDirectoryRelationSummary(directoryCards, edges),
+    [directoryCards, edges],
   )
-  const mode2 = hoveredDirectoryKey !== null ? 'directory' : activeTurn === null ? 'directory' : 'turn'
-  const graphFiles = mode2 === 'turn' ? turnFiles : hoveredDirectoryKey !== null ? hoveredDirectoryFiles : directoryFiles
+  // 轮次关系数：只统计本轮文件之间的边（同一份 edges；确定性）。
+  const turnRelations = React.useMemo(() => {
+    const map = new Map<string, number>()
+    for (const [sid, detail] of details) {
+      for (const turn of detail.turns) {
+        const keys = new Set(turn.files.map((file) => file.path.toLowerCase()))
+        let count = 0
+        for (const edge of edges) {
+          if (keys.has(edge.from.toLowerCase()) && keys.has(edge.to.toLowerCase())) count += 1
+        }
+        if (count > 0) map.set(selectionKey({ kind: 'turn', sessionId: sid, turn: turn.n }), count)
+      }
+    }
+    return map
+  }, [details, edges])
   // 文件 → 轮次 / 目录 → 轮次（只用已加载详情；未加载不猜）。
   const fileTurnKeys = React.useMemo(() => {
     const map = new Map<string, Set<string>>()
@@ -730,11 +727,13 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
     },
     [applyFocus, selectedPath],
   )
+  // 1.1：点卡片 pin/收起目录簇；再点同一张收起；传入 null = 点空白取消。
   const selectDirectory = React.useCallback(
-    (key: string) => {
-      directoryPickedRef.current = true
-      setDirectoryKey(key)
+    (key: string | null) => {
+      setHoverDirectory(null)
+      setHoverPath(null)
       if (activeTurn !== null) setState((previous) => selectionReducer(previous, { type: 'blank' }))
+      setDirectoryKey((previous) => (key === null ? null : previous === key ? null : key))
     },
     [activeTurn],
   )
@@ -811,10 +810,20 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
       : null
 
   /* ---------------- 左列：图（或列表视图） ---------------- */
+  const workspaceLoading = nodes.length === 0 && (coverage.state === 'loading' || data.graph.applied !== true)
   const emptyState = graphEmptyStateOf(
     { degradeKind: data.degrade.kind, hasFiles: nodes.length > 0, hasSessions: scope.sessions.length > 0 },
     t,
   )
+  const graphLoading = mode2 === 'turn' ? turnLoading : workspaceLoading
+  const graphLoadingLabel =
+    mode2 === 'turn' && turnTarget !== null ? t('graph.loadingTurn', { n: turnTarget.turn }) : t('graph.loading')
+  const turnEmpty = mode2 === 'turn' && turnView?.status === 'ready' && activeTurn !== null && activeTurn.files.length === 0
+  const turnUnknown = mode2 === 'turn' && turnView?.status === 'unknown'
+  const coverageNote =
+    scope.sessions.length > details.size && details.size > 0
+      ? t('graph.coverage', { n: details.size })
+      : undefined
   const listNode =
     listView === 'list'
       ? h(
@@ -889,6 +898,11 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
         files: graphFiles,
         edges,
         mode: mode2,
+        cards: mode2 === 'overview' ? directoryCards : undefined,
+        hoveredDirectoryKey,
+        focusedDirectoryKey,
+        onHoverDirectory,
+        onFocusDirectory: selectDirectory,
         directoryKey: graphDirectoryKey,
         directoryLabel,
         onHoverFile,
@@ -901,7 +915,16 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
         now,
         locale,
         reducedMotion: reduced,
-        ...(emptyState === undefined ? {} : { emptyTitle: emptyState.title }),
+        loading: graphLoading,
+        loadingLabel: graphLoadingLabel,
+        coverageNote,
+        ...(turnEmpty
+          ? { emptyTitle: t('graph.emptyTurn') }
+          : turnUnknown
+            ? { emptyTitle: t('state.unknown') }
+            : emptyState === undefined
+              ? {}
+              : { emptyTitle: emptyState.title }),
         testId: 'graph',
       }),
   )
@@ -967,6 +990,7 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
         selected: state.selected,
         preview: state.preview,
         relatedKeys: hoverRelatedTurnKeys,
+        relationCountByKey: turnRelations,
         onPreview: (target: Selection | null) => {
           if (target !== null) {
             // 悬停轮次 = 轮次预览优先；清掉目录卡片的预览。
@@ -992,15 +1016,16 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
         onEscape: exitTurn,
         now,
         privacyMode: hidden,
-        loading: currentEntry?.status === 'loading' && currentDetail === null,
+        loading: detailLoadingOf(currentEntry),
         testId: 'turn-strip',
       }),
       railSlot: h(DirectoryRail, {
         nodes,
-        selectedKey: mode2 === 'directory' ? resolvedDirectoryKey : null,
+        selectedKey: focusedDirectoryKey,
         hoveredKey: hoveredDirectoryKey,
         relatedKeys: hoverRelatedDirectoryKeys,
         activeKeys: mode2 === 'turn' && hoveredDirectoryKey === null ? turnDirectoryKeys : null,
+        relationByKey: directoryRelations,
         onHover: onHoverDirectory,
         currentTurnPaths,
         onSelect: selectDirectory,

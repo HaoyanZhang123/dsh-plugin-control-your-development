@@ -3,6 +3,8 @@
  *
  * 卡片内容沿用 1.0 的可读设计：目录名（ellipsis + title 全名）、「本轮 N」徽章、计数 pill、
  * meta（{ops} 次操作 · 最近 {time}）、5 族色条、前 3 个最活跃文件（族色点 + basename + ops）。
+ * 脉络 1.1（T36）：可选的 `relationByKey` 追加一行紧凑关系摘要（meta 行内，不新增卡片行高）：
+ *   `关系 N`（与其它目录的边数）+ `top partner · 边数`；无关系的目录不渲染任何关系节点。
  * 点击卡片 = 切换左图目录；本轮视图里未涉及目录降透明（`data-dim`）。
  *
  * 纯展示：不读数据层、不注册全局监听；卡片是 `<button>`，整卡可点、Tab 可达。
@@ -13,6 +15,7 @@ import { createTranslator, DEFAULT_LOCALE, type Locale, type Translator } from '
 import { EmptyState } from '../common/index.ts'
 import { FAMILY_COLOR, FILE_FAMILIES } from '../map/theme.ts'
 import { buildDirectoryCards, type DirectoryCard } from './directories.ts'
+import type { DirectoryRelationSummary } from './relations.ts'
 
 const h = React.createElement
 
@@ -29,6 +32,11 @@ export interface DirectoryRailProps {
   activeKeys?: ReadonlySet<string> | null
   /** 当前轮次影响的文件（「本轮 N」徽章）。 */
   currentTurnPaths?: readonly string[]
+  /**
+   * 目录关系摘要（T36；由 `buildDirectoryRelationSummary(cards, edges)` 算出）。
+   * 键 = 目录键；没有关系的目录可以不出现在 map 里。
+   */
+  relationByKey?: ReadonlyMap<string, DirectoryRelationSummary> | null
   onSelect: (key: string) => void
   onHover?: (key: string | null) => void
   locale?: Locale
@@ -38,21 +46,36 @@ export interface DirectoryRailProps {
 
 const GRAPH_CARD_TOP = 3
 
+/** partner 目录键 → 展示名（根目录走 locale 的 `map.rootCluster`，与卡片一致）。 */
+function partnerLabel(key: string, t: Translator): string {
+  return key === '' ? t('map.rootCluster') : key
+}
+
 function RailCard(props: {
   card: DirectoryCard
   selected: boolean
   hovered: boolean
   related: boolean
   dim: boolean
+  relation?: DirectoryRelationSummary
   formatTime: (at: number) => string
   onSelect: (key: string) => void
   onHover?: (key: string | null) => void
   t: Translator
 }): React.ReactElement {
   const { card, selected, hovered, related, dim, formatTime, onSelect, onHover, t } = props
+  const relation = props.relation
   const time = formatTime(card.lastAt).replace(/ /g, '\u00a0').replace(/-/g, '\u2011')
   const meta = t('map.clusterMeta', { ops: card.totalOps, time })
-  const ariaLabel = card.label + ' · ' + t('map.clusterCount', { count: card.count }) + ' · ' + meta
+  // T36：关系摘要单独一行（与 meta 同档字号/弱色，一行 11px，不改变卡片主内容结构）。
+  // 可见文案 =「与 N 个目录相关 · top partner · 计数」；title =「关系 N（边数） · 同一段」。
+  const top = relation?.topPartner
+  const topText = top === null || top === undefined ? null : t('rail.topRelated', { name: partnerLabel(top.key, t), n: top.count })
+  const relationVisible =
+    relation === undefined ? null : t('rail.relatedDirs', { n: relation.partners }) + (topText === null ? '' : ' · ' + topText)
+  const relationTitle = relation === undefined ? null : t('rail.relations', { n: relation.relations }) + ' · ' + String(relationVisible)
+  const ariaLabel =
+    card.label + ' · ' + t('map.clusterCount', { count: card.count }) + ' · ' + meta + (relationTitle === null ? '' : ' · ' + relationTitle)
   return h(
     'button',
     {
@@ -63,6 +86,7 @@ function RailCard(props: {
       'data-hover': hovered ? 'true' : 'false',
       'data-related': related ? 'true' : 'false',
       'data-dim': dim ? 'true' : 'false',
+      'data-related-dirs': relation === undefined ? undefined : String(relation.partners),
       title: card.label + ' · ' + meta,
       'aria-label': ariaLabel,
       'aria-pressed': selected,
@@ -81,6 +105,20 @@ function RailCard(props: {
       h('span', { className: 'tl-rail-card-count', title: t('inspector.file') }, String(card.count)),
     ),
     h('span', { className: 'tl-rail-card-meta' }, meta),
+    relationVisible === null
+      ? null
+      : h(
+          'span',
+          {
+            className: 'tl-rail-card-relations',
+            'data-role': 'rail-relations',
+            'data-relations': String(relation?.relations ?? 0),
+            'data-related-dirs': String(relation?.partners ?? 0),
+            ...(top === null || top === undefined ? {} : { 'data-top-partner': top.key, 'data-top-count': String(top.count) }),
+            title: relationTitle ?? undefined,
+          },
+          relationVisible,
+        ),
     h(
       'span',
       { className: 'tl-rail-card-mix', 'aria-hidden': true },
@@ -134,8 +172,9 @@ export function DirectoryRail(props: DirectoryRailProps): React.ReactElement {
   return h(
     'div',
     { className: 'tl-rail', 'data-directory-rail': 'true', role: 'group', 'aria-label': t('rail.title'), 'data-card-count': String(cards.length), 'data-testid': props.testId },
-    ...cards.map((card) =>
-      h(RailCard, {
+    ...cards.map((card) => {
+      const relation = props.relationByKey?.get(card.key)
+      return h(RailCard, {
         key: card.key,
         card,
         selected: props.selectedKey !== null && props.selectedKey === card.key,
@@ -145,8 +184,9 @@ export function DirectoryRail(props: DirectoryRailProps): React.ReactElement {
         formatTime: props.formatTime,
         onSelect: props.onSelect,
         ...(props.onHover === undefined ? {} : { onHover: props.onHover }),
+        ...(relation === undefined ? {} : { relation }),
         t,
-      }),
-    ),
+      })
+    }),
   )
 }

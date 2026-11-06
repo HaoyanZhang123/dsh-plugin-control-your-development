@@ -3,6 +3,13 @@
  */
 export { DirectoryRail, type DirectoryRailProps } from './DirectoryRail.ts'
 export {
+  DIRECTORY_RELATION_TYPES,
+  buildDirectoryRelationSummary,
+  type DirectoryRelationOptions,
+  type DirectoryRelationPartner,
+  type DirectoryRelationSummary,
+} from './relations.ts'
+export {
   buildDirectoryCards,
   defaultDirectoryKey,
   compareDirectoryCards,

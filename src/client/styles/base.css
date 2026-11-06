@@ -1029,6 +1029,10 @@
   block-size: 100%;
   min-block-size: 0;
   overflow: hidden;
+  /* T36：Chrome 会把嵌套滚动容器（shell / 两栏）的 scrollable overflow 计入文档滚动区，
+     即使祖先 overflow:hidden（实测：窄容器下 documentElement.scrollHeight 会多出内容高度）。
+     paint containment 把这份溢出留在本插件根内，保证"不产生整页滚动"。 */
+  contain: paint;
 }
 
 .threadline-app .threadline-shell {
@@ -1147,32 +1151,62 @@
   }
 }
 
-/* ========== 6. 脉络 2.0 版式（T31）：左列 sticky + 右栏两列 + 单一滚动 ========== */
+/* ========== 6. 脉络 1.1 版式（T36）：双栏独立滚动 ========== */
 
 /*
- * 口径（33 §2）：
- * - .threadline-shell 是**唯一**滚动容器（见 §5），图/卡片/时间轴/轮次带都不得 overflow:auto；
- * - 主区 grid 两列：左列 = 图 + 时间轴 + 轮次带（sticky），右列 = 目录卡片（随页面滚动）；
- * - < 960px：上下堆叠（图 → 时间轴 → 轮次带 → 目录卡片），左列不再 sticky。
+ * 口径（T36，替换 T31 的「左列 sticky + 单一滚动」）：
+ * - >= 960（容器宽）：threadline-shell **不滚动**；header / Now strip 固定在顶部；
+ *   threadline-layout 吃掉剩余高度，左列 threadline-left 与右栏 threadline-rail
+ *   **各自** overflow-y:auto + overscroll-behavior:contain（滚轮按指针所在栏滚动，不带着宿主页面滚）；
+ * - 左列不再 sticky（两栏都自己滚，sticky 会与栏内滚动打架）；
+ * - < 960：回退为单页滚动 + 上下堆叠（图 → 时间轴 → 轮次带 → 目录卡片），header/Now 恢复 sticky。
  */
+
+.threadline-app .threadline-shell {
+  overflow: hidden;
+  padding-block-end: 0;
+}
+
+/* 桌面：header/Now 不再是 sticky（shell 不滚，它们天然固定） */
+.threadline-app .threadline-header {
+  position: static;
+  inset: auto;
+}
+
+.threadline-app .threadline-now {
+  position: static;
+  inset: auto;
+}
 
 .threadline-app .threadline-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 16px;
-  align-items: start;
+  align-items: stretch;
   padding: 16px;
   min-inline-size: 0;
+  flex: 1 1 auto;
+  min-block-size: 0;
+  overflow: hidden;
+}
+
+/* 左右两栏各自是滚动容器（滚轮落在哪栏就滚哪栏；到边界不传给宿主页面） */
+.threadline-app .threadline-left,
+.threadline-app .threadline-rail {
+  min-inline-size: 0;
+  min-block-size: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .threadline-app .threadline-left {
-  position: sticky;
-  inset-block-start: calc(var(--tl-header-h) + 8px);
+  position: static;
+  inset: auto;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  min-inline-size: 0;
-  align-self: start;
+  align-self: stretch;
 }
 
 .threadline-app .threadline-graph-slot {
@@ -1223,12 +1257,37 @@
   min-inline-size: 0;
 }
 
-/* 窄容器（<960）：上下堆叠；左列不再吸顶。 */
+/* 窄容器（<960）：回退为单页滚动 + 上下堆叠；两栏不再各自滚动。 */
 @container threadline (max-width: 959.98px) {
+  .threadline-app .threadline-shell {
+    overflow-y: auto;
+    padding-block-end: 8px;
+  }
+
+  .threadline-app .threadline-header {
+    position: sticky;
+    inset-block-start: 0;
+    z-index: 20;
+  }
+
+  .threadline-app .threadline-now {
+    position: sticky;
+    inset-block-start: var(--tl-header-h);
+    z-index: 19;
+  }
+
   .threadline-app .threadline-layout {
     grid-template-columns: minmax(0, 1fr);
+    flex: 0 0 auto;
     padding: 12px;
     gap: 12px;
+    overflow: visible;
+  }
+
+  .threadline-app .threadline-left,
+  .threadline-app .threadline-rail {
+    overflow: visible;
+    align-self: auto;
   }
 
   .threadline-app .threadline-left {

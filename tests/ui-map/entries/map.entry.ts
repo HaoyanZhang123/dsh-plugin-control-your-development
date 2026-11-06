@@ -18,7 +18,7 @@ import { createTranslator, type Locale } from '../../../src/client/locale/index.
 import { installStyles } from '../../../src/client/styles/index.ts'
 import { ProgressPill } from '../../../src/client/ui/common/index.ts'
 import { FileGraph } from '../../../src/client/ui/map/index.ts'
-import { DIRECTORY_TOP_FILES, DirectoryRail, buildDirectoryCards, directoryKeyOf } from '../../../src/client/ui/rail/index.ts'
+import { DIRECTORY_TOP_FILES, DirectoryRail, buildDirectoryCards, buildDirectoryRelationSummary, directoryKeyOf } from '../../../src/client/ui/rail/index.ts'
 import { ThreadlineShell } from '../../../src/client/ui/shell/index.ts'
 import { Timeline } from '../../../src/client/ui/timeline/index.ts'
 import {
@@ -61,8 +61,15 @@ declare global {
         graphOverflowY: boolean
         railOverflowY: boolean
         leftSticky: boolean
+        leftScroll: number
+        leftOverflowY: boolean
+        railScroll: number
+        railScrollable: boolean
+        leftScrollable: boolean
       }
       scrollShell: (top: number) => void
+      scrollLeft: (top: number) => void
+      scrollRail: (top: number) => void
     }
   }
 }
@@ -151,8 +158,10 @@ function App(): React.ReactElement {
   )
 
   const cards = React.useMemo(() => buildDirectoryCards(nodes, { rootLabel: t('map.rootCluster'), topFiles: DIRECTORY_TOP_FILES }), [nodes, t])
-  const initialDirectory = params.dir !== null && cards.some((card) => card.key === params.dir) ? params.dir : cards.length === 0 ? '' : cards[0].key
-  const [directoryKey, setDirectoryKey] = React.useState<string>(initialDirectory)
+  const [directoryKey, setDirectoryKey] = React.useState<string | null>(
+    params.dir !== null && cards.some((card) => card.key === params.dir) ? params.dir : null,
+  )
+  const [hoverDirectory, setHoverDirectory] = React.useState<string | null>(null)
   const [activeTurnN, setActiveTurnN] = React.useState<number | null>(
     params.state === 'turn' ? (params.turn !== null && turnDetails.some((turn) => turn.n === params.turn) ? params.turn : turnDetails[0]?.n ?? null) : null,
   )
@@ -162,11 +171,8 @@ function App(): React.ReactElement {
 
   const activeTurn = React.useMemo(() => turnDetails.find((turn) => turn.n === activeTurnN) ?? null, [turnDetails, activeTurnN])
   const turnStatus = React.useMemo(() => (activeTurn === null ? null : turnFileStatusOf(activeTurn, fileIndex)), [activeTurn, fileIndex])
-  const directoryLabel = directoryKey === '' ? t('map.rootCluster') : directoryKey
-  const directoryFiles = React.useMemo(
-    () => nodes.filter((node) => directoryKeyOf(node.path) === directoryKey),
-    [nodes, directoryKey],
-  )
+  const focusedDirectoryKey = directoryKey !== null && cards.some((card) => card.key === directoryKey) ? directoryKey : null
+  const directoryLabel = focusedDirectoryKey === null ? t('map.overview') : focusedDirectoryKey === '' ? t('map.rootCluster') : focusedDirectoryKey
   const turnFiles = React.useMemo(() => {
     if (activeTurn === null) return []
     const list: FileNode[] = []
@@ -176,21 +182,34 @@ function App(): React.ReactElement {
     }
     return list
   }, [activeTurn, fileIndex])
-  const mode = activeTurn === null ? 'directory' : 'turn'
-  const graphFiles = mode === 'turn' ? turnFiles : directoryFiles
+  const mode = activeTurn === null ? 'overview' : 'turn'
+  const graphFiles = mode === 'turn' ? turnFiles : nodes
   const activeKeys = React.useMemo(() => {
     if (mode !== 'turn') return null
     const keys = new Set<string>()
     for (const file of graphFiles) keys.add(directoryKeyOf(file.path))
     return keys
   }, [mode, graphFiles])
+  const turnRelations = React.useMemo(() => {
+    const map: Record<string, number> = {}
+    for (const turn of turnDetails) {
+      const keys = new Set(turn.files.map((file) => file.path.toLowerCase()))
+      let count = 0
+      for (const edge of edges) {
+        if (keys.has(edge.from.toLowerCase()) && keys.has(edge.to.toLowerCase())) count += 1
+      }
+      if (count > 0) map['turn:' + String(turn.n)] = count
+    }
+    return map
+  }, [turnDetails, edges])
 
-  const selectCard = React.useCallback((key: string) => {
-    setDirectoryKey(key)
+  const selectCard = React.useCallback((key: string | null) => {
+    setHoverDirectory(null)
     setActiveTurnN(null)
     setSelection({ kind: 'none' })
     setPreview(null)
     setSelectedPath(null)
+    setDirectoryKey((previous) => (key === null ? null : previous === key ? null : key))
   }, [])
   const selectTurn = React.useCallback((n: number) => {
     setActiveTurnN((previous) => (previous === n ? null : n))
@@ -248,13 +267,19 @@ function App(): React.ReactElement {
         const rail = document.querySelector('.threadline-rail') as HTMLElement | null
         const left = document.querySelector('.threadline-left') as HTMLElement | null
         const leftStyle = left === null ? null : window.getComputedStyle(left)
+        const railStyle = rail === null ? null : window.getComputedStyle(rail)
         return {
           windowScroll: window.scrollY,
           shellScroll: shell?.scrollTop ?? 0,
           shellScrollHeight: shell?.scrollHeight ?? 0,
           shellClientHeight: shell?.clientHeight ?? 0,
-          graphOverflowY: graph !== null && graph.scrollHeight > graph.clientHeight + 1,
+          leftScroll: left?.scrollTop ?? 0,
+          leftOverflowY: left !== null && left.scrollHeight > left.clientHeight + 1,
+          railScroll: rail?.scrollTop ?? 0,
           railOverflowY: rail !== null && rail.scrollHeight > rail.clientHeight + 1,
+          leftScrollable: leftStyle !== null && leftStyle.overflowY === 'auto',
+          railScrollable: railStyle !== null && railStyle.overflowY === 'auto',
+          graphOverflowY: graph !== null && graph.scrollHeight > graph.clientHeight + 1,
           leftSticky: leftStyle !== null && leftStyle.position === 'sticky',
         }
       },
@@ -262,13 +287,21 @@ function App(): React.ReactElement {
         const shell = document.querySelector('[data-threadline-shell]') as HTMLElement | null
         if (shell !== null) shell.scrollTop = top
       },
+      scrollLeft: (top: number) => {
+        const left = document.querySelector('.threadline-left') as HTMLElement | null
+        if (left !== null) left.scrollTop = top
+      },
+      scrollRail: (top: number) => {
+        const rail = document.querySelector('.threadline-rail') as HTMLElement | null
+        if (rail !== null) rail.scrollTop = top
+      },
     }
   })
 
   React.useEffect(() => {
     if (params.state !== 'scrolled') return
-    const shell = document.querySelector('[data-threadline-shell]') as HTMLElement | null
-    if (shell !== null) shell.scrollTop = Math.round(shell.scrollHeight * 0.45)
+    const rail = document.querySelector('.threadline-rail') as HTMLElement | null
+    if (rail !== null) rail.scrollTop = Math.round(rail.scrollHeight * 0.45)
   }, [params.state])
 
   const timelineNodes = React.useMemo(
@@ -290,6 +323,7 @@ function App(): React.ReactElement {
     },
     onClearSelection: exitTurn,
     onEscape: exitTurn,
+    relationCountByKey: new Map(Object.entries(turnRelations)),
     now: NOW,
     testId: 'turn-strip',
   })
@@ -310,7 +344,12 @@ function App(): React.ReactElement {
       files: graphFiles,
       edges,
       mode,
-      directoryKey,
+      cards: mode === 'overview' ? cards : undefined,
+      hoveredDirectoryKey: hoverDirectory,
+      focusedDirectoryKey,
+      onHoverDirectory: setHoverDirectory,
+      onFocusDirectory: selectCard,
+      directoryKey: focusedDirectoryKey ?? '',
       directoryLabel,
       turn: activeTurn === null || turnStatus === null ? null : { turn: activeTurn, status: turnStatus },
       selectedPath,
@@ -350,9 +389,12 @@ function App(): React.ReactElement {
     turnStripSlot: strip,
     railSlot: h(DirectoryRail, {
       nodes,
-      selectedKey: mode === 'directory' ? directoryKey : null,
+      selectedKey: focusedDirectoryKey,
+      hoveredKey: hoverDirectory,
       activeKeys,
+      relationByKey: buildDirectoryRelationSummary(cards, edges),
       ...(activeTurn === null ? {} : { currentTurnPaths: activeTurn.files.map((file) => file.path) }),
+      onHover: setHoverDirectory,
       onSelect: selectCard,
       locale: params.locale,
       formatTime: (at: number) => new Date(at).toISOString().slice(0, 16).replace('T', ' '),

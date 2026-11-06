@@ -13,6 +13,7 @@ import * as React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { caseKey } from '../../src/shared/relations/index.ts'
 import { FileGraph, FILE_FAMILIES, FAMILY_COLOR } from '../../src/client/ui/map/index.ts'
+import { buildDirectoryCards } from '../../src/client/ui/rail/index.ts'
 import { turnFileStatusOf } from '../../src/client/ui/turns/index.ts'
 import { buildEdges, makeFiles, makeTurnDetail, NOW } from './fixtures.ts'
 
@@ -183,4 +184,142 @@ test('turn 模式：运行中轮次（无 end）首见显示 —，不显示 0',
   const html = renderGraph({ files: turnFiles, mode: 'turn', turn: { turn, status }, edges: [] })
   assert.ok(html.includes('首见 —'))
   assert.equal(html.includes('首见 0'), false)
+})
+
+/* ================================================================== *
+ * T35 星图总览（overview）：目录簇 / top3+聚合标记 / 目录级弱边 /
+ * 关系类型 chip / 加载态 / 覆盖说明 / 图内证据
+ * ================================================================== */
+
+function overviewEdge(type: 'coTurn' | 'reference' | 'structure', from: string, to: string, weight = 1) {
+  const evidence =
+    type === 'structure'
+      ? { kind: 'structure' as const, dir: from.split('/')[0] ?? '', text: '同目录：' + from }
+      : type === 'reference'
+        ? { kind: 'reference' as const, line: 3, raw: to, target: to, resolved: true, text: '引用：' + to }
+        : { kind: 'coTurn' as const, samples: [{ sessionId: 'sess-0001', turn: 1 }], count: weight, text: '同一轮：' + from }
+  return {
+    id: 'e:' + type + ':' + from + ':' + to,
+    type,
+    from,
+    to,
+    weight,
+    directed: type === 'reference',
+    evidence,
+    confirmed: true,
+    confidence: type === 'structure' ? ('estimated' as const) : type === 'reference' ? ('parsed' as const) : ('confirmed' as const),
+  }
+}
+
+function overviewFixture() {
+  const nodes = makeFiles({ count: 120, dirs: ['src', 'docs', 'assets', 'notes'] })
+  const src = nodes.find((file) => file.path.startsWith('src/'))
+  const docs = nodes.find((file) => file.path.startsWith('docs/'))
+  const assets = nodes.find((file) => file.path.startsWith('assets/'))
+  assert.ok(src !== undefined && docs !== undefined && assets !== undefined)
+  const edges = [
+    overviewEdge('coTurn', src.path, docs.path, 3),
+    overviewEdge('reference', src.path, docs.path, 1),
+    overviewEdge('structure', src.path, nodes[0].path, 1),
+    overviewEdge('coTurn', docs.path, assets.path, 2),
+  ]
+  return { nodes, cards: buildDirectoryCards(nodes), edges, src, docs }
+}
+
+function renderOverview(overrides: Record<string, unknown> = {}): string {
+  const fixture = overviewFixture()
+  return renderToStaticMarkup(
+    h(FileGraph, {
+      files: fixture.nodes,
+      cards: fixture.cards,
+      edges: fixture.edges,
+      mode: 'overview',
+      directoryKey: '',
+      directoryLabel: '/',
+      now: NOW,
+      locale: 'zh',
+      testId: 'overview-graph',
+      ...overrides,
+    }),
+  )
+}
+
+test('overview：每目录一簇 + 折叠只画 top3 + +N 聚合标记（不出现数千文件节点）', () => {
+  const fixture = overviewFixture()
+  const html = renderOverview()
+  assert.ok(html.includes('data-graph-mode="overview"'))
+  assert.equal(countMatches(html, /data-cluster-key="/g), fixture.cards.length)
+  assert.equal(countMatches(html, /data-file-path="/g), fixture.cards.length * 3, '折叠态只画每簇 top3')
+  for (const card of fixture.cards) {
+    assert.ok(html.includes('data-cluster-key="' + card.key + '"'), '缺目录簇：' + card.key)
+    if (card.count > 3) assert.ok(html.includes('data-more-files="' + String(card.count - 3) + '"'), '缺 +N：' + card.key)
+  }
+  // 300 文件真实规模也不会把全部文件塞进 DOM。
+  const many = makeFiles({ count: 300, dirs: ['src', 'docs', 'assets', 'notes'] })
+  const manyCards = buildDirectoryCards(many)
+  const manyHtml = renderToStaticMarkup(
+    h(FileGraph, { files: many, cards: manyCards, edges: [], mode: 'overview', directoryKey: '', directoryLabel: '/', now: NOW, locale: 'zh' }),
+  )
+  assert.ok(countMatches(manyHtml, /data-file-path="/g) <= manyCards.length * 3)
+})
+
+test('overview：悬浮/聚焦的簇展开 top12，其他簇 dim；目录级弱关系只画跨目录聚合', () => {
+  const fixture = overviewFixture()
+  const expandedKey = fixture.cards[0].key
+  const html = renderOverview({ hoveredDirectoryKey: expandedKey })
+  const expandedBlockStart = html.indexOf('data-cluster-key="' + expandedKey + '"')
+  assert.ok(expandedBlockStart > 0)
+  assert.ok(html.includes('data-expanded="true"'))
+  assert.ok(html.includes('data-dim="true"'), '其他簇要 dim')
+  assert.ok(countMatches(html, /data-file-path="/g) > fixture.cards.length * 3, '展开态应有更多文件节点')
+  assert.ok(countMatches(html, /data-file-path="/g) <= (fixture.cards.length - 1) * 3 + 12)
+  assert.ok(countMatches(html, /data-dir-edge="/g) > 0, '缺目录级弱关系')
+  assert.ok(html.includes('data-from-directory="' + expandedKey + '"') || html.includes('data-to-directory="' + expandedKey + '"'))
+})
+
+test('overview：关系类型 chip 带计数；加载态显示骨架而不是 0 文件空态；coverageNote 进图尾', () => {
+  const html = renderOverview({ coverageNote: '基于已加载 12 个会话' })
+  assert.ok(html.includes('data-relation-filter="coTurn"'))
+  assert.ok(html.includes('data-relation-filter="reference"'))
+  assert.ok(html.includes('aria-pressed="true"'))
+  assert.ok(html.includes('基于已加载 12 个会话'))
+  assert.ok(html.includes('data-graph-reset="true"'))
+
+  const loading = renderToStaticMarkup(
+    h(FileGraph, {
+      files: [],
+      cards: [],
+      edges: [],
+      mode: 'overview',
+      directoryKey: '',
+      directoryLabel: '/',
+      now: NOW,
+      locale: 'zh',
+      loading: true,
+      loadingLabel: '正在加载文件关系…',
+    }),
+  )
+  assert.ok(loading.includes('data-graph-loading="true"'))
+  assert.ok(loading.includes('正在加载文件关系…'))
+  assert.equal(loading.includes('data-threadline-empty'), false, '加载中不能显示空态/0 文件')
+})
+
+test('overview：选中文件显示图内证据浮层（路径/族/ops/关系分组），不是旧检查器', () => {
+  const fixture = overviewFixture()
+  const html = renderOverview({ selectedPath: fixture.src.path })
+  assert.ok(html.includes('data-graph-evidence="file"'))
+  assert.ok(html.includes('关系证据'))
+  assert.ok(html.includes(fixture.src.path))
+  assert.ok(html.includes('data-evidence-family="code"') || html.includes('data-evidence-family="text"') || html.includes('data-evidence-family="data"'))
+  assert.ok(html.includes('操作 '))
+  assert.ok(html.includes('data-evidence-type="coTurn"') || html.includes('data-evidence-type="reference"'))
+  assert.equal(html.includes('data-region="inspector"'), false)
+})
+
+test('overview：空数据走既有空态；同 props 两次渲染逐字符相同', () => {
+  const empty = renderToStaticMarkup(
+    h(FileGraph, { files: [], cards: [], edges: [], mode: 'overview', directoryKey: '', directoryLabel: '/', now: NOW, locale: 'zh' }),
+  )
+  assert.ok(empty.includes('data-threadline-empty'))
+  assert.equal(renderOverview(), renderOverview())
 })

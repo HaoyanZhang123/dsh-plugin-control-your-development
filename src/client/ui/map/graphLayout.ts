@@ -23,7 +23,7 @@ export interface GraphSourceFile {
   lastAt: number
 }
 
-export type GraphMode = 'directory' | 'turn'
+export type GraphMode = 'overview' | 'directory' | 'turn'
 
 export interface GraphLayoutNode extends GraphSourceFile {
   /** 屏幕坐标（viewBox 与容器 1:1）。 */
@@ -96,6 +96,10 @@ function round2(value: number): number {
 export function layoutFileGraph(files: readonly GraphSourceFile[], options: GraphLayoutOptions): GraphLayout {
   const width = Math.max(240, Math.round(options.width))
   const height = Math.max(240, Math.round(options.height))
+  // overview 不走文件级径向布局（它由 overview.ts 的簇布局负责）；显式返回空布局，避免误用。
+  if (options.mode === 'overview') {
+    return { nodes: [], width, height, shown: 0, total: files.length, truncated: false, mode: options.mode }
+  }
   // 窄容器（左列 < 640px）减少目录节点，避免 40 节点在 450px 宽里互相压住（T34 复验）。
   const narrowLimit = options.mode === 'directory' && width < 640 ? 30 : undefined
   const selection = selectGraphFiles(files, narrowLimit === undefined ? options : { ...options, limit: narrowLimit })
