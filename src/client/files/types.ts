@@ -26,8 +26,33 @@ export interface WorkspaceReadRange {
 }
 
 /**
- * workspaceFiles 只读通道（只声明本插件用到的两个方法；README 明示无 mutation 操作）。
+ * 目录条目类型（`remote.workspaceFiles.list` 的 wire 形状；notes/21 §c.1）。
+ * `other` = 符号链接/socket/设备等非普通文件非目录（**不可进入**）。
+ */
+export type WorkspaceEntryType = 'file' | 'directory' | 'other'
+
+/** 一个目录条目（wire 形状，未经归一化/排序；不含路径，只有名字）。 */
+export interface WorkspaceDirectoryEntry {
+  readonly name: string
+  readonly type: WorkspaceEntryType
+  /** 只有普通文件可能带；目录/other 不保证有。 */
+  readonly size?: number
+}
+
+/** 一次目录列表（wire 形状）。`path` 是**工作区相对路径**，空串 = 根。 */
+export interface WorkspaceDirectoryListing {
+  readonly path: string
+  readonly entries: readonly WorkspaceDirectoryEntry[]
+  readonly truncated: boolean
+}
+
+/**
+ * workspaceFiles 只读通道（只声明本插件用到的方法；README 明示无 mutation 操作）。
  * 单测注入假实现，运行期注入 `remote.workspaceFiles`。
+ *
+ * `list`：真机能力可能缺失（R00 探针；02 §G/§K1），所以**声明为可选**：
+ * 缺失时目录树走 B1 host 只读 fallback（`src/host/tree.ts`），而不是假装空目录。
+ * `list.path` 是工作区相对路径（空串 = 根），**与 stat/read 的路径词汇不同**（notes/21 §c.1）。
  */
 export interface WorkspaceFilesFace {
   stat(sessionId: string, path: string, signal?: AbortSignal): Promise<WorkspaceFileStat>
@@ -37,6 +62,7 @@ export interface WorkspaceFilesFace {
     range?: WorkspaceReadRange,
     signal?: AbortSignal,
   ): Promise<WorkspaceFileText>
+  list?(sessionId: string, path: string, signal?: AbortSignal): Promise<WorkspaceDirectoryListing>
 }
 
 /** 路径被本层拒绝的原因（N-07：绝对路径、`..` 穿越、工作区外）。 */

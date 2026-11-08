@@ -33,7 +33,9 @@ export type ShellRegion = (typeof SHELL_REGIONS)[keyof typeof SHELL_REGIONS]
 export const SHELL_METRICS = {
   header: 56,
   now: 36,
-  timeline: 48,
+  // 时间轴：48 → 104（2026-11-08 用户拍板改「双轨」：上轨活跃度柱 + 下轨会话分层）。
+  // 104 % 8 === 0，8px 网格不破。
+  timeline: 104,
   turns: 92,
   turnsCollapsed: 40,
   inspector: 340,

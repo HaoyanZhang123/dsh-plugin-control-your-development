@@ -1,63 +1,76 @@
 /*
- * timeline.css —— 时间轴（T07 / 03 §5）的样式。
+ * timeline.css —— 时间轴（双轨：活跃度 + 会话分层）的样式。
  *
- * 纪律同 base.css：选择器挂 .threadline-app；颜色只用 --tl-*；只做容器查询；
- * 注入走 styles/index.ts 的单一 installStyles()（枚举 styles/*.css），不自己插 <style>。
+ * 规范：33 §5（双轨）、03 §5（范围/刻度/播放头）、03 §13.1（颜色只来自 --tl-*）。
+ * R12（2.2.0）：旧的生长带 / 密集刻度 / 会话竖线 / 轨道外播放头文本四条规则的样式已删除。
+ *
+ * 布局（总高 = --tl-timeline-h = 104px；左侧不再有控件列，绘图区占满整条宽度）：
+ *   顶部 14px   播放头标签行（全时间轴**唯一**标签，贴边自动翻转）
+ *   0–46px      上轨：活跃度柱，柱底落在 46px 的基线上
+ *   50–100px    下轨：会话分层，行高 6 间距 4，最多 4 行（行距 10）
+ *   90–104px    底部三个刻度标签（11px）
+ *
+ * 纪律：
+ * - 选择器挂 .threadline-app；颜色只用 --tl-*（本文件不出现颜色字面量）；
+ * - 只做容器查询；注释里不用反引号（工厂纪律：模板串截断事故）；
+ * - 没有任何图例 / 单位 / 说明文字样式（用户明确要求删掉解释性小字）。
  */
 
-/* ========== 根 ========== */
+/* ========== 根：左右两栏（控件 + 绘图区） ========== */
 
 .threadline-app .tl-timeline {
   position: relative;
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 8px;
   inline-size: 100%;
   block-size: 100%;
   min-inline-size: 0;
+  min-block-size: 0;
   overflow: hidden;
   color: var(--tl-fg-secondary);
+  font-family: var(--tl-font);
   font-size: var(--tl-fs-meta);
 }
 
-/* ========== 生长带（8px，03 §5） ========== */
+/* 控件列（.tl-controls / 「回到最新」按钮）已于 2026-11-08 删除（用户拍板）。
+   能力保留为**双击轨道**，所以这里不再有控件列样式；绘图区直接占满整条宽度。 */
 
-.threadline-app .tl-growth {
+/* ========== 绘图区（双轨的坐标系） ========== */
+
+/*
+ * 先把「时间轴卡片」的**上下内边距归零**，让双轨拿到完整的 104px 画布。
+ *
+ * 为什么必须这样：.threadline-timeline 卡片（base.css）原本有 padding: 8px 12px，
+ * 那是给 48px 单行时间轴留的呼吸；改成 104px 双轨后，8+8 的内边距 + 上下各 1px 边框
+ * 会把内容区压到 86px，于是「46px 上轨 + 4 行会话（40px）+ 14px 刻度」放不下、
+ * 会话条与刻度互相压住（实测：lanes bottom 716 > track bottom 712）。
+ * 本文件在注入顺序里晚于 base.css，同特异性下覆盖生效 → 画布 = 104px 边框盒 - 2px 边框 = 102px。
+ * 横向内边距不动（12px 左右留白仍然保留）。
+ */
+.threadline-app .threadline-left .threadline-timeline {
+  padding-block: 0;
+}
+
+/*
+ * .tl-plot 是「轨道几何」的唯一容器：
+ * 播放头的百分比、柱的百分比、会话条的百分比都以它为准 —— 三者必须同一个参照系，
+ * 否则播放头与柱子对不上（这正是旧版被说"粗糙"的原因之一）。
+ */
+.threadline-app .tl-plot {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
   flex: 1 1 auto;
-  block-size: 100%;
   min-inline-size: 0;
-  overflow: hidden;
+  block-size: 100%;
 }
 
-.threadline-app .tl-growth-svg {
-  display: block;
-  inline-size: 100%;
-  block-size: 8px;
-  overflow: visible;
-}
-
-.threadline-app .tl-growth-line {
-  fill: var(--tl-accent);
-  fill-opacity: 0.16;
-  stroke: var(--tl-accent);
-  stroke-width: 1;
-  vector-effect: non-scaling-stroke;
-}
-
-/* ========== 轨道 ========== */
+/* ========== 轨道（role=slider；整条都可点） ========== */
 
 .threadline-app .tl-track {
   position: relative;
-  flex: 1 1 auto;
-  block-size: 22px;
+  inline-size: 100%;
+  block-size: 100%;
   min-inline-size: 0;
-  border-block-start: 1px solid var(--tl-border-weak);
-  border-block-end: 1px solid var(--tl-border-weak);
-  background: var(--tl-surface-sunken);
   cursor: crosshair;
   touch-action: none;
 }
@@ -67,146 +80,156 @@
   outline-offset: 2px;
 }
 
-/* ========== 未加载区段（斜纹 + 真标签；不画假节点） ========== */
+/* ========== 上轨：活跃度柱 ========== */
 
-.threadline-app .tl-unloaded {
+/*
+ * 上轨 = 0–46px；基线（1px，--tl-border-strong）画在 46px 上。
+ * 柱用 position:absolute + bottom:0 从基线往上长，高度由 JS 给（blockSize）。
+ */
+.threadline-app .tl-activity {
   position: absolute;
-  inset-block: 0;
-  background-color: var(--tl-surface);
-  background-image: repeating-linear-gradient(
-    135deg,
-    var(--tl-border-strong) 0 2px,
-    transparent 2px 7px
-  );
-  border-inline: 1px solid var(--tl-warn);
-  opacity: 0.85;
+  inset-block-start: 0;
+  inset-inline: 0;
+  block-size: 46px;
+  border-block-end: 1px solid var(--tl-border-strong);
   pointer-events: none;
 }
 
-.threadline-app .tl-unloaded-label {
+.threadline-app .tl-bar {
   position: absolute;
-  inset-block-start: 2px;
-  inset-inline-start: 3px;
-  padding: 0 3px;
+  inset-block-end: 0;
+  /*
+   * 柱宽 = 桶宽 × 0.68：JS 给的是整个桶的宽（100/binCount%），
+   * 这里以「桶中心」为原点横向缩到 0.68 → 柱在自己桶内居中，柱间自然留白。
+   */
+  transform: scaleX(0.68);
+  transform-origin: center bottom;
+  /*
+   * 顶部圆角走令牌（styles 纪律：不许 radius 字面量）。
+   * 柱宽只有 5–6px，CSS 会按「水平半径之和不得超边宽」等比缩小，
+   * 4px 令牌实际渲染约 2.7px —— 正是想要的小圆顶，不需要新 token。
+   */
+  border-start-start-radius: var(--tl-radius-xs);
+  border-start-end-radius: var(--tl-radius-xs);
+  background: var(--tl-accent);
+}
+
+/* ========== 下轨：会话分层 ========== */
+
+/*
+ * 下轨 = 50px 起，到刻度行上沿为止（38px）。
+ * 每会话一行：行高 6px、行距 10px（= 6 + 4），最多 4 行 → 4 行占据 50–86px，
+ * 与刻度行（88–102px）留 2px 缝，互不压住。
+ * 行号由 JS 给（insetBlockStart = lane × 10px），这里只定高度与外观。
+ * 刻意**不写标题**：只有 title 属性做 hover tooltip。
+ */
+.threadline-app .tl-lanes {
+  position: absolute;
+  inset-block-start: 50px;
+  inset-inline: 0;
+  block-size: 38px;
+  pointer-events: none;
+}
+
+.threadline-app .tl-lane-bar {
+  position: absolute;
+  block-size: 6px;
+  /*
+   * 会话条 6px 高 + 4px 令牌圆角：CSS 会把上下半径等比压到 3px，
+   * 于是渲染出来就是"两端半圆"的 3px 观感（与设计稿一致），无需新增 3px token。
+   */
   border-radius: var(--tl-radius-xs);
-  background: var(--tl-surface-raised);
-  color: var(--tl-fg-tertiary);
-  font-size: 10px;
-  line-height: 1.2;
-  white-space: nowrap;
-  pointer-events: none;
-}
-
-.threadline-app .tl-unloaded-hint {
-  position: absolute;
-  inset-block-start: -20px;
-  z-index: 4;
-  padding: 1px 6px;
-  border: 1px solid var(--tl-warn);
-  border-radius: var(--tl-radius-sm);
-  background: var(--tl-surface-raised);
-  color: var(--tl-fg);
-  font-size: 10px;
-  line-height: 1.5;
-  white-space: nowrap;
-  pointer-events: none;
-}
-
-/* ========== 会话刻度（03 §5：开始/结束小竖线） ========== */
-
-.threadline-app .tl-session {
-  position: absolute;
-  inset-block: 0;
-  inline-size: 1px;
-  background: var(--tl-border-strong);
+  background: var(--tl-fg-secondary);
+  opacity: 0.45;
+  pointer-events: auto;
   cursor: default;
 }
 
-.threadline-app .tl-session[data-edge='end'] {
-  background: var(--tl-fg-tertiary);
+.threadline-app .tl-lane-bar:hover {
+  opacity: 0.7;
 }
 
-.threadline-app .tl-session:hover {
-  background: var(--tl-accent);
-}
+/* ========== 播放头：2px 竖线贯穿两轨 + 唯一标签 ========== */
 
-/* ========== 播放头 ========== */
-
-.threadline-app .tl-playhead {
+.threadline-app .tl-playhead-line {
   position: absolute;
-  inset-block: -2px;
+  inset-block: 0;
   inline-size: 2px;
+  margin-inline-start: -1px;
   background: var(--tl-accent);
-  transform: translateX(-1px);
   pointer-events: none;
 }
 
-.threadline-app .tl-playhead-handle {
-  position: absolute;
-  inset-block-start: -5px;
-  inset-inline-start: 50%;
-  inline-size: 10px;
-  block-size: 10px;
-  margin-inline-start: -5px;
-  border: 2px solid var(--tl-accent);
-  border-radius: var(--tl-radius-pill);
-  background: var(--tl-bg);
-  pointer-events: auto;
-  cursor: grab;
-}
-
-.threadline-app .tl-playhead-handle:active {
-  cursor: grabbing;
-}
-
-/* ========== 刻度标签 ========== */
-
-.threadline-app .tl-ticks {
-  position: relative;
-  flex: 0 0 auto;
-  block-size: 14px;
-}
-
-.threadline-app .tl-tick {
+/*
+ * 唯一标签：顶部 11px、--tl-accent 色。
+ * 标签与竖线**分别在同一个比例位置**上定位，靠 data-label-anchor 决定它贴在竖线哪一侧：
+ *   center → 以竖线为中心（translateX(-50%)）
+ *   start  → 贴近左边界，向右展开（不位移）
+ *   end    → 贴近右边界，向左展开（整个宽度左移）
+ * 三种都不越出轨道（这是"贴边自动翻转"的实现）。
+ */
+.threadline-app .tl-playhead-label {
   position: absolute;
   inset-block-start: 0;
-  transform: translateX(-50%);
-  color: var(--tl-fg-tertiary);
+  display: block;
+  padding-block-end: 2px;
+  color: var(--tl-accent);
   font-family: var(--tl-mono);
-  font-size: 10px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 14px;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.threadline-app .tl-playhead-label[data-label-anchor='start'] {
+  transform: translateX(0);
+}
+
+.threadline-app .tl-playhead-label[data-label-anchor='end'] {
+  transform: translateX(-100%);
+}
+
+/* ========== 底部刻度：只有三个标签，不画刻度线 ========== */
+
+.threadline-app .tl-scale {
+  position: absolute;
+  inset-block-end: 0;
+  inset-inline: 0;
+  block-size: 14px;
+  pointer-events: none;
+}
+
+.threadline-app .tl-scale-tick {
+  position: absolute;
+  inset-block-start: 0;
+  color: var(--tl-fg-caption);
+  font-family: var(--tl-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
   line-height: 14px;
   white-space: nowrap;
 }
 
-.threadline-app .tl-tick[data-tick-priority='high'] {
-  color: var(--tl-fg-secondary);
+/* 对齐：首贴左、尾贴右、中间居中 —— 三个标签都不越出容器（也就都不翻转）。 */
+.threadline-app .tl-scale-tick[data-tick-align='start'] {
+  transform: translateX(0);
 }
 
-/* ========== 控件（只读动作：播放/暂停 · 倍速 · 回到现在） ========== */
-
-.threadline-app .tl-controls {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex: 0 0 auto;
-  min-inline-size: 0;
+.threadline-app .tl-scale-tick[data-tick-align='center'] {
+  transform: translateX(-50%);
 }
 
-.threadline-app .tl-controls .threadline-btn {
-  block-size: 22px;
+.threadline-app .tl-scale-tick[data-tick-align='end'] {
+  transform: translateX(-100%);
 }
 
-.threadline-app .tl-speed {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-}
+/* ========== 空数据：不画假柱子，也不写说明文字 ========== */
 
-.threadline-app .tl-current {
-  flex: 0 0 auto;
-  color: var(--tl-fg-tertiary);
-  font-size: 10px;
-  white-space: nowrap;
+/* 没有数据域时只剩基线与三个刻度（真实存在的时间范围），不补 0 高假柱。 */
+.threadline-app .tl-timeline[data-empty='true'] .tl-playhead-label {
+  color: var(--tl-fg-caption);
 }
 
 /* ========== 响应式（容器查询） ========== */
@@ -216,12 +239,9 @@
     gap: 4px;
   }
 
-  .threadline-app .tl-controls .threadline-btn {
-    padding: 0 4px;
-  }
-
-  .threadline-app .tl-current {
-    display: none;
+  .threadline-app .tl-playhead-label,
+  .threadline-app .tl-scale-tick {
+    font-size: 10px;
   }
 }
 

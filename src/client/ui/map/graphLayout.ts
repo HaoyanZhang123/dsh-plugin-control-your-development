@@ -1,12 +1,13 @@
 /*
- * map/graphLayout.ts —— 文件关系图的确定性径向布局（33 §3）。
+ * map/graphLayout.ts —— 轮次图的确定性径向布局（33 §3）。
  *
  * 规则（与原型一致，但**确定性**且不依赖 DOM）：
- * - 只布局当前集合（目录 top 40、窄容器 30 / 轮次 top 200，按 ops → lastAt → path 排序）；
+ * - 只布局当前集合（轮次 top 200，按 ops → lastAt → path 排序）；
  * - 最活跃的 1 个文件居中；其余按"先内环（≤6）后外环"铺开，角度按序号均匀分布（−90° 起）；
  * - y 方向压扁到 72%（星座感），所有坐标按容器宽高收敛，保证不出画框；
  * - 同数据 + 同容器尺寸 → 逐节点坐标相同；无随机数 / 时间依赖。
  *
+ * 当前目录图（folder）**不走**这里：它用 `folderLayout.ts` 的等宽网格（文件夹带 + 文件网格）。
  * 纯函数：可被 node:test 直接调用。
  */
 import type { FileFamily } from '../../../shared/events/index.ts'
@@ -23,7 +24,11 @@ export interface GraphSourceFile {
   lastAt: number
 }
 
-export type GraphMode = 'overview' | 'directory' | 'turn'
+/**
+ * 图的模式（单一执行路径：只剩 folder / turn；旧的 overview/description 已删）。
+ * 本文件的径向布局只服务 `turn`；`folder` 走 `folderLayout.ts` 的网格布局。
+ */
+export type GraphMode = 'folder' | 'turn'
 
 export interface GraphLayoutNode extends GraphSourceFile {
   /** 屏幕坐标（viewBox 与容器 1:1）。 */
@@ -77,7 +82,7 @@ export function selectGraphFiles(
   files: readonly GraphSourceFile[],
   options: { mode: GraphMode; limit?: number },
 ): { shown: GraphSourceFile[]; total: number; truncated: boolean } {
-  const limit = Math.max(1, Math.trunc(options.limit ?? GRAPH_LIMITS[options.mode]))
+  const limit = Math.max(1, Math.trunc(options.limit ?? GRAPH_LIMITS.turn))
   const ordered = files.slice().sort(compareGraphFiles)
   const shown = ordered.length > limit ? ordered.slice(0, limit) : ordered
   return { shown, total: files.length, truncated: files.length > shown.length }
@@ -88,21 +93,16 @@ function round2(value: number): number {
 }
 
 /**
- * 径向布局。
+ * 径向布局（只用于 turn：某一轮涉及的文件，可跨目录）。
  *
  * @param files  当前集合的全部文件（顺序无关）
- * @param options 画布尺寸 + mode（决定上限）
+ * @param options 画布尺寸 + 节点上限
  */
 export function layoutFileGraph(files: readonly GraphSourceFile[], options: GraphLayoutOptions): GraphLayout {
   const width = Math.max(240, Math.round(options.width))
   const height = Math.max(240, Math.round(options.height))
-  // overview 不走文件级径向布局（它由 overview.ts 的簇布局负责）；显式返回空布局，避免误用。
-  if (options.mode === 'overview') {
-    return { nodes: [], width, height, shown: 0, total: files.length, truncated: false, mode: options.mode }
-  }
-  // 窄容器（左列 < 640px）减少目录节点，避免 40 节点在 450px 宽里互相压住（T34 复验）。
-  const narrowLimit = options.mode === 'directory' && width < 640 ? 30 : undefined
-  const selection = selectGraphFiles(files, narrowLimit === undefined ? options : { ...options, limit: narrowLimit })
+  const limit = Math.max(1, Math.trunc(options.limit ?? (options.mode === 'turn' ? GRAPH_LIMITS.turn : GRAPH_LIMITS.folder)))
+  const selection = selectGraphFiles(files, { mode: options.mode, limit })
   const shown = selection.shown
 
   const cx = width / 2

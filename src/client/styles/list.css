@@ -1,0 +1,193 @@
+/*
+ * list.css —— 列表视图（文件表 / 轮次表）的排版（Q6，1.2.0）。
+ *
+ * 背景：1.1.0 的列表视图只有 tab.ts 里的内联 overflow/padding，没有任何 .threadline-table
+ * 样式，浏览器 auto 布局会被完整路径撑宽 → 横向滚动、表头逐字竖排。
+ *
+ * 纪律（与 base.css / map.css 一致）：
+ * - 选择器全部挂 .threadline-app；颜色只用 tokens.css 的 --tl-*；
+ * - 只在列表自身做容器查询（.threadline-listview 是 container）；
+ * - 行高锁 26px，必须与 perf.ts 的 LIST_ROW_HEIGHT 一致（虚拟化按它算窗口）；
+ * - 不引入横向滚动：table-layout:fixed + 首列省略 + 窄栏降级。
+ */
+
+/* ========== 容器 ========== */
+
+.threadline-app .threadline-listview {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px;
+  max-block-size: 520px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.threadline-app .threadline-list {
+  min-inline-size: 0;
+}
+
+/* ========== 表格骨架 ========== */
+
+.threadline-app .threadline-table {
+  inline-size: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  color: var(--tl-fg);
+  font-family: var(--tl-font);
+  font-size: var(--tl-fs-meta-sm);
+  line-height: var(--tl-lh-tight);
+}
+
+.threadline-app .threadline-table colgroup,
+.threadline-app .threadline-table thead {
+  position: relative;
+}
+
+.threadline-app .threadline-table th,
+.threadline-app .threadline-table td {
+  min-inline-size: 0;
+  block-size: 26px;
+  padding: 0 6px;
+  overflow: hidden;
+  text-align: start;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+/* fixed 布局的列宽：首列自适应，其余定宽（动作列 = 64px）。 */
+.threadline-app .threadline-table th:nth-child(2),
+.threadline-app .threadline-table td:nth-child(2) {
+  inline-size: 48px;
+}
+
+.threadline-app .threadline-table th:nth-child(3),
+.threadline-app .threadline-table td:nth-child(3) {
+  inline-size: 68px;
+}
+
+.threadline-app .threadline-table th:nth-child(4),
+.threadline-app .threadline-table td:nth-child(4) {
+  inline-size: 68px;
+}
+
+.threadline-app .threadline-table th:nth-child(5),
+.threadline-app .threadline-table td:nth-child(5) {
+  inline-size: 64px;
+}
+
+.threadline-app .threadline-table thead th {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 1;
+  border-block-end: 1px solid var(--tl-border-weak);
+  background: var(--tl-surface);
+  color: var(--tl-fg-tertiary);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.threadline-app .threadline-table tbody tr {
+  border-block-end: 1px solid var(--tl-border-weak);
+}
+
+.threadline-app .threadline-table tbody tr:hover {
+  background: var(--tl-hover);
+}
+
+.threadline-app .threadline-table tbody tr[aria-selected='true'] {
+  background: var(--tl-active);
+}
+
+.threadline-app .threadline-table td[data-numeric='true'] {
+  color: var(--tl-fg-secondary);
+  font-family: var(--tl-mono);
+  font-size: 10px;
+  text-align: end;
+}
+
+/* ========== 列头排序按钮 ========== */
+
+.threadline-app .threadline-table th .threadline-table-sort {
+  display: inline-flex;
+  align-items: center;
+  max-inline-size: 100%;
+  min-inline-size: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.threadline-app .threadline-table th .threadline-table-sort:hover {
+  color: var(--tl-fg-secondary);
+}
+
+/* ========== 首列：主名 + 次级目录 ========== */
+
+.threadline-app .threadline-table td.threadline-table-file {
+  padding-block: 1px;
+}
+
+.threadline-app .threadline-table-file-name {
+  display: block;
+  overflow: hidden;
+  color: var(--tl-fg);
+  font-size: 11px;
+  line-height: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.threadline-app .threadline-table-file-dir {
+  display: block;
+  overflow: hidden;
+  color: var(--tl-fg-tertiary);
+  font-size: 9px;
+  line-height: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ========== 动作列 ========== */
+
+.threadline-app .threadline-table-action-head {
+  /* 表头文字对读屏可见、视觉上留白；列宽由上面的 nth-child(5) 提供。 */
+}
+
+.threadline-app .threadline-table td:nth-child(5) .threadline-btn {
+  max-inline-size: 100%;
+  min-block-size: 20px;
+  padding: 0 4px;
+  overflow: hidden;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ========== 窄栏降级：不横滚、不显示次级路径与“首次”列 ========== */
+
+@container (max-width: 560px) {
+  .threadline-app .threadline-table th:nth-child(3),
+  .threadline-app .threadline-table td:nth-child(3) {
+    display: none;
+  }
+
+  .threadline-app .threadline-table-file-dir {
+    display: none;
+  }
+
+  .threadline-app .threadline-table th:nth-child(4),
+  .threadline-app .threadline-table td:nth-child(4) {
+    inline-size: 64px;
+  }
+
+  .threadline-app .threadline-table th:nth-child(5),
+  .threadline-app .threadline-table td:nth-child(5) {
+    inline-size: 56px;
+  }
+}

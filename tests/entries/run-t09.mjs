@@ -239,7 +239,7 @@ try {
           { selector: '[data-region="rail"]' },
           { selector: '[data-testid="coverage-pill"]' },
           { selector: '[data-testid="turn-strip"]' },
-          { selector: '[data-testid="list-toggle"]', text: '列表视图' },
+          { selector: '[data-testid="list-toggle"]', text: '表格视图' },
           { selector: '[data-testid="privacy-toggle"]', text: '隐私模式' },
           { selector: '[data-testid="reference-disabled"]', text: '观测不到' },
           { selector: '[data-testid="map-host"]' },
@@ -255,13 +255,23 @@ try {
           { selector: '[data-inspector]' },
         ],
         expr: [
-          // T33 / 2.0：左图 = 文件关系图；右栏 = 目录卡片两列；无检查器。
-          { label: 'rail-has-cards', code: 'document.querySelectorAll("[data-directory-card]").length >= 1', equals: true },
-          { label: 'rail-card-count-matches', code: 'Number(document.querySelector("[data-directory-rail]").getAttribute("data-card-count")) === document.querySelectorAll("[data-directory-card]").length', equals: true },
-          { label: 'graph-mode-overview', code: 'document.querySelector("[data-tl-graph]").getAttribute("data-graph-mode")', equals: 'overview' },
+          // 1.2.0 返工：左图 = 当前目录节点图（folder）；右栏 = 工作区根目录浏览器（FileTreeRail）。
+          { label: 'rail-has-rows', code: 'document.querySelectorAll("[data-tree-row]").length >= 1', equals: true },
+          { label: 'rail-row-count-matches', code: 'Number(document.querySelector("[data-file-tree-rail]").getAttribute("data-row-count")) === document.querySelectorAll("[data-tree-row]").length', equals: true },
+          { label: 'graph-mode-folder', code: 'document.querySelector("[data-tl-graph]").getAttribute("data-graph-mode")', equals: 'folder' },
+          { label: 'graph-current-root', code: 'document.querySelector("[data-testid=graph]").getAttribute("data-graph-current")', equals: '' },
           { label: 'graph-has-file-nodes', code: 'document.querySelectorAll("[data-file-path]").length >= 1', equals: true },
-          { label: 'graph-cluster-set', code: 'Number(document.querySelector("[data-tl-graph]").getAttribute("data-cluster-count")) >= 1', equals: true },
-          { label: 'graph-node-limit', code: 'Number(document.querySelector("[data-tl-graph]").getAttribute("data-node-count")) <= 140', equals: true },
+          // 根层 fixture 里至少有一个子文件夹 → 必须有文件夹枢纽（M5：子文件夹是枢纽不是文件节点）。
+          { label: 'graph-has-folder-hubs', code: 'document.querySelectorAll("[data-folder-hub]").length >= 1', equals: true },
+          // M2：图尾整块不存在（四段文案从 DOM 消失）。
+          { label: 'no-graph-foot', code: 'document.querySelectorAll(".tl-graph-foot").length', equals: 0 },
+          // M1：播放控件不存在。
+          { label: 'no-play-controls', code: 'document.querySelectorAll("[data-testid=timeline-play],[data-testid=timeline-speed-1],[data-testid=timeline-speed-4],[data-playing],[data-speed]").length', equals: 0 },
+          // 缩放组：−/适应/+/重置 四个动作，重置无可见文字（M2/M5）。
+          { label: 'zoom-actions', code: 'document.querySelectorAll("[data-zoom-action]").length', equals: 4 },
+          { label: 'reset-has-no-text', code: 'document.querySelector("[data-testid=graph-reset]").textContent.trim()', equals: '' },
+          { label: 'reset-has-aria', code: 'document.querySelector("[data-testid=graph-reset]").getAttribute("aria-label")', equals: '重置布局' },
+          { label: 'fit-has-text', code: 'document.querySelector("[data-testid=graph-fit]").textContent.trim()', equals: '适应' },
           { label: 'no-inspector', code: 'document.querySelectorAll("[data-inspector-kind], [data-inspector], .threadline-inspector").length', equals: 0 },
           { label: 'turn-strip-scoped', code: 'document.querySelectorAll("[role=option]").length', equals: 3 },
           { label: 'coverage-pill-text', code: 'document.querySelector("[data-testid=coverage-pill]").textContent.length > 0', equals: true },
@@ -292,37 +302,47 @@ try {
     'P0：轮次 detail loading 显示正在读取，不是 0 文件的假空态',
   )
 
-  /* T21：点目录卡片 → 文件细节（只渲染焦点目录的 SVG 节点；旧「tab 默认就是节点」的证据改到这里） */
+  /* 1.2.0：点右栏文件夹行 → 进入该目录；左图跟到该目录；面包屑可回退。 */
   await capture(
     {
       query: 'view=tab',
       outPng: OUT_DIR + '/tab-detail.png',
       label: 'tab-detail',
       actions: [
-        { type: 'click', selector: '[data-directory-card][data-selected="false"]' },
-        { type: 'wait', ms: 300 },
+        // 进 `src`（它下面还有 `lib`，所以进入后仍应有目录行可断言「任意深度」）。
+        { type: 'click', selector: '[data-tree-row][data-kind="directory"][data-tree-row="src"]' },
+        { type: 'wait', ms: 400 },
       ],
       assert: {
         contains: [
           { selector: '[data-testid="graph"]' },
           { selector: '.tl-graph-stage' },
-          { selector: '[data-directory-card][data-selected="true"]' },
+          { selector: '[data-tree-row][data-kind="directory"]' },
         ],
         absent: [
           { selector: '[role="dialog"]' },
           { selector: '[data-inspector-kind]' },
         ],
         expr: [
-          { label: 'card-selected-matches-graph', code: '(function(){var c=document.querySelector("[data-directory-card][data-selected=true]");var g=document.querySelector("[data-tl-graph]");return !!c && !!g && g.getAttribute("data-graph-directory")===c.getAttribute("data-directory-card")})()', equals: true },
-          { label: 'graph-still-overview-mode', code: 'document.querySelector("[data-tl-graph]").getAttribute("data-graph-mode")', equals: 'overview' },
+          // 进入 src 后：左图 currentPath = 'src'，右栏面包屑 = 根 + src（2 段）。
+          { label: 'graph-mode-still-folder', code: 'document.querySelector("[data-tl-graph]").getAttribute("data-graph-mode")', equals: 'folder' },
+          { label: 'graph-navigated-deeper', code: 'document.querySelector("[data-testid=graph]").getAttribute("data-graph-current")', equals: 'src' },
+          { label: 'rail-breadcrumb-deepened', code: 'document.querySelectorAll("[data-crumb-path]").length >= 2', equals: true },
+          { label: 'rail-shows-child-dir', code: 'document.querySelectorAll("[data-tree-row][data-kind=directory]").length', equals: 1 },
           { label: 'graph-has-nodes-after-switch', code: 'document.querySelectorAll("[data-file-path]").length >= 1', equals: true },
-          { label: 'graph-expanded-cluster', code: 'Number(document.querySelector("[data-tl-graph]").getAttribute("data-node-count")) >= 3', equals: true },
-          { label: 'only-one-selected-card', code: 'document.querySelectorAll("[data-directory-card][data-selected=true]").length', equals: 1 },
+          { label: 'no-graph-foot-after-nav', code: 'document.querySelectorAll(".tl-graph-foot").length', equals: 0 },
+          // M2：四段**可见**图尾文案逐字不存在。
+          // 注意：`重置布局` 保留为重置按钮的 aria-label（07 §4.3 明确允许），
+          // 所以这里必须只查**可见文本**（textContent 不含 aria-label，但 reset 按钮的
+          // 可见 textContent 已单独断言为空），不能把 aria-label 也算进来。
+          { label: 'no-foot-copy', code: '(function(){var t=document.body.textContent||"";return ["点右侧卡片展开目录","拖动节点可调整位置","点轮次看本轮文件","可拖动节点","基于已加载"].filter(function(s){return t.indexOf(s)>=0}).join("|")})()', equals: '' },
+          // M2：重置按钮可见文字为空（它不是文字按钮）。
+          { label: 'reset-not-a-text-button', code: 'document.querySelector("[data-testid=graph-reset]").textContent.trim()', equals: '' },
         ],
       },
     },
     'tab',
-    '点目录卡片 → 文件细节（只渲染焦点目录；「‹ 全部目录」可返回）',
+    '点右栏文件夹行 → 左图跟到该目录（folder 视图 + 面包屑可回退；无图尾文案）',
   )
 
   /* T09b ② 列表视图：点击「列表视图」→ 挂 FileListView / TurnListView；同一时刻只有一个 aria-live */

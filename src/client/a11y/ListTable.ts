@@ -26,7 +26,7 @@ import {
   type SortState,
   type TurnListRow,
 } from './listModel.ts'
-import { timeOfDay, sessionStatusKey } from '../ui/turns/index.ts'
+import { sessionStatusKey } from '../ui/turns/index.ts'
 
 const h = React.createElement
 
@@ -98,21 +98,49 @@ interface RowModel {
   key: string
   ariaLabel: string
   cells: string[]
+  /** 文件表首列：主名 + 次级目录（turn 表不用）。 */
+  primary?: string
+  secondary?: string
+  /** 首列完整展示路径（已掩码），只用于 title。 */
+  title?: string
 }
 
 function turnStatusText(row: TurnListRow, t: Translator): string {
   return t(sessionStatusKey(row.status))
 }
 
+/** Q6：日期 + 时间（本地时区）——只显示 HH:MM 会让“按首次/最近排序”看起来像乱序。 */
+export function dateTimeOfDay(at: number | null): string {
+  if (at === null || !Number.isFinite(at) || at <= 0) return '—'
+  const date = new Date(at)
+  const pad = (value: number): string => (value < 10 ? '0' + value : String(value))
+  return pad(date.getMonth() + 1) + '-' + pad(date.getDate()) + ' ' + pad(date.getHours()) + ':' + pad(date.getMinutes())
+}
+
+/** 文件路径拆成「主名 + 目录」两段；displayPath 已是掩码后的，隐私模式不会带目录。 */
+function splitDisplayPath(displayPath: string, label: string): { primary: string; secondary: string } {
+  if (displayPath === label) return { primary: label, secondary: '' }
+  if (displayPath.endsWith('/' + label)) {
+    return { primary: label, secondary: displayPath.slice(0, displayPath.length - label.length - 1) }
+  }
+  return { primary: displayPath, secondary: '' }
+}
+
 function toRowModels(props: ListViewProps): RowModel[] {
   const { t } = props
   if (props.kind === 'files') {
     const rows = sortFileRows(props.rows, props.sort)
-    return rows.map((row) => ({
-      key: row.key,
-      ariaLabel: rowAriaLabel('files', row.label, t('inspector.ops') + ' ' + String(row.ops), t),
-      cells: [row.displayPath, String(row.ops), timeOfDay(row.firstAt), timeOfDay(row.lastAt)],
-    }))
+    return rows.map((row) => {
+      const split = splitDisplayPath(row.displayPath, row.label)
+      return {
+        key: row.key,
+        ariaLabel: rowAriaLabel('files', row.label, t('inspector.ops') + ' ' + String(row.ops), t),
+        cells: [row.displayPath, String(row.ops), dateTimeOfDay(row.firstAt), dateTimeOfDay(row.lastAt)],
+        primary: split.primary,
+        secondary: split.secondary,
+        title: row.displayPath,
+      }
+    })
   }
   const rows = sortTurnRows(props.rows, props.sort)
   return rows.map((row) => {
@@ -206,7 +234,14 @@ export function ListView(props: ListViewProps): React.ReactElement {
   })
 
   if (props.onFocusInMap) {
-    headerCells.push(h('th', { key: 'action', role: 'columnheader', scope: 'col', className: 'threadline-visually-hidden' }, t('inspector.focusInMap')))
+    // fixed 布局需要真实占位的列：外层 th 留在流内，只有文字对读屏可见。
+    headerCells.push(
+      h(
+        'th',
+        { key: 'action', role: 'columnheader', scope: 'col', className: 'threadline-table-action-head' },
+        h('span', { className: 'threadline-visually-hidden' }, t('inspector.focusInMap')),
+      ),
+    )
   }
 
   const bodyRows = rowModels.map((row, index) => {
@@ -214,18 +249,35 @@ export function ListView(props: ListViewProps): React.ReactElement {
     const domKey = mode === 'hidden' ? 'r' + String(index) : row.key
     const isSelected = selectedKey === row.key
     const isActive = index === Math.min(activeRow, Math.max(0, rowModels.length - 1))
-    const cells: React.ReactElement[] = row.cells.map((text, cellIndex) =>
-      h(
+    const cells: React.ReactElement[] = row.cells.map((text, cellIndex) => {
+      const numeric = columns[cellIndex]?.numeric === true
+      if (cellIndex === 0 && row.primary !== undefined) {
+        // Q6：首列两行——主名常显，目录次级弱化；完整（掩码后）路径放 title。
+        return h(
+          'td',
+          {
+            key: 'c0',
+            role: 'cell',
+            className: 'threadline-table-file',
+            ...(row.title === undefined ? {} : { title: row.title }),
+          },
+          h('span', { className: 'threadline-table-file-name' }, row.primary),
+          row.secondary === undefined || row.secondary === ''
+            ? null
+            : h('span', { className: 'threadline-table-file-dir' }, row.secondary),
+        )
+      }
+      return h(
         'td',
         {
           key: 'c' + String(cellIndex),
           role: 'cell',
-          'data-numeric': columns[cellIndex]?.numeric === true ? 'true' : 'false',
+          'data-numeric': numeric ? 'true' : 'false',
           className: cellIndex === 0 ? 'threadline-ellipsis' : undefined,
         },
         text,
-      ),
-    )
+      )
+    })
     if (props.onFocusInMap) {
       cells.push(
         h(

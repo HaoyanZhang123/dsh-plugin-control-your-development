@@ -29,11 +29,13 @@ export interface FetchInitLike {
 /** 可注入的 fetch；只接受字符串 URL（同源相对路径）。 */
 export type FetchLike = (input: string, init?: FetchInitLike) => Promise<FetchResponseLike>
 
-/** 三条只读路由（04 §2.2；唯一事实源，测试也引用这里）。 */
+/** 四条只读路由（04 §2.2；唯一事实源，测试也引用这里）。 */
 export const DATA_ROUTES = {
   scan: '/api/dsh-threadline/scan',
   snapshot: '/api/dsh-threadline/snapshot',
   detail: '/api/dsh-threadline/detail',
+  /** 1.2.0 B1：目录列表（用户已批准的 host 只读例外，04 §9.5）。 */
+  tree: '/api/dsh-threadline/tree',
 } as const
 
 export type DataRouteName = keyof typeof DATA_ROUTES

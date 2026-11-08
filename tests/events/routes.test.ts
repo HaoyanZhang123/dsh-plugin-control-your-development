@@ -319,13 +319,14 @@ test('路由注册：三条 POST 只读路由 + disposal 回收；注册抛错�
     '/api/dsh-threadline/detail',
     '/api/dsh-threadline/scan',
     '/api/dsh-threadline/snapshot',
+    '/api/dsh-threadline/tree',
   ])
   for (const route of registered) {
     assert.deepEqual(route.methods, ['POST'])
     assert.equal(route.requestBody, 'buffered')
   }
   routes.dispose()
-  assert.equal(disposed.length, 3)
+  assert.equal(disposed.length, 4)
   assert.equal(routes.register(), true) // dispose 后可重新注册（fiber 重载场景）
   routes.dispose()
 
@@ -391,10 +392,10 @@ test('index.apply 接线：connection 缺失不崩；注册成功由 effect 回�
     },
   }
   apply(okCtx)
-  assert.deepEqual(registered.sort(), [ROUTE_PATHS.detail, ROUTE_PATHS.scan, ROUTE_PATHS.snapshot].sort())
+  assert.deepEqual(registered.sort(), [ROUTE_PATHS.detail, ROUTE_PATHS.scan, ROUTE_PATHS.snapshot, ROUTE_PATHS.tree].sort())
   assert.equal(typeof effectDispose, 'function')
   effectDispose?.()
-  assert.equal(disposed.length, 3)
+  assert.equal(disposed.length, 4)
 
   // 3) 注册抛错：插件不崩，只多一条不含正文/路径的 warning。
   const failingCtx: HostContext = {

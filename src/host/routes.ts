@@ -1,16 +1,19 @@
 /**
  * 本地只读路由（04 §2.2/§2.4–§2.7、§9.3）。
  *
- * 三个路由，全部 `POST` + `requestBody: 'buffered'`，只做「校验 → 调内存扫描器 → 返回 JSON」：
- *   /api/dsh-threadline/scan
- *   /api/dsh-threadline/snapshot
- *   /api/dsh-threadline/detail
+ * 四个路由，全部 `POST` + `requestBody: 'buffered'`，只做「校验 → 调只读实现 → 返回 JSON」：
+ *   /api/dsh-threadline/scan      （会话日志只读扫描）
+ *   /api/dsh-threadline/snapshot  （扫描快照）
+ *   /api/dsh-threadline/detail    （单会话详情）
+ *   /api/dsh-threadline/tree      （B1 只读目录列表；遥不可及项见 host/tree.ts，用户已批准）
  *
  * 硬约束：
- * - 只读：不写文件、不写存储、不发外部请求（只调用 `ScanManager` 的只读方法）；
- * - 不接受路径参数；sessionId 走 `^[A-Za-z0-9._:-]{1,200}$`，从根上排除路径穿越；
+ * - 只读：不写文件、不写存储、不发外部请求；
+ * - sessionId 走 `^[A-Za-z0-9._:-]{1,200}$`，从根上排除路径穿越；tree 的 path 只接受
+ *   工作区相对路径，且由 host/tree.ts 做 cwd 包含检查 + 符号链接逃逸检查；
  * - 所有响应 `cache-control: no-store`；
- * - 注册失败不抛崩插件（返回 false，由 index.ts 只打一条 warning）。
+ * - 注册失败不抛崩插件（返回 false，由 index.ts 只打一条 warning）；
+ * - 日志只打错误码/计数，不打路径/正文（tree 分支同守）。
  */
 import { isAbsoluteCwd, normalizeCwd } from '../shared/events/index.ts'
 import type {
@@ -23,12 +26,18 @@ import type {
 } from '../shared/events/index.ts'
 import type { HostServices } from './services.ts'
 import { ScanManager } from './scan.ts'
+import { HOST_TREE_MAX_PATH_LENGTH, handleTreeRequest, type TreeRequest } from './tree.ts'
 
-/** 三个路由的路径（唯一事实源；测试也引用这里）。 */
+/** 四个路由的路径（唯一事实源；测试也引用这里）。 */
 export const ROUTE_PATHS = {
   scan: '/api/dsh-threadline/scan',
   snapshot: '/api/dsh-threadline/snapshot',
   detail: '/api/dsh-threadline/detail',
+  /**
+   * 1.2.0 B1：目录列表（04 §9.5 的 host 只读例外，用户 2026-11-07 已批准）。
+   * 只在 `remote.workspaceFiles.list` 不可用时由客户端调用。
+   */
+  tree: '/api/dsh-threadline/tree',
 } as const
 
 /** 会话 id 形状（04 §2.4；不允许 `/`、`\`、`..` 等路径成分）。 */
@@ -229,7 +238,7 @@ export interface RoutesHandle {
   register(): boolean
   dispose(): void
   /** 测试/自检入口：调用与真实注册完全相同的 handler（不经过 HTTP）。 */
-  invoke(kind: 'scan' | 'snapshot' | 'detail', request: Request): Promise<Response>
+  invoke(kind: keyof typeof ROUTE_PATHS, request: Request): Promise<Response>
   /** 测试与自检用：扫描器引用（不暴露给客户端）。 */
   readonly manager: ScanManager
 }
@@ -246,7 +255,25 @@ interface ConnectionLike {
   }
 }
 
-/** 建三个只读路由。`sessionPersistence` 缺失时路由仍注册（返回 capability-missing）。 */
+/* ------------------------------------------------------------------ *
+ * 第 4 条路由：tree（B1 host 只读目录列表；用户已批准，见 host/tree.ts 头注释）
+ * ------------------------------------------------------------------ */
+
+/** 校验 `POST /tree`：sessionId 与 scan/detail 同一条规则；path 交给 host/tree.ts 的校验器。 */
+export function validateTreeRequest(body: unknown): Validation<TreeRequest> {
+  const record = asRecord(body)
+  if (record === undefined) return failure('threadline/bad-request', 'body must be an object')
+  if (!isSessionId(record.sessionId)) return failure('threadline/bad-request', 'invalid sessionId')
+  const rawPath = record.path
+  if (rawPath !== undefined && typeof rawPath !== 'string') {
+    return failure('threadline/bad-request', 'invalid path')
+  }
+  const path = rawPath ?? ''
+  if (path.length > HOST_TREE_MAX_PATH_LENGTH) return failure('threadline/bad-request', 'invalid path')
+  return { ok: true, value: { sessionId: record.sessionId, path } }
+}
+
+/** 建四条只读路由。`sessionPersistence` 缺失时路由仍注册（返回 capability-missing）。 */
 export function createRoutes(services: HostServices, manager?: ScanManager): RoutesHandle {
   const scanner = manager ?? new ScanManager(services)
   let disposers: Array<() => void> = []
@@ -292,6 +319,40 @@ export function createRoutes(services: HostServices, manager?: ScanManager): Rou
           return toResponse(await scanner.detailRequest(validation.value))
         } catch {
           return errorResponse('threadline/internal', 'detail failed')
+        }
+      },
+    },
+    {
+      // B1：只读目录列表（读 fs、零写；cwd 卡口/符号链接/上限都在 host/tree.ts 里）。
+      path: ROUTE_PATHS.tree,
+      async fetch(request: Request): Promise<Response> {
+        const body = await readJsonBody(request)
+        if (body === undefined) return errorResponse('threadline/bad-request', 'invalid JSON body')
+        const validation = validateTreeRequest(body)
+        if (!validation.ok) return errorResponse(validation.code, validation.message)
+        try {
+          const result = await handleTreeRequest(
+            {
+              getPersistence: () => services.getPersistence(),
+              ...(services.logger === undefined ? {} : { logger: services.logger }),
+            },
+            validation.value,
+          )
+          if (!result.ok) {
+            return errorResponse(
+              result.code,
+              result.message,
+              result.detail === undefined ? undefined : result.detail,
+            )
+          }
+          return toResponse({
+            ok: true as const,
+            path: result.path,
+            entries: result.entries,
+            truncated: result.truncated,
+          })
+        } catch {
+          return errorResponse('threadline/internal', 'tree failed')
         }
       },
     },

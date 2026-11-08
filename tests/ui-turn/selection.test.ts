@@ -16,6 +16,7 @@ import {
   createSelectionState,
   effectiveSelection,
   escapeSelection,
+  hoverSelection,
   moveIndex,
   moveSelection,
   sameSelection,
@@ -35,19 +36,28 @@ test('selectionKey / sameSelection：四种目标各自稳定', () => {
   assert.equal(sameSelection(null, NO_SELECTION), false)
 })
 
-test('hover 只改预览：固定选择不被预览覆盖', () => {
+test('hover 只改预览：固定选择不被预览覆盖，且呈现也**锁定优先**', () => {
   const pinned = selectionReducer(createSelectionState(), { type: 'click', target: select.file('src/a.ts') })
   assert.deepEqual(pinned.selected, select.file('src/a.ts'))
   assert.equal(pinned.inspectorOpen, true)
 
   const previewing = selectionReducer(pinned, { type: 'hover', target: select.turn('s1', 3) })
   assert.deepEqual(previewing.selected, select.file('src/a.ts'), 'hover 不得改固定选择')
-  assert.deepEqual(previewing.preview, select.turn('s1', 3))
-  assert.deepEqual(effectiveSelection(previewing), select.turn('s1', 3), '检查器显示的是预览目标')
+  assert.deepEqual(previewing.preview, select.turn('s1', 3), 'hover 仍要记下预览目标（悬停描边要用）')
+
+  // 2026-11-08 用户拍板改为「锁定优先」：有固定选择时，预览不参与呈现。
+  // 旧断言是 `effectiveSelection === 预览目标`（预览优先）——那导致「点了锁定，鼠标一扫就跑」。
+  assert.deepEqual(effectiveSelection(previewing), select.file('src/a.ts'), '有固定选择时，画面看固定选择')
+  assert.deepEqual(hoverSelection(previewing), select.turn('s1', 3), '悬停描边仍跟随鼠标')
+
+  // 反向：**没有固定选择**时，预览才有资格决定画面（不点也能扫一眼）。
+  const onlyPreview = selectionReducer(createSelectionState(), { type: 'hover', target: select.turn('s1', 3) })
+  assert.deepEqual(effectiveSelection(onlyPreview), select.turn('s1', 3), '无固定选择时，预览决定画面')
 
   const left = selectionReducer(previewing, { type: 'hover', target: null })
   assert.equal(left.preview, null)
-  assert.deepEqual(effectiveSelection(left), select.file('src/a.ts'), '离开后回到固定选择')
+  assert.deepEqual(effectiveSelection(left), select.file('src/a.ts'), '离开后仍是固定选择')
+  assert.equal(hoverSelection(left), null, '离开后没有悬停描边')
 })
 
 test('click：再次点同一目标取消；点击新目标替换并打开检查器', () => {

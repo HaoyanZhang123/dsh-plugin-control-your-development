@@ -122,6 +122,7 @@ const ROUTE_BY_PATH = new Map<string, DataRouteName>([
   [DATA_ROUTES.scan, 'scan'],
   [DATA_ROUTES.snapshot, 'snapshot'],
   [DATA_ROUTES.detail, 'detail'],
+  [DATA_ROUTES.tree, 'tree'],
 ])
 
 export function createFakeFetch(): FakeFetch {
@@ -129,8 +130,8 @@ export function createFakeFetch(): FakeFetch {
   const calls: FakeCall[] = []
   let active = 0
   let maxActive = 0
-  const activeByRoute: Record<DataRouteName, number> = { scan: 0, snapshot: 0, detail: 0 }
-  const maxActiveByRoute: Record<DataRouteName, number> = { scan: 0, snapshot: 0, detail: 0 }
+  const activeByRoute: Record<DataRouteName, number> = { scan: 0, snapshot: 0, detail: 0, tree: 0 }
+  const maxActiveByRoute: Record<DataRouteName, number> = { scan: 0, snapshot: 0, detail: 0, tree: 0 }
 
   const fetchImpl: FetchLike = async (input, init) => {
     const route = ROUTE_BY_PATH.get(input)

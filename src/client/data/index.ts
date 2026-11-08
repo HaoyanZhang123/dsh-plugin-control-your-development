@@ -8,8 +8,10 @@
  *   buildWorkspaceScope, withoutArchived, refocusScope, toScanSessions,
  *   createDataController, createDetailStore, useThreadlineData, useThreadlineDetail,
  *   useWorkspaceScope, degradeForCoverage, degradeForError, DATA_ROUTES,
+ *   useDirectoryTree, createDirectoryTree,
  * } from '<plugin>/src/client/data/index.ts'
  * import type { WorkspaceScope, WorkspaceGraph, Coverage, DegradeState, DetailEntry } from ...
+ * import type { TreeEntry, TreeListing, TreeState, DirectoryTreeView } from ...
  * ```
  *
  * 协议类型（`SessionSummary` / `FileNode` / `ScanError` / …）仍从
@@ -25,3 +27,4 @@ export * from './warmup.ts'
 export * from './detail.ts'
 export * from './detailView.ts'
 export * from './hooks.ts'
+export * from './tree.ts'

@@ -99,13 +99,74 @@ const WORKSPACES_SNAPSHOT = { items: [{ id: 'ws-1', title: 'skill开发', sessio
 const useSessions = (selector: (snapshot: unknown) => unknown): unknown => selector(SESSIONS_SNAPSHOT)
 const useWorkspaces = (selector: (snapshot: unknown) => unknown): unknown => selector(WORKSPACES_SNAPSHOT)
 
-/** 假同源 fetch：三条只读路由的确定性响应（不发真实请求）。 */
+/**
+ * 目录树夹具（1.2.0 / R02 的 `/tree` 只读路由）。
+ *
+ * 右栏是工作区根目录浏览器：根层要有**目录 + 文件 + 未触碰文件**，
+ * 且必须有一个子目录可进入（t09 的「进入目录」场景要点击它）。
+ * entries 形状与 host/remote 一致：`{ name, type: 'file'|'directory'|'other', size? }`。
+ */
+const TREE_ROOT = {
+  path: '',
+  truncated: false,
+  entries: [
+    { name: 'docs', type: 'directory' as const },
+    { name: 'src', type: 'directory' as const },
+    { name: 'output', type: 'other' as const },
+    { name: 'README.md', type: 'file' as const, size: 2048 },
+    { name: 'untouched.txt', type: 'file' as const, size: 12 },
+  ],
+}
+
+/** 子目录的 listing（点进去之后）：文件 + 孙目录，证明「任意深度」。 */
+const TREE_CHILD: Record<string, { path: string; truncated: boolean; entries: Array<{ name: string; type: 'file' | 'directory' | 'other'; size?: number }> }> = {
+  docs: {
+    path: 'docs',
+    truncated: false,
+    entries: [
+      { name: 'notes.md', type: 'file' as const, size: 512 },
+      { name: 'spec.md', type: 'file' as const, size: 1024 },
+    ],
+  },
+  src: {
+    path: 'src',
+    truncated: false,
+    entries: [
+      { name: 'lib', type: 'directory' as const },
+      { name: 'app.ts', type: 'file' as const, size: 3072 },
+    ],
+  },
+  'src/lib': {
+    path: 'src/lib',
+    truncated: false,
+    entries: [{ name: 'util.ts', type: 'file' as const, size: 640 }],
+  },
+}
+
+/** 假同源 fetch：四条只读路由的确定性响应（不发真实请求）。 */
 function response(value: unknown): { ok: boolean; status: number; json(): Promise<unknown> } {
   return { ok: true, status: 200, json: () => Promise.resolve(value) }
 }
 
 const fetchImpl = (input: string, init?: { body?: string }): Promise<{ ok: boolean; status: number; json(): Promise<unknown> }> => {
   const url = String(input)
+  if (url.endsWith('/tree')) {
+    let path = ''
+    try {
+      const raw = typeof init?.body === 'string' ? init.body : '{}'
+      const parsed = JSON.parse(raw) as { path?: unknown }
+      path = typeof parsed.path === 'string' ? parsed.path : ''
+    } catch {
+      return Promise.resolve(response({ ok: false, error: { code: 'threadline/bad-request', message: 'invalid JSON body' } }))
+    }
+    const listing = path === '' ? TREE_ROOT : TREE_CHILD[path]
+    if (listing === undefined) {
+      return Promise.resolve(
+        response({ ok: false, error: { code: 'threadline/bad-request', message: 'not-found', detail: 'not-found' } }),
+      )
+    }
+    return Promise.resolve(response({ ok: true, ...listing }))
+  }
   void init
   if (url.endsWith('/scan')) {
     return Promise.resolve(response({ ok: true, scanId: 'scan-t09', rev: 0, total: 1, order: [SESSION_ID] }))
@@ -259,17 +320,22 @@ if (view === 'tab') {
 
 // 探针：假宿主 tab 被点中的次数（T20/T32 的"点击 = 导航"证据；不再有 dialog 探针）
 /**
- * 就绪判定：等数据层把首帧扫描/详情落定（覆盖率文案稳定 + 有关系图节点），再打 ready。
- * 只等两帧会截到"正在补全历史 x/y"的中间态，同一状态两次截图不一致（可复现性纪律）。
+ * 就绪判定：等数据层把首帧扫描/详情落定（覆盖率文案稳定 + 目录树已出条目），再打 ready。
+ * 只等两帧会截到"正在补全历史 x/y"或"右栏还在读根目录"的中间态，同一状态两次截图不一致（可复现性纪律）。
+ *
+ * 1.2.0：右栏改为工作区目录树（`/tree` 是异步的），所以 ready 条件从旧的「图节点 > 0」
+ * 换成「右栏已渲染出行」——图节点可能为 0（空目录/未触碰文件是中性节点），不能拿它当门。
  */
 function whenStable(): void {
   const deadline = Date.now() + 3500
   const tick = (): void => {
     const pill = document.querySelector('[data-testid="coverage-pill"]')
-    const nodes = document.querySelectorAll('[data-node-path]').length
+    const rows = document.querySelectorAll('[data-tree-row]').length
+    const graphRoot = document.querySelector('[data-tl-graph]')
     const text = pill === null ? '' : (pill.textContent ?? '')
     const settled = text.includes('全部记录') || text.includes('读取失败') || text.length === 0
-    if ((settled && nodes > 0) || Date.now() > deadline) {
+    // 右栏出行 = 目录树已就绪；图根存在 = 左图已挂载（空目录也算挂载）。
+    if ((settled && rows > 0 && graphRoot !== null) || Date.now() > deadline) {
       document.documentElement.setAttribute('data-harness-ready', '1')
       return
     }

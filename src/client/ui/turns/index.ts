@@ -13,6 +13,7 @@ export {
   createSelectionState,
   effectiveSelection,
   escapeSelection,
+  hoverSelection,
   moveIndex,
   moveSelection,
   sameSelection,

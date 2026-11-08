@@ -2,7 +2,7 @@
  * perf/bench.ts —— 文件关系图布局与交互选择的可复现基准（04 §8；06 A44-3）。
  *
  * 只测**纯计算**（不含 React 渲染），这样基准在 node 里稳定可跑、不依赖浏览器：
- *   layout  = `layoutFileGraph(600 节点 → 目录图上限 120)` —— 预算 150ms
+ *   layout  = `layoutFileGraph(600 节点 → folder 图上限 40)` —— 预算 150ms
  *   prepare = `prepareEdges(4000 条边)` —— 边去重/收拢（预算同布局，单列报告）
  *   select  = `selectVisibleEdges` + 邻居集 —— 每次 hover/选中重绘的纯计算，预算 16ms
  */
@@ -141,7 +141,7 @@ export function bench(options: BenchOptions = {}): BenchResult {
   let preparedEdges = 0
 
   for (let run = 0; run < runs; run += 1) {
-    const layout = measureSync(() => layoutFileGraph(files, { width: 680, height: 460, mode: 'directory' }))
+    const layout = measureSync(() => layoutFileGraph(files, { width: 680, height: 460, mode: 'folder' }))
     laidOutNodes = layout.value.shown
     layoutSamples.push(layout.ms)
 

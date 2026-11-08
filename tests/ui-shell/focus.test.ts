@@ -72,9 +72,10 @@ test('tooltip 的 aria-describedby id 被净化成选择器安全字符串', () 
 
 test('区域几何符合 D-28（星图首屏 520；header/now/timeline 仍按规范像素）', () => {
   // D-28（2026-11-04 用户定）：tab 改成页面流 —— 星图占首屏（>=520，宽屏 640），其余往下滚；
-  // header 吸顶 56、Now 36、时间轴 48 仍是固定像素；轮次带不再锁 92px 内滚（token 保留为设计刻度）。
+  // header 吸顶 56、Now 36 仍是固定像素；轮次带不再锁 92px 内滚（token 保留为设计刻度）。
+  // 时间轴 48 → 104（2026-11-08 用户拍板改「双轨」：上轨活跃度柱 + 下轨会话分层）。
   assert.equal(SHELL_METRICS.header, 56)
-  assert.equal(SHELL_METRICS.timeline, 48)
+  assert.equal(SHELL_METRICS.timeline, 104)
   assert.equal(SHELL_METRICS.inspector, 340)
   assert.equal(SHELL_METRICS.inspectorWide, 360)
   assert.equal(SHELL_METRICS.mapMinHeight, 520)

@@ -1,13 +1,21 @@
 /*
- * timeline/scale.ts —— 时间轴的纯函数：范围、刻度、窗口过滤、播放推进、未加载区段。
+ * timeline/scale.ts —— 时间轴的纯函数：窗口 / 刻度 / 活跃度分桶 / 会话分层 / 播放头文本。
  *
- * 规范：03 §5（范围/刻度/播放头/未加载/回到现在）、03 §14（窄容器刻度减少）、03 §15（aria-live）。
+ * 规范：03 §5（范围/刻度/播放头/回到现在）、33 §5（双轨：活跃度 + 会话分层）、03 §15（aria-live）。
+ *
+ * R12（2.2.0 重做，用户 2026-11-08 拍板「D · 双轨」）：
+ * 旧的「生长带面积曲线」与「密集刻度」两条实现已整类删除（用户反馈「粗糙/丑陋」），
+ * 现在时间轴只有一条执行路径：
+ *   上轨 = 按时间分桶的 ops 柱状图   buildActivityTrack
+ *   下轨 = 会话分层条（最多 4 行）   buildSessionLanes
+ *   刻度 = 只有 start / middle / end 三个标签   buildScaleTicks
+ *
  * 纪律：
- * - 不读时钟（`now` 由调用方给），不写存储，不用随机数 → 同一输入同一输出，可单测 + 可复现截图；
- * - 未加载区段（`unloadedRanges`）是**记录层面**的事实：那里没有节点数据，
- *   本文件只负责"标出来 + 判断播放头是否落在里面"，绝不生成假节点；
- * - 节点按 `firstAt` 出现，大小按**截至 T 的累计 ops** 增长；没有 `samples` 时按"首现即全部 ops"
- *   计算（这是数据能给的全部，不额外编造中间过程）。
+ * - 不读时钟（now 由调用方给）、**不读真实 DOM 宽度**（宽度由调用方量好传入）、不用随机数
+ *   → 同一输入同一输出，可单测 + 可复现截图；
+ * - 桶数 = 把宽度按 8px 量化后取整（亚像素抖动不改桶数）；
+ * - 会话行数 = min(4, 会话数)；同一会话永远落在同一行（贪心首次适配，排序后确定性）；
+ * - 节点按 firstAt 出现，ops 按 samples（缺省 = 首现即全量）累计。
  */
 import type { RangeKey } from '../shell/index.ts'
 
@@ -15,13 +23,64 @@ export const MINUTE_MS = 60 * 1000
 export const HOUR_MS = 60 * MINUTE_MS
 export const DAY_MS = 24 * HOUR_MS
 
+/* ------------------------------------------------------------------ *
+ * 0. 几何常量（组件与测试共用；CSS 里的对应像素值写死同名位置，改一处必须改两处）
+ * ------------------------------------------------------------------ */
+
+/** 时间轴**卡片**总高（= tokens.css 的 --tl-timeline-h；含上下各 1px 边框）。 */
+export const TIMELINE_H = 104
+/**
+ * 轨道画布高 = 卡片高 - 上下边框（box-sizing: border-box）。
+ * 所有轨道内的 y 坐标都相对于它，不是相对 TIMELINE_H —— 差这 2px 会让
+ * 会话条与刻度标签互相压住（实测过：lanes 底部 90 > 刻度顶部 88）。
+ */
+export const TRACK_H = TIMELINE_H - 2
+/** 上轨基线在轨道内的 y（px；基线下方没有内容，它就是上轨的下沿）。 */
+export const ACTIVITY_BASE_Y = 46
+/** 一个桶占的宽度（px）。桶数 = 量化后的宽度 / 这个值。 */
+export const ACTIVITY_BIN_PX = 8
+/** 柱宽 = 桶宽 × 这个系数（柱与柱之间留白，不做实心墙）。 */
+export const ACTIVITY_BAR_WIDTH_FACTOR = 0.68
+/** 柱高上限（px）：上轨顶部留出播放头标签行（14px），柱从基线往上长到这里。 */
+export const ACTIVITY_BAR_MAX_H = 30
+/** 非零 ops 的最小柱高（px）：1 次操作也要看得见。 */
+export const ACTIVITY_BAR_MIN_H = 2
+/** 柱透明度 = MIN + ratio × SPAN。 */
+export const ACTIVITY_OPACITY_MIN = 0.25
+export const ACTIVITY_OPACITY_SPAN = 0.65
+/** 宽度未知（挂载前 / 无 ResizeObserver）时按这个宽度估桶数 → 首屏确定性。 */
+export const DEFAULT_ACTIVITY_WIDTH = 640
+
+/** 下轨第一行会话条在轨道内的 y（px）。 */
+export const SESSION_LANE_TOP = 50
+/** 下轨最多几行会话。 */
+export const SESSION_LANE_MAX = 4
+/** 会话行距（px）= 行高 6 + 间距 4。 */
+export const SESSION_LANE_PITCH = 10
+/** 会话条高度（px）。 */
+export const SESSION_BAR_H = 6
+/** 会话条最小可视宽度（占轨道比例）：零时长会话也给一点点宽度。 */
+export const SESSION_MIN_RATIO = 0.006
+
+/** 播放头标签的贴边翻转阈值（占轨道比例）：左右各留这么多就开始翻转。 */
+export const PLAYHEAD_LABEL_EDGE = 0.15
+
+/** 底部刻度只留几个标签（用户：不要密集刻度）。 */
+export const SCALE_TICK_COUNT = 3
+/** 底部刻度行高度（px，11px 字号 / 14px 行高）。 */
+export const SCALE_TICK_H = 14
+/** 底部刻度行在轨道内的 y（贴底）。 */
+export const SCALE_TICK_TOP = TRACK_H - SCALE_TICK_H
+/** 下轨可用高度（px）= 刻度行上沿 - 会话首行上沿；4 行会话必须放得下。 */
+export const SESSION_LANE_BAND_H = SCALE_TICK_TOP - SESSION_LANE_TOP
+
 /** 时间区间（闭区间，ms）。 */
 export interface TimeRange {
   start: number
   end: number
 }
 
-/** 时间轴上的一个节点（从 T04 `FileNode` 映射而来；`samples` 可选，来自触碰记录）。 */
+/** 时间轴上的一个节点（从 T04 FileNode 映射而来；samples 可选，来自触碰记录）。 */
 export interface TimelineNode {
   path: string
   firstAt: number
@@ -32,7 +91,7 @@ export interface TimelineNode {
   samples?: ReadonlyArray<{ at: number; ops: number }>
 }
 
-/** 会话刻度（会话开始/结束各一根小竖线）。 */
+/** 会话（下轨分层条；标题只做 hover tooltip，不常驻显示）。 */
 export interface TimelineSession {
   id: string
   title?: string
@@ -44,27 +103,11 @@ export interface TimelineSession {
 /** 刻度粒度（03 §5：年/月/日/小时）。 */
 export type TickGranularity = 'year' | 'month' | 'week' | 'day' | 'hour' | 'minute'
 
-export interface TimelineTick {
-  /** 时间点（ms）。 */
-  at: number
-  /** 展示文本（默认按本地时区格式化）。 */
-  label: string
-  /** 在窗口内的比例位置 0–1。 */
-  ratio: number
-  /** 窄容器只保留 high（03 §14：时间轴标签减少）。 */
-  priority: 'high' | 'low'
-}
+/* ------------------------------------------------------------------ *
+ * 1. 窗口
+ * ------------------------------------------------------------------ */
 
-export interface TickOptions {
-  /** 容器宽度（px），用于决定保留多少个刻度。 */
-  width?: number
-  /** 最多刻度数（缺省按宽度算，3–8）。 */
-  maxTicks?: number
-  /** 自定义格式化（T09 可注入 locale 相关格式）。 */
-  format?: (at: number, granularity: TickGranularity) => string
-}
-
-/** 范围窗口：默认「全部」= 数据的起止；其它范围以 `now` 为右界。 */
+/** 范围窗口：默认「全部」= 数据的起止；其它范围以 now 为右界。 */
 export function windowForRange(range: RangeKey, now: number, domain: TimeRange | null): TimeRange {
   const safeNow = Number.isFinite(now) ? now : 0
   if (domain === null || !Number.isFinite(domain.start) || !Number.isFinite(domain.end)) {
@@ -121,42 +164,8 @@ export function clampPlayhead(at: number, window: TimeRange): number {
   return Math.min(window.end, Math.max(window.start, at))
 }
 
-/** 区间是否包含某时刻（闭区间）。 */
-export function rangeContains(range: TimeRange, at: number): boolean {
-  return at >= range.start && at <= range.end
-}
-
-/** 播放头是否落在某个未加载区段。 */
-export function unloadedRangeAt(ranges: readonly TimeRange[] | undefined, at: number): TimeRange | null {
-  if (!ranges) return null
-  for (const range of ranges) if (rangeContains(range, at)) return range
-  return null
-}
-
-/** 把未加载区段裁到当前窗口并合并重叠（确定性：按 start 排序）。 */
-export function clipUnloadedRanges(ranges: readonly TimeRange[] | undefined, window: TimeRange): TimeRange[] {
-  if (!ranges || ranges.length === 0) return []
-  const clipped: TimeRange[] = []
-  for (const range of ranges) {
-    const start = Math.max(range.start, window.start)
-    const end = Math.min(range.end, window.end)
-    if (end > start) clipped.push({ start, end })
-  }
-  clipped.sort((left, right) => left.start - right.start || left.end - right.end)
-  const merged: TimeRange[] = []
-  for (const range of clipped) {
-    const last = merged[merged.length - 1]
-    if (last && range.start <= last.end) {
-      last.end = Math.max(last.end, range.end)
-    } else {
-      merged.push({ ...range })
-    }
-  }
-  return merged
-}
-
 /* ------------------------------------------------------------------ *
- * 1. 刻度
+ * 2. 刻度：只有 start / middle / end 三个标签，没有刻度线
  * ------------------------------------------------------------------ */
 
 /** 跨度 → 粒度（03 §5）。 */
@@ -174,7 +183,7 @@ function pad2(value: number): string {
   return value < 10 ? '0' + value : String(value)
 }
 
-/** 默认刻度文本（本地时区；年 `2026`、月 `2026-11`、周/日 `11-04`、时 `14:00`、分 `14:05`）。 */
+/** 默认刻度文本（本地时区；年 2026、月 2026-11、周/日 11-04、时 14:00、分 14:05）。 */
 export function formatTick(at: number, granularity: TickGranularity): string {
   const date = new Date(at)
   switch (granularity) {
@@ -193,92 +202,254 @@ export function formatTick(at: number, granularity: TickGranularity): string {
   }
 }
 
-/** 把时刻对齐到粒度边界（向前）。 */
-export function floorToGranularity(at: number, granularity: TickGranularity): number {
-  const date = new Date(at)
-  switch (granularity) {
-    case 'year':
-      return new Date(date.getFullYear(), 0, 1).getTime()
-    case 'month':
-      return new Date(date.getFullYear(), date.getMonth(), 1).getTime()
-    case 'week': {
-      const day = date.getDay()
-      const mondayOffset = (day + 6) % 7
-      const floored = new Date(date.getFullYear(), date.getMonth(), date.getDate())
-      floored.setDate(floored.getDate() - mondayOffset)
-      return floored.getTime()
-    }
-    case 'day':
-      return startOfDay(at)
-    case 'hour':
-      return new Date(date.getFullYear(), date.getMonth(), date.getDate(), date.getHours()).getTime()
-    case 'minute':
-    default:
-      return new Date(date.getFullYear(), date.getMonth(), date.getDate(), date.getHours(), date.getMinutes()).getTime()
-  }
-}
+/** 底部标签的对齐方式（首贴左、尾贴右、中间居中 → 都不越出容器）。 */
+export type ScaleTickAlign = 'start' | 'center' | 'end'
 
-/** 下一个粒度边界（用于步进）。 */
-export function nextTick(at: number, granularity: TickGranularity): number {
-  const date = new Date(at)
-  switch (granularity) {
-    case 'year':
-      return new Date(date.getFullYear() + 1, 0, 1).getTime()
-    case 'month':
-      return new Date(date.getFullYear(), date.getMonth() + 1, 1).getTime()
-    case 'week':
-      return at + 7 * DAY_MS
-    case 'day':
-      return at + DAY_MS
-    case 'hour':
-      return at + HOUR_MS
-    case 'minute':
-    default:
-      return at + MINUTE_MS
-  }
-}
-
-/** 最多保留的刻度数：按容器宽度（每个标签 ~88px），夹在 3–8。 */
-export function maxTicksForWidth(width: number): number {
-  const safe = Number.isFinite(width) && width > 0 ? width : 640
-  return Math.min(8, Math.max(3, Math.floor(safe / 88)))
+/** 底部刻度标签（比例固定 0 / 0.5 / 1，不随宽度增减 → 确定性 + 不密集）。 */
+export interface ScaleTick {
+  /** 时间点（ms）。 */
+  at: number
+  /** 展示文本（默认本地时区）。 */
+  label: string
+  /** 轨道内比例位置：0 / 0.5 / 1。 */
+  ratio: number
+  /** 标签对齐方式。 */
+  align: ScaleTickAlign
 }
 
 /**
- * 构造刻度：先按跨度选粒度，再按最多标签数放大步进（整除式放大，保证边界对齐）。
- * 首/中/尾标记为 high（窄容器只保留 high，03 §14）。
+ * 构造底部三个标签：start / middle / end。
+ * 目标视觉（用户选定）：**没有刻度线、没有网格**，只有三个 11px 数字标签。
+ * 文本复用 windowEdgeLabels()（首尾）与 formatTick()（中间），不另造格式化函数。
  */
-export function buildTicks(window: TimeRange, options: TickOptions = {}): { granularity: TickGranularity; ticks: TimelineTick[] } {
+export function buildScaleTicks(window: TimeRange, format?: (at: number, granularity: TickGranularity) => string): ScaleTick[] {
   const span = Math.max(1, window.end - window.start)
   const granularity = granularityFor(span)
-  const maxTicks = Math.max(2, options.maxTicks ?? maxTicksForWidth(options.width ?? 640))
-  const format = options.format ?? formatTick
-
-  // 先按 1 步长生成，再按 ceil(count / maxTicks) 倍步进。
-  const raw: number[] = []
-  let cursor = floorToGranularity(window.start, granularity)
-  let guard = 0
-  while (cursor <= window.end && guard < 512) {
-    if (cursor >= window.start) raw.push(cursor)
-    cursor = nextTick(cursor, granularity)
-    guard += 1
-  }
-  if (raw.length === 0) raw.push(window.start)
-  const stride = Math.max(1, Math.ceil(raw.length / maxTicks))
-  const kept = raw.filter((_, index) => index % stride === 0)
-  if (kept[kept.length - 1] !== raw[raw.length - 1]) kept.push(raw[raw.length - 1])
-
-  const ticks: TimelineTick[] = kept.map((at, index) => ({
-    at,
-    label: format(at, granularity),
-    ratio: timeToRatio(at, window),
-    priority: index === 0 || index === kept.length - 1 || index === Math.floor(kept.length / 2) ? 'high' : 'low',
-  }))
-  return { granularity, ticks }
+  const edges =
+    format === undefined ? windowEdgeLabels(window) : { start: format(window.start, granularity), end: format(window.end, granularity) }
+  const middleAt = Math.round(window.start + span / 2)
+  const middleLabel = (format ?? formatTick)(middleAt, granularity)
+  return [
+    { at: window.start, label: edges.start, ratio: 0, align: 'start' },
+    { at: middleAt, label: middleLabel, ratio: 0.5, align: 'center' },
+    { at: window.end, label: edges.end, ratio: 1, align: 'end' },
+  ]
 }
 
 /* ------------------------------------------------------------------ *
- * 2. 生长：按 firstAt 出现，按截至 T 的累计 ops 增长
+ * 3. 上轨：活跃度柱（按时间分桶的 ops）
+ * ------------------------------------------------------------------ */
+
+/** 上轨一根柱。 */
+export interface ActivityBar {
+  /** 桶序号（0 = 窗口最左）。 */
+  index: number
+  /** 该桶内的操作数（= 各节点在此区间的累计增量之和）。 */
+  ops: number
+  /** ops / 全局最大桶 ops（0–1）。 */
+  ratio: number
+  /** 像素高度（ACTIVITY_BAR_MIN_H ≤ height ≤ ACTIVITY_BAR_MAX_H）。 */
+  height: number
+  /** 不透明度（0.25–0.90）。 */
+  opacity: number
+}
+
+/** 上轨数据（纯函数输出，组件只摆位不计算）。 */
+export interface ActivityTrack {
+  /** 桶数（= 量化宽度 / 8px）。 */
+  binCount: number
+  /** 每个桶的 ops（长度 = binCount，含 0）。 */
+  bins: number[]
+  /** 最大桶 ops；全 0 时为 0。 */
+  maxOps: number
+  /** 只含 ops > 0 的柱（空数据 → 空数组，不造假柱子）。 */
+  bars: ActivityBar[]
+}
+
+/**
+ * 桶数：把宽度按 8px 量化后取整（确定性；宽度未知/为 0 时按 DEFAULT_ACTIVITY_WIDTH）。
+ * 注意：这里**不读 DOM**，宽度必须由调用方量好传入。
+ */
+export function binCountForWidth(width: number, binPx: number = ACTIVITY_BIN_PX): number {
+  const step = Number.isFinite(binPx) && binPx > 0 ? Math.floor(binPx) : ACTIVITY_BIN_PX
+  const safe = Number.isFinite(width) && width > 0 ? width : DEFAULT_ACTIVITY_WIDTH
+  return Math.max(1, Math.floor(safe / step))
+}
+
+/**
+ * 上轨：把节点按时间分桶，桶内 ops = 各节点在此区间的累计增量之和。
+ * 只用 cumulativeOpsAt 的差分 → 没有 samples 的节点「首现即全量」，有 samples 的按阶梯增长；
+ * 窗口之前的累计被扣掉（只统计窗口内的操作）。
+ * 空输入（没有节点）→ bars 为空数组，绝不补 0 高假柱子。
+ */
+export function buildActivityTrack(nodes: readonly TimelineNode[], window: TimeRange, binCount: number): ActivityTrack {
+  const count = Math.max(1, Math.floor(Number.isFinite(binCount) && binCount > 0 ? binCount : 1))
+  const span = Math.max(1, window.end - window.start)
+  const bins: number[] = []
+  for (let index = 0; index < count; index += 1) bins.push(0)
+
+  for (const node of nodes) {
+    // 从窗口**左侧一毫秒**起算：恰好落在窗口起点（或节点首现即起点）的 ops 也要计入，
+    // 否则「首现即全量」的节点会把起点那一刻的 ops 整段吞掉。
+    let previous = cumulativeOpsAt(node, window.start - 1)
+    for (let index = 0; index < count; index += 1) {
+      // 桶边界取整到 ms；最后一桶收到窗口右界上（不把尾巴算丢）。
+      const edge = index + 1 === count ? window.end : Math.round(window.start + (span * (index + 1)) / count)
+      const reached = cumulativeOpsAt(node, edge)
+      if (reached > previous) {
+        bins[index] += reached - previous
+        previous = reached
+      }
+    }
+  }
+
+  let maxOps = 0
+  for (const value of bins) if (value > maxOps) maxOps = value
+
+  const bars: ActivityBar[] = []
+  for (let index = 0; index < count; index += 1) {
+    const ops = bins[index]
+    if (ops <= 0) continue
+    const ratio = maxOps === 0 ? 0 : ops / maxOps
+    bars.push({
+      index,
+      ops,
+      ratio,
+      height: Math.max(ACTIVITY_BAR_MIN_H, Math.round(ratio * ACTIVITY_BAR_MAX_H)),
+      opacity: Math.round((ACTIVITY_OPACITY_MIN + ratio * ACTIVITY_OPACITY_SPAN) * 1000) / 1000,
+    })
+  }
+  return { binCount: count, bins, maxOps, bars }
+}
+
+/* ------------------------------------------------------------------ *
+ * 4. 下轨：会话分层（最多 4 行）
+ * ------------------------------------------------------------------ */
+
+/** 下轨一条会话条。 */
+export interface SessionLane {
+  id: string
+  title?: string
+  /** 轮次数（hover tooltip 用）。 */
+  turns: number
+  /** 会话开始（ms，原值）。 */
+  start: number
+  /** 会话结束（ms；没有 end 时等于 start）。 */
+  end: number
+  /** 行号 0–3（0 = 最上面一行）。 */
+  lane: number
+  /** 左边界比例 0–1。 */
+  leftRatio: number
+  /** 宽度比例 0–1（至少 SESSION_MIN_RATIO，且不越出右界）。 */
+  widthRatio: number
+}
+
+/** 会话占几行：0 条 → 0 行；否则 min(4, 条数)。 */
+export function sessionLaneCount(sessionCount: number): number {
+  const safe = Number.isFinite(sessionCount) ? Math.floor(sessionCount) : 0
+  if (safe <= 0) return 0
+  return Math.min(SESSION_LANE_MAX, safe)
+}
+
+/**
+ * 会话分层：先按开始时间（同一时刻再按 id）排序，再贪心首次适配到空出来的行，
+ * 四行都占着时落到「最早空出来」的那行（并列取行号小的）→ 同一输入永远同一行号。
+ * 与窗口不相交的会话直接丢弃（不画看不到的东西）。
+ */
+export function buildSessionLanes(
+  sessions: readonly TimelineSession[],
+  window: TimeRange,
+  laneCount: number = SESSION_LANE_MAX,
+): SessionLane[] {
+  const lanes = Math.max(0, Math.min(SESSION_LANE_MAX, Math.floor(Number.isFinite(laneCount) ? laneCount : 0)))
+  const result: SessionLane[] = []
+  if (lanes === 0) return result
+
+  const visible = sessions.filter((session) => {
+    const end = session.end === undefined ? session.start : Math.max(session.start, session.end)
+    return end >= window.start && session.start <= window.end
+  })
+  if (visible.length === 0) return result
+
+  const sorted = visible.slice().sort((left, right) => {
+    if (left.start !== right.start) return left.start - right.start
+    return left.id < right.id ? -1 : left.id > right.id ? 1 : 0
+  })
+
+  const laneEnds: number[] = []
+  for (let index = 0; index < lanes; index += 1) laneEnds.push(-Infinity)
+
+  for (const session of sorted) {
+    const end = session.end === undefined ? session.start : Math.max(session.start, session.end)
+    let lane = -1
+    for (let index = 0; index < lanes; index += 1) {
+      if (laneEnds[index] <= session.start) {
+        lane = index
+        break
+      }
+    }
+    if (lane === -1) {
+      lane = 0
+      for (let index = 1; index < lanes; index += 1) if (laneEnds[index] < laneEnds[lane]) lane = index
+    }
+    laneEnds[lane] = end
+
+    const left = timeToRatio(session.start, window)
+    const right = timeToRatio(end, window)
+    const width = Math.min(Math.max(SESSION_MIN_RATIO, right - left), Math.max(0, 1 - left))
+    result.push({
+      id: session.id,
+      ...(session.title === undefined ? {} : { title: session.title }),
+      turns: session.turns,
+      start: session.start,
+      end,
+      lane,
+      leftRatio: left,
+      widthRatio: width,
+    })
+  }
+  return result
+}
+
+/* ------------------------------------------------------------------ *
+ * 5. 播放头：位置 + 唯一标签（贴边翻转）
+ * ------------------------------------------------------------------ */
+
+/** 播放头标签对齐：贴左 → start；贴右 → end；中间 → center。 */
+export type PlayheadLabelAnchor = 'start' | 'center' | 'end'
+
+/** 标签是否贴边翻转：由比例决定（确定性，与容器实际像素无关）。 */
+export function playheadLabelAnchor(ratio: number): PlayheadLabelAnchor {
+  const safe = Number.isFinite(ratio) ? ratio : 0
+  if (safe <= PLAYHEAD_LABEL_EDGE) return 'start'
+  if (safe >= 1 - PLAYHEAD_LABEL_EDGE) return 'end'
+  return 'center'
+}
+
+/**
+ * 播放头文本（aria-live / aria-valuetext / 顶部唯一标签共用）。
+ * Q2：单写 HH:MM 会丢掉日期（跨天窗口里看起来像乱序），至少给到 MM-DD HH:MM；
+ * 长窗口（年/月粒度）给完整日期。R12：全时间轴只显示这一处标签。
+ */
+export function playheadLabel(at: number, window: TimeRange): string {
+  const span = window.end - window.start
+  const granularity = granularityFor(span)
+  if (granularity === 'year' || granularity === 'month') {
+    const date = new Date(at)
+    return String(date.getFullYear()) + '-' + pad2(date.getMonth() + 1) + '-' + pad2(date.getDate())
+  }
+  return formatTick(at, 'day') + ' ' + formatTick(at, 'minute')
+}
+
+/** 窗口左/右标签（首尾刻度）。 */
+export function windowEdgeLabels(window: TimeRange): { start: string; end: string } {
+  const span = window.end - window.start
+  const granularity = granularityFor(span)
+  return { start: formatTick(window.start, granularity), end: formatTick(window.end, granularity) }
+}
+
+/* ------------------------------------------------------------------ *
+ * 6. 累计 ops（上轨分桶的基石）
  * ------------------------------------------------------------------ */
 
 /** 截至 at 的累计 ops（有 samples 用 samples，否则首现即全部；未出现 = 0）。 */
@@ -289,57 +460,4 @@ export function cumulativeOpsAt(node: TimelineNode, at: number): number {
   let total = 0
   for (const sample of samples) if (sample.at <= at) total = Math.max(total, sample.ops)
   return Math.max(0, total)
-}
-
-/** 截至 at 已出现的文件（按 firstAt 过滤；未加载区段没有数据，自然不会被造出来）。 */
-export function visiblePathsAt(nodes: readonly TimelineNode[], at: number): string[] {
-  const result: string[] = []
-  for (const node of nodes) if (node.firstAt <= at) result.push(node.path)
-  return result
-}
-
-/** 截至 at 的生长条数据（累计文件数 + 累计 ops）。 */
-export function growthAt(nodes: readonly TimelineNode[], at: number, window: TimeRange): { files: number; ops: number; ratios: number[] } {
-  let files = 0
-  let ops = 0
-  for (const node of nodes) {
-    if (node.firstAt <= at) files += 1
-    ops += cumulativeOpsAt(node, at)
-  }
-  // 生长曲线采样：固定 64 段（确定性），首现时刻之后线性累加节点数。
-  const samples = 64
-  const ratios: number[] = []
-  const sorted = nodes.slice().sort((left, right) => left.firstAt - right.firstAt)
-  for (let index = 0; index <= samples; index += 1) {
-    const time = window.start + ((window.end - window.start) * index) / samples
-    let count = 0
-    for (const node of sorted) if (node.firstAt <= time) count += 1
-    ratios.push(count / Math.max(1, sorted.length))
-  }
-  return { files, ops, ratios }
-}
-
-/** 播放头推进：dt 毫秒 × speed；到窗口尾部即停（返回 done=true）。 */
-export function advancePlayhead(current: number, deltaMs: number, speed: number, window: TimeRange): { value: number; done: boolean } {
-  const safeDelta = Number.isFinite(deltaMs) ? Math.max(0, deltaMs) : 0
-  const safeSpeed = Number.isFinite(speed) ? Math.max(0.1, speed) : 1
-  const next = clampPlayhead(current + safeDelta * safeSpeed, window)
-  return { value: next, done: next >= window.end }
-}
-
-/** 播放头文本（aria-live / aria-valuetext / tooltip 共用）。 */
-export function playheadLabel(at: number, window: TimeRange): string {
-  const span = window.end - window.start
-  const granularity = granularityFor(span)
-  if (granularity === 'year') return formatTick(at, 'month')
-  if (granularity === 'month') return formatTick(at, 'day')
-  if (granularity === 'week' || granularity === 'day') return formatTick(at, 'hour')
-  return formatTick(at, 'minute')
-}
-
-/** 窗口左/右标签（首尾刻度）。 */
-export function windowEdgeLabels(window: TimeRange): { start: string; end: string } {
-  const span = window.end - window.start
-  const granularity = granularityFor(span)
-  return { start: formatTick(window.start, granularity), end: formatTick(window.end, granularity) }
 }

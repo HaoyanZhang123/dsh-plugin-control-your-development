@@ -89,7 +89,10 @@ function rejection(reason: PathRejectionReason, path: string): FileReadFailure {
 
 export function createWorkspaceFilesReader(options: WorkspaceFilesReaderOptions): WorkspaceFilesReader {
   const limits: WorkspaceFileLimits = { ...DEFAULT_WORKSPACE_FILE_LIMITS, ...options.limits }
-  const caseInsensitive = options.caseInsensitive ?? true
+  // 大小写策略：不传时交给 `containsPath` 的**自适应**判断——只有 Windows 风格路径
+  // （盘符 / UNC）才折叠大小写；POSIX 路径（Linux/macOS）保持大小写敏感。
+  // 强制 `?? true` 会把「工作区外、只差大小写」的路径误判为区内（安全缺陷）。
+  const caseInsensitive = options.caseInsensitive
 
   function assertInside(absPath: string): boolean {
     return containsPath(options.cwd, absPath, caseInsensitive)

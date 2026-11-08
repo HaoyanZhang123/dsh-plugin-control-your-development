@@ -66,12 +66,8 @@ export type MessageKey =
   | "inspector.listView"
   | "legend.title"
   | "map.fit"
-  | "map.reset"
   | "map.showAllRelations"
   | "map.onlyCurrent"
-  | "timeline.play"
-  | "timeline.pause"
-  | "timeline.now"
   | "range.all"
   | "range.today"
   | "range.7d"
@@ -117,20 +113,16 @@ export type MessageKey =
   | "inspector.parentSession"
   | "inspector.recentTurns"
   | "inspector.timeRange"
-  | "map.truncatedNodes"
   | "relations.collapsed"
   // —— §16 扩展段（2026-11-05，T21 目录总览）——
   | "map.rootCluster"
-  | "map.overview"
-  | "map.overviewHint"
   | "map.clusterCount"
   | "map.clusterMeta"
-  | "map.clusterVisible"
   | "map.clusterCurrent"
+  | "map.zoomIn"
+  | "map.zoomOut"
   // —— §16 扩展段（2026-11-05，T31 脉络 2.0：文件关系图/轮次状态/目录 rail）——
   | "graph.title"
-  | "graph.directoryHint"
-  | "graph.turnHint"
   | "rail.title"
   | "turnStatus.read"
   | "turnStatus.write"
@@ -138,22 +130,44 @@ export type MessageKey =
   | "turnStatus.deleteCommands"
   | "turnStatus.deleteShort"
   | "turns.relationsTip"
+  | "tree.root"
+  | "tree.folder"
+  | "tree.path"
+  | "tree.ops"
+  | "tree.back"
+  | "tree.refresh"
+  | "tree.cards"
+  | "tree.list"
+  | "tree.empty"
+  | "tree.readFailed"
+  | "tree.truncated"
+  | "tree.retry"
+  | "map.folder"
+  | "map.folderCount"
+  | "graph.untouched"
+  | "graph.currentDir"
+  | "graph.emptyFolder"
+  | "graph.showingOf"
+  | "graph.noRecord"
+  | "graph.density"
+  | "graph.densitySkeleton"
+  | "graph.densityStandard"
+  | "graph.densityAll"
+  | "graph.showAll"
+  | "graph.collapseAll"
+  | "graph.relationsSummary"
+  | "graph.relationsTrimmed"
+  | "graph.hubEmpty"
   | "turns.relations"
   | "rail.topRelated"
   | "rail.relatedDirs"
   | "rail.relations"
-  | "graph.filterHint"
   | "graph.fileRelations"
   | "graph.evidenceTitle"
-  | "graph.moreFiles"
-  | "graph.dragHint"
   | "graph.resetLayout"
-  | "graph.coverage"
   | "graph.emptyTurn"
   | "graph.loadingTurn"
   | "graph.loading"
-  | "graph.overviewSubtitle"
-  | "graph.overviewHint"
   | "turnStatus.unknown"
   | "turnStatus.markRead"
   | "turnStatus.markWriteAdd"
@@ -224,12 +238,8 @@ export const MESSAGE_KEYS: readonly MessageKey[] = [
   "inspector.listView",
   "legend.title",
   "map.fit",
-  "map.reset",
   "map.showAllRelations",
   "map.onlyCurrent",
-  "timeline.play",
-  "timeline.pause",
-  "timeline.now",
   "range.all",
   "range.today",
   "range.7d",
@@ -275,20 +285,16 @@ export const MESSAGE_KEYS: readonly MessageKey[] = [
   "inspector.parentSession",
   "inspector.recentTurns",
   "inspector.timeRange",
-  "map.truncatedNodes",
   "relations.collapsed",
   // —— §16 扩展段（2026-11-05，T21 目录总览）——
   "map.rootCluster",
-  "map.overview",
-  "map.overviewHint",
   "map.clusterCount",
   "map.clusterMeta",
-  "map.clusterVisible",
   "map.clusterCurrent",
+  "map.zoomIn",
+  "map.zoomOut",
   // —— §16 扩展段（2026-11-05，T31 脉络 2.0：文件关系图/轮次状态/目录 rail）——
   "graph.title",
-  "graph.directoryHint",
-  "graph.turnHint",
   "rail.title",
   "turnStatus.read",
   "turnStatus.write",
@@ -296,22 +302,44 @@ export const MESSAGE_KEYS: readonly MessageKey[] = [
   "turnStatus.deleteCommands",
   "turnStatus.deleteShort",
   "turns.relationsTip",
+  "tree.root",
+  "tree.folder",
+  "tree.path",
+  "tree.ops",
+  "tree.back",
+  "tree.refresh",
+  "tree.cards",
+  "tree.list",
+  "tree.empty",
+  "tree.readFailed",
+  "tree.truncated",
+  "tree.retry",
+  "map.folder",
+  "map.folderCount",
+  "graph.untouched",
+  "graph.currentDir",
+  "graph.emptyFolder",
+  "graph.showingOf",
+  "graph.noRecord",
+  "graph.density",
+  "graph.densitySkeleton",
+  "graph.densityStandard",
+  "graph.densityAll",
+  "graph.showAll",
+  "graph.collapseAll",
+  "graph.relationsSummary",
+  "graph.relationsTrimmed",
+  "graph.hubEmpty",
   "turns.relations",
   "rail.topRelated",
   "rail.relatedDirs",
   "rail.relations",
-  "graph.filterHint",
   "graph.fileRelations",
   "graph.evidenceTitle",
-  "graph.moreFiles",
-  "graph.dragHint",
   "graph.resetLayout",
-  "graph.coverage",
   "graph.emptyTurn",
   "graph.loadingTurn",
   "graph.loading",
-  "graph.overviewSubtitle",
-  "graph.overviewHint",
   "turnStatus.unknown",
   "turnStatus.markRead",
   "turnStatus.markWriteAdd",

@@ -110,6 +110,10 @@ export function TurnBlock(props: TurnBlockProps): React.ReactElement {
       onClick: () => props.onSelect?.(model),
       onDoubleClick: () => props.onDoubleClick?.(model),
       onMouseEnter: () => props.onPreview?.(model),
+      // 鼠标离开必须清预览（2026-11-08 修）。
+      // 之前只有 onMouseEnter、没有 onMouseLeave → preview 一旦设置就永不消失，
+      // 表现为「悬停某轮后左图一直停在那轮，移开鼠标也不回来」。这是真实缺陷，不是设计。
+      onMouseLeave: () => props.onPreview?.(null),
       onFocus: () => props.onFocusBlock?.(model),
     },
     // 状态条：宽度 = 块宽（时长映射），颜色 = 状态；运行中脉冲（reduced-motion 下由 tokens.css 归零）

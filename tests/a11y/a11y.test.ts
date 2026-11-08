@@ -50,7 +50,9 @@ import {
   type MediaQueryLike,
 } from '../../src/client/a11y/index.ts'
 import { DEFAULT_FILE_SORT, DEFAULT_TURN_SORT } from '../../src/client/a11y/listModel.ts'
+import { dateTimeOfDay } from '../../src/client/a11y/ListTable.ts'
 import { nextTrapIndex as COMMON_NEXT_TRAP } from '../../src/client/ui/common/index.ts'
+import { FileTreeRail, railKeyAction } from '../../src/client/ui/rail/index.ts'
 import { FILES, TURNS } from './fixtures.ts'
 
 const t = createTranslator('zh')
@@ -155,7 +157,7 @@ function renderFiles(selectedKey: string | null = null): string {
 test('文件表语义：table + 列头 aria-sort + roving tabindex + aria-selected', () => {
   const html = renderFiles('src/client/ui/shell/shell.ts')
   assert.match(html, /<table[^>]*role="table"/)
-  assert.match(html, /aria-label="列表视图 · 文件"/)
+  assert.match(html, /aria-label="表格视图 · 文件"/)
   assert.match(html, /aria-rowcount="4"/, '行数 = 数据行 3 + 表头 1')
   assert.match(html, /aria-colcount="5"/, '4 列 + 聚焦动作列')
   const sorted = html.match(/aria-sort="(ascending|descending|none)"/g) ?? []
@@ -168,6 +170,19 @@ test('文件表语义：table + 列头 aria-sort + roving tabindex + aria-select
   assert.match(html, /aria-label="文件 Shell\.ts，操作 18"/, '行的可访问名只含元数据')
   assert.match(html, /aria-label="在图中聚焦 · src\/client\/ui\/shell\/Shell\.ts"/, '每行有可在图中聚焦的动作（标签用该行展示路径，隐私模式下随之掩码）')
   assert.match(html, /role="status" aria-live="polite" aria-atomic="true"/, 'aria-live 播报器存在')
+})
+
+test('Q6 文件表首列拆成主名 + 次级目录，title 保留完整（掩码后）路径', () => {
+  const html = renderFiles('src/client/ui/shell/shell.ts')
+  assert.match(html, /class="threadline-table-file-name">Shell\.ts</)
+  assert.match(html, /class="threadline-table-file-dir">src\/client\/ui\/shell</)
+  assert.match(html, /title="src\/client\/ui\/shell\/Shell\.ts"/)
+})
+
+test('Q6 日期时间带日期（MM-DD HH:MM），未知不伪造', () => {
+  const at = new Date(2026, 10, 7, 15, 4).getTime()
+  assert.equal(dateTimeOfDay(at), '11-07 15:04')
+  assert.equal(dateTimeOfDay(null), '—')
 })
 
 test('隐私模式下表格单元格不含目录（掩码进到渲染层）', () => {
@@ -195,7 +210,7 @@ test('轮次表语义：状态与计数以 locale 文案呈现，未时长不伪
       selectedKey: 'turn:2',
     }),
   )
-  assert.match(html, /aria-label="列表视图 · 轮次"/)
+  assert.match(html, /aria-label="表格视图 · 轮次"/)
   assert.match(html, /T1 · 完成/)
   assert.match(html, /T2 · 已中断/)
   assert.match(html, /aria-selected="true"/)
@@ -364,4 +379,99 @@ test('DSH 主题令牌：明暗两套实测值全部达标', () => {
   const summary = summarizeContrast(results)
   assert.deepEqual(summary.failedNames, [], '对比度不足：' + summary.failedNames.join(', '))
   assert.equal(summary.total, DSH_TOKEN_PAIRS.length)
+})
+
+/* ------------------------------------------------------------------ *
+ * 7. 右栏文件浏览器（R03）：列表/卡片的可读名、键盘语义、aria-current
+ *
+ * 只做静态可判定部分；真实 Tab 走查由 tests/harness 的截图/交互场景负责。
+ * 判据（07 §7）：Tab 进入；↑/↓/Enter/Escape 可达；全部按钮可读名称；颜色不是唯一信息。
+ * ------------------------------------------------------------------ */
+
+function railEntry(name: string, kind: 'directory' | 'file' | 'other', size?: number) {
+  return {
+    name,
+    path: name,
+    kind,
+    family: (name.endsWith('.md') ? 'text' : name.endsWith('.png') ? 'media' : 'code') as 'text' | 'media' | 'code',
+    ...(size === undefined ? {} : { size }),
+  }
+}
+
+function renderRailHtml(overrides: Record<string, unknown> = {}): string {
+  return renderToStaticMarkup(
+    h(FileTreeRail, {
+      currentPath: '',
+      entries: [railEntry('src', 'directory'), railEntry('README.md', 'file', 2048), railEntry('weird', 'other')],
+      status: 'ready' as const,
+      onNavigate: () => undefined,
+      onBack: () => undefined,
+      onRefresh: () => undefined,
+      onSelectFile: () => undefined,
+      onViewModeChange: () => undefined,
+      locale: 'zh',
+      ...overrides,
+    }),
+  )
+}
+
+test('右栏：每个可点元素都是 button，且都有非空可访问名（aria-label 或可见文本）', () => {
+  const html = renderRailHtml({ viewMode: 'list' as const })
+  const buttons = html.match(/<button[^>]*>[\s\S]*?<\/button>/g) ?? []
+  assert.ok(buttons.length >= 6, '右栏应有多枚按钮（回退/更新/切换/面包屑/行），实际 ' + buttons.length)
+  for (const markup of buttons) {
+    const tag = /^<button[^>]*>/.exec(markup)?.[0] ?? markup
+    const hasAria = /aria-label="[^"]+"/.test(tag) || /title="[^"]+"/.test(tag)
+    // 可见文本也算可访问名（面包屑就是纯文本按钮）；装饰性 glyph 都带 aria-hidden。
+    const inner = markup.slice(tag.length).replace(/<\/button>$/, '').replace(/<[^>]*aria-hidden="true"[^>]*>[\s\S]*?<\/[^>]+>/g, '')
+    const visibleText = inner.replace(/<[^>]*>/g, '').trim()
+    assert.ok(hasAria || visibleText !== '', '按钮缺可读名称：' + tag)
+  }
+  // 图标按钮必须有 aria-label（不是只有 title）
+  for (const id of ['rail-back', 'rail-refresh', 'rail-view-toggle']) {
+    const match = new RegExp('<button[^>]*data-testid="' + id + '"[^>]*>').exec(html)
+    assert.ok(match !== null, '缺按钮 ' + id)
+    assert.match(match[0], /aria-label="[^"]+"/, '图标按钮必须有 aria-label：' + id)
+    // 图标本身 aria-hidden（读屏不念装饰字符）
+    assert.ok(html.includes('aria-hidden="true"'), '图标要有 aria-hidden')
+  }
+})
+
+test('右栏：面包屑用 aria-current 标出当前层（不靠颜色）', () => {
+  const root = renderRailHtml({ currentPath: '' })
+  assert.equal((root.match(/aria-current="location"/g) ?? []).length, 1, '根层只有一个 current')
+  const deep = renderRailHtml({ currentPath: 'src/client', entries: [railEntry('ui', 'directory')] })
+  assert.equal((deep.match(/aria-current="location"/g) ?? []).length, 1, '深层只有一个 current（最后一段）')
+  assert.match(deep, /aria-label="路径"/, '面包屑导航有名称（tree.path）')
+})
+
+test('右栏：行是 button + roving tabindex，Enter/Escape 语义进键盘状态机', () => {
+  const html = renderRailHtml()
+  assert.equal((html.match(/tabindex="0"/g) ?? []).length, 1, '只有一个 Tab 落点（roving tabindex）')
+  // Esc 清选择 / Enter 激活：由 railKeyAction（复用 listKeyNav）给出，纯逻辑已单测；
+  // 这里确认组件没有把行做成不可聚焦的 div。
+  assert.equal(/<div[^>]*data-tree-row=/.test(html), false, '行不许是 div（必须 button）')
+  const action = railKeyAction(listKeyNav, { index: 1, count: 3, key: 'Enter' })
+  assert.equal(action.activate, true)
+  assert.equal(railKeyAction(listKeyNav, { index: 1, count: 3, key: 'Escape' }).escape, true)
+})
+
+test('右栏：类型不只靠颜色（visible 文字标签）+ 未触碰不显示假 0', () => {
+  const html = renderRailHtml()
+  // 三类都有文字类型标签
+  assert.ok(html.includes('文件夹') && html.includes('文件') && html.includes('其它'), '类型要有文字标签（颜色不是唯一信息）')
+  // 没给 touched → 一个 ops 徽标都不许出现
+  assert.equal(html.includes('data-ops='), false, '未触碰条目不许有 ops 徽标')
+  assert.equal(/data-ops="0"/.test(html), false, '绝不显示假 0')
+})
+
+test('右栏：空/错误/截断态有可读状态（不是空白，也不是静默）', () => {
+  const empty = renderRailHtml({ entries: [], status: 'empty' as const })
+  assert.ok(empty.includes('空文件夹'))
+  const failed = renderRailHtml({ entries: [], status: 'error' as const, errorCode: 'unreadable' as const })
+  assert.match(failed, /role="alert"/, '读取失败要立刻播报')
+  assert.ok(failed.includes('重新读取'), '只读重试文案是「重新读取」')
+  const truncated = renderRailHtml({ truncated: true })
+  assert.match(truncated, /role="status"/, '截断提示是状态播报（不打断）')
+  assert.ok(truncated.includes('显示前'))
 })

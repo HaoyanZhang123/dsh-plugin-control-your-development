@@ -224,7 +224,11 @@ export function TurnStrip(props: TurnStripProps): React.ReactElement {
       'data-running-count': String(runningCount),
       ref: containerRef,
       onKeyDown,
-      // 不在这里清预览：从轮次块移到左图看状态时，预览需要保持（由入口的 layout mouseleave 清）。
+      // 兜底：鼠标离开整条轮次带时清预览（单个块的 onMouseLeave 已清，这条防"从块直接甩出边界"漏网）。
+      // 旧注释说"不在这里清，因为移到左图看状态时预览要保持" —— 那个理由在**锁定优先**下已不成立：
+      // 画面由 effectiveSelection 决定（有选中就看选中），预览只做悬停描边，
+      // 所以离开轮次带把它清掉不会让用户想看的画面消失，只会让悬停描边消失。
+      onMouseLeave: () => props.onPreview(null),
       onBlur: (event: React.FocusEvent<HTMLDivElement>) => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) props.onPreview(null)
       },

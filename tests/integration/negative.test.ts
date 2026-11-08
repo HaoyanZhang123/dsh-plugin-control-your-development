@@ -335,7 +335,21 @@ test('N-12 窄容器：只用容器查询、不产生页面级横向滚动', () 
 
 test('N-13 reduced-motion：不播放动画/脉冲', async () => {
   const { graph } = await chain()
-  const base = { files: sortedFiles(graph), mode: 'directory' as const, directoryKey: 'src', directoryLabel: 'src', edges: [], now: NOW, selectedPath: null, locale: 'zh' as const }
+  // R04 起 folder 模式需要 entries + currentPath（不再有 mode:'directory'）。
+  const srcFiles = sortedFiles(graph).filter((file) => file.path.startsWith('src/'))
+  const entries = srcFiles
+    .filter((file) => !file.path.slice('src/'.length).includes('/'))
+    .map((file) => ({ name: file.name, path: file.path, kind: 'file' as const }))
+  const base = {
+    files: srcFiles,
+    entries,
+    currentPath: 'src',
+    mode: 'folder' as const,
+    edges: [],
+    now: NOW,
+    selectedPath: null,
+    locale: 'zh' as const,
+  }
   const reduced = renderToStaticMarkup(React.createElement(FileGraph, { ...base, reducedMotion: true }))
   const normal = renderToStaticMarkup(React.createElement(FileGraph, { ...base, reducedMotion: false }))
   assert.ok(reduced.includes('data-reduced-motion="true"'))

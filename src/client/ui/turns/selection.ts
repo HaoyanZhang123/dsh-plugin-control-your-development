@@ -89,9 +89,35 @@ export function sameSelection(a: Selection | null, b: Selection | null): boolean
   return selectionKey(a) === selectionKey(b)
 }
 
-/** 当前应当呈现（检查器/高亮）的选择：预览优先，其次固定选择。 */
+/**
+ * 当前应当呈现（检查器/高亮）的选择：**锁定优先**（2026-11-08 用户拍板改）。
+ *
+ * 旧规则是「预览优先」（`preview ?? selected`），带来一个真实缺陷：
+ * 用户点选某一轮把它锁定了，鼠标只要划过别的轮次，左图就跳到那一轮 ——
+ * 选中被悬停覆盖，「锁定」形同不存在。用户原话：
+ * 「我已经点击选中了一个高亮的，但是我这个时候鼠标悬浮在其他的轮子上，
+ *   它会切换到其他轮子上，而不是锁定在那个高亮上。」
+ *
+ * 新规则：
+ * - **有固定选择时，预览不参与呈现**（悬停只影响悬停项自己的描边，不改画面）；
+ * - **没有固定选择时，预览才有意义**（不点也能扫一眼各轮）。
+ *
+ * 这样「点 = 锁定」是真锁定，而「不点 = 自由浏览」仍然保留。
+ */
 export function effectiveSelection(state: SelectionState): Selection {
+  if (state.selected.kind !== 'none') return state.selected
   return state.preview ?? state.selected
+}
+
+/**
+ * 悬停提示用的呈现值：**不受锁定影响**，永远跟随鼠标。
+ *
+ * 与 `effectiveSelection` 分开是为了让 UI 能同时表达两件事：
+ * - 画面（左图/检查器）用 `effectiveSelection` → 锁定优先，不跳；
+ * - 轮次块自己的悬停反馈用这个 → 鼠标在哪就给哪画淡描边。
+ */
+export function hoverSelection(state: SelectionState): Selection | null {
+  return state.preview
 }
 
 /** 是否有可退的一层（供 Esc 上层联动判断）。 */

@@ -128,15 +128,38 @@ async function fullChain(): Promise<{
       now: NOW,
     }),
   )
-  // T31：左图是文件关系图（只画当前目录的文件）。两次渲染覆盖 src / docs 两个目录，
+  // T31/1.2.0：左图是「当前目录节点图」（folder 模式）。两次渲染覆盖 src / docs 两个目录，
   // 保证「数据真的进了 DOM」这条断言不被单一视图替换掉。
+  // R04 起 folder 模式需要 entries（当前目录的直接 entries：文件 + 子文件夹，含未触碰项）+ currentPath。
+  // 子文件夹要从 files 的路径里推导出来（孙级文件说明中间有目录），否则枢纽会缺失。
+  const entriesOf = (
+    nodes: readonly { path: string; name: string }[],
+    dir: string,
+  ): Array<{ name: string; path: string; kind: 'file' | 'directory' }> => {
+    const prefix = dir + '/'
+    const files: Array<{ name: string; path: string; kind: 'file' }> = []
+    const dirs = new Map<string, { name: string; path: string; kind: 'directory' }>()
+    for (const node of nodes) {
+      if (!node.path.startsWith(prefix)) continue
+      const rest = node.path.slice(prefix.length)
+      const slash = rest.indexOf('/')
+      if (slash < 0) {
+        files.push({ name: node.name, path: node.path, kind: 'file' as const })
+        continue
+      }
+      const segment = rest.slice(0, slash)
+      const childPath = prefix + segment
+      if (!dirs.has(childPath)) dirs.set(childPath, { name: segment, path: childPath, kind: 'directory' as const })
+    }
+    return [...dirs.values(), ...files]
+  }
   const mapHtml = renderToStaticMarkup(
     React.createElement(FileGraph, {
       files: files.filter((file) => file.path.startsWith('src/')),
+      entries: entriesOf(files, 'src'),
+      currentPath: 'src',
       edges: finalized.edges,
-      mode: 'directory',
-      directoryKey: 'src',
-      directoryLabel: 'src',
+      mode: 'folder',
       now: NOW,
       selectedPath: null,
       locale: 'zh',
@@ -145,10 +168,10 @@ async function fullChain(): Promise<{
   const mapDetailHtml = renderToStaticMarkup(
     React.createElement(FileGraph, {
       files: files.filter((file) => file.path.startsWith('docs/')),
+      entries: entriesOf(files, 'docs'),
+      currentPath: 'docs',
       edges: finalized.edges,
-      mode: 'directory',
-      directoryKey: 'docs',
-      directoryLabel: 'docs',
+      mode: 'folder',
       now: NOW,
       selectedPath: null,
       locale: 'zh',
@@ -312,15 +335,20 @@ test('A50-2 链路一致：reducer 计数 = host 摘要 = 图节点/边 = 关系
   assert.equal(block.partial, false)
 
   // 8) 渲染：数据真的进了 DOM，且没有 undefined/NaN。
-  // T31：左图是文件关系图（只画当前目录文件；目录切换由卡片驱动）。
+  // 1.2.0（R04）：左图是「当前目录节点图」——当前目录的**直接**文件画成文件节点，
+  // 直接子文件夹画成文件夹枢纽（`data-folder-hub`）；孙级文件不再出现在这一层。
   const { rendered } = await fullChain()
   assert.ok(rendered.strip.includes('data-turn="1"'))
   assert.equal((rendered.strip.match(/data-turn="/g) ?? []).length, 3)
-  assert.equal((rendered.map.match(/data-file-path="/g) ?? []).length, 2, 'src 目录图应只有 2 个文件节点')
+  // src 的直接文件只有 src/app.ts；src/lib 是子文件夹 → 枢纽（不是文件节点）。
+  assert.equal((rendered.map.match(/data-file-path="/g) ?? []).length, 1, 'src 目录图应只有 1 个直接文件节点')
+  assert.equal((rendered.map.match(/data-folder-hub="/g) ?? []).length, 1, 'src 目录图应有 1 个文件夹枢纽（lib）')
   assert.equal((rendered.map.match(/data-cluster-card="/g) ?? []).length, 0)
-  assert.ok(rendered.map.includes('data-graph-mode="directory"'))
-  assert.ok(rendered.map.includes('data-file-count="2"'))
-  assert.equal((rendered.mapDetail.match(/data-file-path="/g) ?? []).length, 2, 'docs 目录图应只有 2 个文件节点')
+  assert.ok(rendered.map.includes('data-graph-mode="folder"'))
+  assert.ok(rendered.map.includes('data-file-count="1"'))
+  // docs 的直接文件是 docs/notes.md、docs/spec.md（都在 docs 下一层）→ 2 个文件节点、0 个枢纽。
+  assert.equal((rendered.mapDetail.match(/data-file-path="/g) ?? []).length, 2, 'docs 目录图应有 2 个直接文件节点')
+  assert.equal((rendered.mapDetail.match(/data-folder-hub="/g) ?? []).length, 0, 'docs 目录图没有子文件夹')
   assert.equal((rendered.mapDetail.match(/data-cluster-card="/g) ?? []).length, 0)
   for (const [name, html] of Object.entries(rendered)) {
     if (name === 'edges') continue

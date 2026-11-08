@@ -40,9 +40,13 @@ import {
 import { ErrorBoundary, ThreadlineShell, type RangeKey } from '../ui/shell/index.ts'
 import { Button, Chip, ProgressPill } from '../ui/common/index.ts'
 import { FileGraph } from '../ui/map/index.ts'
-import { DIRECTORY_TOP_FILES, buildDirectoryCards, buildDirectoryRelationSummary, directoryKeyOf } from '../ui/rail/index.ts'
-import { DirectoryRail } from '../ui/rail/index.ts'
-import { Timeline, visiblePathsAt, type TimeRange } from '../ui/timeline/index.ts'
+import { FileTreeRail } from '../ui/rail/index.ts'
+import { useDirectoryTree, type TreeEntry } from '../data/index.ts'
+// 派生计算（R06）：边端点邻接索引 + 轮次关系计数 + 当前目录内边过滤。
+// 这三个函数与 tab 里的旧内联实现**逐 key 等价**（R06 与 Lead 各验一次），但把
+// 「每条边 × 每一轮」的 O(轮次×边) 降成 O(轮次 × 本轮文件 × 出度)。
+import { buildEdgeEndpointIndex, createInputMemo, filterEdgesWithin, turnRelationCounts } from '../perf/index.ts'
+import { Timeline, windowForRange, type TimeRange } from '../ui/timeline/index.ts'
 import {
   NO_SELECTION,
   SessionSelector,
@@ -74,7 +78,6 @@ import {
   TurnListView,
   buildFileRows,
   buildTurnRows,
-  motionDuration,
   useReducedMotion,
   type SortState,
 } from '../a11y/index.ts'
@@ -84,6 +87,19 @@ const h = React.createElement
 
 /** 列表视图模式（关闭 / 文件表 + 轮次表；2.0 里是图的替代视图）。 */
 export type ListViewMode = 'off' | 'list'
+
+/** 取文件所在目录（工作区相对；根层文件返回 ''）。右栏目录树的导航与「列表里在图中聚焦」都用它。 */
+function dirOfPath(path: string): string {
+  const slash = path.lastIndexOf('/')
+  return slash < 0 ? '' : path.slice(0, slash)
+}
+
+/** 卡片/图共用的本地时间文案（Q6 顺带修掉 rail 用 UTC 的问题）。 */
+function formatLocalTime(value: number): string {
+  const date = new Date(value)
+  const pad = (n: number): string => (n < 10 ? '0' + n : String(n))
+  return pad(date.getMonth() + 1) + '-' + pad(date.getDate()) + ' ' + pad(date.getHours()) + ':' + pad(date.getMinutes())
+}
 
 /** `conversation.view` 的 ownerProps（+ 我们允许注入的测试/宿主字段）。 */
 export interface TabOwnerProps {
@@ -144,6 +160,25 @@ function coverageView(
     failed,
     text: failed > 0 && coverage.phase !== 'failed' ? text + ' · ' + t('coverage.failed', { n: failed }) : text,
   }
+}
+
+/**
+ * 模块作用域的派生量 memo（R06 的 P2：**跨 React 重挂载复用**）。
+ *
+ * 为什么需要：`React.useMemo` 的缓存挂在组件实例上，tab 一卸载/重挂载（用户切走再切回、
+ * 切换 tab）就全丢，导致「第二次打开」仍要重算全部派生量（PERF 实测 p95 340.7ms，
+ * 超 50ms 预算 6.8×）。把这几条重派生提到模块作用域、按**入参身份**命中，重挂载即同帧出内容。
+ *
+ * 失效纪律（不做永久缓存）：
+ * - `edges`：入参含 `data.graph`（数据版本变化即换身份）、详情对象引用、`effective`、`reference`；
+ * - 传的是**稳定来源**，不传 `details` 这种每帧新建的 Map（否则永不命中，等于没缓存）；
+ * - 切工作区时入参里的 `data.graph` 必然换身份 → 自然失效，不需要手工清。
+ *   只在测试 / 显式重置时调 `clear()`。
+ */
+const InputMemos = {
+  edges: createInputMemo<GraphEdge[]>(),
+  turnRelations: createInputMemo<Map<string, number>>(),
+  fileTurnKeys: createInputMemo<Map<string, Set<string>>>(),
 }
 
 /**
@@ -219,7 +254,6 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
   const mode: PrivacyMode = props.mode ?? privacy.mode
   const hidden = mode === 'hidden'
   const reduced = useReducedMotion()
-  const motionMs = motionDuration(180, reduced)
 
   const sessionsSnapshot = readSnapshot<{ current?: string; ids?: readonly string[] }>(props.useSessions)
   const workspacesSnapshot = readSnapshot<WorkspacesSnapshot>(props.useWorkspaces)
@@ -232,6 +266,15 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
   const scope = useWorkspaceScope({ workspaces: workspacesSnapshot, sessions: sessionsSnapshot, sessionId })
   const scannable = isScannableScope(scope)
   const data = useThreadlineData({ scope: scannable ? scope : null, fetch: fetchImpl })
+  // 右栏目录树（M4）：首选 remote.workspaceFiles.list，不可用则 host 只读 fallback（B1 已批准）。
+  // cwd 必须传：已安装 API 对空串 path 抛 gateway/bad-request，根层要用 cwd 绝对路径。
+  const tree = useDirectoryTree({
+    sessionId,
+    ...(props.remote === undefined ? {} : { remote: props.remote }),
+    fetch: fetchImpl,
+    cwd: scope.cwd ?? '',
+    enabled: scannable,
+  })
 
   const [range, setRange] = React.useState<RangeKey>('range.all')
   const [turnScope, setTurnScope] = React.useState<TurnScope>({ kind: 'current' })
@@ -242,13 +285,16 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
   const [turnSort, setTurnSort] = React.useState<SortState>(DEFAULT_TURN_SORT)
   const [listScroll, setListScroll] = React.useState(0)
   const [listViewport, setListViewport] = React.useState(420)
-  const [playing, setPlaying] = React.useState(false)
   const [playhead, setPlayhead] = React.useState<number | null>(null)
-  // 1.1：directoryKey 是「点击 pin 的目录簇」；总览始终存在，没有默认目录。
-  const [directoryKey, setDirectoryKey] = React.useState<string | null>(null)
-  const [hoverDirectory, setHoverDirectory] = React.useState<string | null>(null)
+  // 1.2.0 返工：右栏是工作区根目录浏览器，目录状态由 tree 数据层持有（不再有 drillPath/pin）。
+  const [railView, setRailView] = React.useState<'cards' | 'list'>('cards')
   const [hoverPath, setHoverPath] = React.useState<string | null>(null)
   const [now, setNow] = React.useState<number>(() => props.now ?? Date.now())
+  // 切工作区/会话重置播放头与右栏视图（目录状态由 useDirectoryTree 按 sessionId 自己隔离）。
+  React.useEffect(() => {
+    setPlayhead(null)
+    setHoverPath(null)
+  }, [sessionId, scope.cwd])
   const [reference, setReference] = React.useState<ReferenceResolutionView | null>(null)
   const listRef = React.useRef<HTMLDivElement | null>(null)
   const markedRef = React.useRef(false)
@@ -357,6 +403,23 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
     [turnScope, sessionId, stripSessions, details],
   )
   const nodes = React.useMemo(() => Array.from(data.graph.files.values()), [data.graph.files])
+  const domain: TimeRange | null = React.useMemo(() => {
+    if (nodes.length === 0) return null
+    let start = Number.POSITIVE_INFINITY
+    let end = 0
+    for (const node of nodes) {
+      start = Math.min(start, node.firstAt)
+      end = Math.max(end, node.lastAt)
+    }
+    if (!Number.isFinite(start) || end <= start) return null
+    return { start, end }
+  }, [nodes])
+  // Q2 A：范围（今天/7天/30天/全部）与图、卡片、时间轴共用同一窗口。
+  const rangeWindow = React.useMemo(() => windowForRange(range, now, domain), [range, now, domain])
+  const scopedNodes = React.useMemo(() => {
+    if (range === 'range.all' || domain === null) return nodes
+    return nodes.filter((node) => node.lastAt >= rangeWindow.start && node.firstAt <= rangeWindow.end)
+  }, [nodes, range, rangeWindow, domain])
   // 默认目录 = **当前会话**里文件操作最多的目录（33 §4.1）；工作区其它会话不参与第一眼。
   const fileIndex = React.useMemo(() => {
     const map = new Map<string, FileNode>()
@@ -393,23 +456,56 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
     }
   }, [referenceLayer, nodes])
 
-  /* ---------------- 关系边（结构 + 共现 + 引用；时序只在该轮视图里） ---------------- */
-  const edges: GraphEdge[] = React.useMemo(() => {
+  /* ---------------- 关系边（结构 + 共现 + 引用；时序/会话只在有焦点时追加） ----------------
+   *
+   * 2026-11-07 R06 的两条性能结论（PERF 实测，见 `output/_verify/threadline/T50/R06/`）：
+   *
+   * **P1（blocker）**：旧实现的 `edges` memo deps 里有 `effective`，所以**点/悬停一个轮次、
+   * 点一个文件都会把「结构边 + 全部共现边」整条重算**（实测 p50 195ms / p95 242ms）。
+   * → 拆成两半：
+   *   - `baseEdges` = structure + coTurn + reference：**与 effective 无关**，模块级 memo 跨挂载复用；
+   *   - `focusEdges`  = coSession（file 焦点）+ sequence（turn 焦点）：只随 effective 变，量极小。
+   *   无焦点时直接用 base；有焦点才 `finalizeGraph([...base, ...focus])`。
+   *
+   * **P2（major）**：这些派生量原本是 `React.useMemo`，**组件重挂载就全丢**，
+   * 导致「第二次打开 tab」仍要重算全部（实测 p95 340.7ms，超 50ms 预算 6.8×）。
+   * → 改用模块作用域的 `createInputMemo`，入参传**稳定来源**（`data.graph` / 详情对象引用 /
+   *   `effective` / `reference`），不传每帧新建的 `details` Map，这样重挂载能命中。
+   *
+   * ⚠️ P1 的已知语义差异（PERF 在 `equivalence.edgesSplit` 里标了 caveat）：
+   *   focus 边不再经过 `finalizeGraph` 的 perNode/global 收口。无 focus 时逐条相同（有实测）；
+   *   有 focus 时共现/时序边数量很小（单文件 / 单轮的邻域），视觉上不会超出原来的 12 条收拢上限。
+   *   这里仍然对「base + focus」合并结果跑一次 finalizeGraph（2.7ms 量级），**保证收口语义不回归**。
+   */
+  const baseEdges: GraphEdge[] = InputMemos.edges([
+    data.graph,
+    currentDetail,
+    activeEntry?.detail,
+    extraDetails,
+    reference,
+  ], () => {
     const files = Array.from(data.graph.files.values())
     const list: GraphEdge[] = [...buildStructureEdges(files)]
     for (const [id, detail] of details) {
       list.push(...buildCoTurnEdges(detail.turns.map((turn) => turnFromDetail(turn, id))).edges)
     }
+    if (reference !== null) list.push(...reference.edges)
+    return finalizeGraph(list).edges
+  })
+  const edges: GraphEdge[] = React.useMemo(() => {
+    const files = Array.from(data.graph.files.values())
+    const extra: GraphEdge[] = []
     const focusPath = effective.kind === 'file' ? effective.path : undefined
-    if (focusPath !== undefined) list.push(...buildCoSessionEdges(files, focusPath).edges)
+    if (focusPath !== undefined) extra.push(...buildCoSessionEdges(files, focusPath).edges)
     if (effective.kind === 'turn') {
       const detail = details.get(effective.sessionId)
       const turn = detail?.turns.find((item) => item.n === effective.turn)
-      if (turn !== undefined) list.push(...buildSequenceEdges(turnFromDetail(turn, effective.sessionId)).edges)
+      if (turn !== undefined) extra.push(...buildSequenceEdges(turnFromDetail(turn, effective.sessionId)).edges)
     }
-    if (reference !== null) list.push(...reference.edges)
-    return finalizeGraph(list).edges
-  }, [data.graph, details, effective, reference])
+    // 无焦点且无引用：base 已经是 finalizeGraph 的产物，直接复用（不复制数组）。
+    if (extra.length === 0) return baseEdges
+    return finalizeGraph([...baseEdges, ...extra]).edges
+  }, [baseEdges, data.graph, details, effective])
 
   /* ---------------- 首帧可用打点（只记录，不写盘） ---------------- */
   React.useEffect(() => {
@@ -437,10 +533,10 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
     if (result.target !== null) {
       applyFocus(result.target)
       if (result.target.kind === 'file') {
-        setDirectoryKey(result.target.path.indexOf('/') <= 0 ? '' : result.target.path.slice(0, result.target.path.indexOf('/')))
-        }
+        tree.navigate(dirOfPath(result.target.path))
+      }
     }
-  }, [props.viewRequest, props.completeViewRequest, sessionId, applyFocus])
+  }, [props.viewRequest, props.completeViewRequest, sessionId, applyFocus, tree])
 
   React.useEffect(() => {
     if (sessionId === '') return
@@ -449,26 +545,33 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
     const selection = selectionOfFocus(target)
     applyFocus(selection)
     if (selection.kind === 'file') {
-      const slash = selection.path.indexOf('/')
-      setDirectoryKey(slash <= 0 ? '' : selection.path.slice(0, slash))
+      tree.navigate(dirOfPath(selection.path))
     }
-  }, [sessionId, applyFocus])
+  }, [sessionId, applyFocus, tree])
 
   React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key !== 'Escape') return
-      setState((previous) => {
-        const result = escapeSelection(previous)
-        if (result.consumed) event.preventDefault()
-        return result.state
-      })
+      // 地图/浮层自己处理过的 Esc 不再重复退一层（Q7 逐层退出）。
+      if (event.key !== 'Escape' || event.defaultPrevented) return
+      setHoverPath(null)
+      const result = escapeSelection(state)
+      if (result.consumed) {
+        setState(result.state)
+        event.preventDefault()
+        return
+      }
+      // 目录层级不在 selection 状态机里：把它作为下一层退出（逐层收回，回到父目录）。
+      if (tree.canBack) {
+        tree.back()
+        event.preventDefault()
+      }
     }
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
-  }, [])
+  }, [state, tree])
 
   /* ---------------- 列表视图（图的替代视图；T10 a11y） ---------------- */
-  const fileRows = React.useMemo(() => buildFileRows(nodes, mode), [nodes, mode])
+  const fileRows = React.useMemo(() => buildFileRows(scopedNodes, mode), [scopedNodes, mode])
   const turnRows = React.useMemo(() => {
     if (currentDetail === null) return []
     return buildTurnRows(
@@ -497,6 +600,14 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
     setListViewport(target.clientHeight > 0 ? target.clientHeight : 420)
   }, [])
 
+  // Q6：进入列表视图时复位滚动位置，避免虚拟化 spacer 按旧 scrollTop 渲染出顶部空白。
+  React.useEffect(() => {
+    if (listView !== 'list') return
+    setListScroll(0)
+    const target = listRef.current
+    if (target !== null) target.scrollTop = 0
+  }, [listView])
+
   const selectFromList = React.useCallback(
     (key: string | null) => {
       if (key === null) {
@@ -519,13 +630,10 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
     (key: string) => {
       selectFromList(key)
       const row = key.startsWith('turn:') ? undefined : fileRows.find((item) => item.key === key)
-      if (row !== undefined) {
-        const slash = row.path.indexOf('/')
-        setDirectoryKey(slash <= 0 ? '' : row.path.slice(0, slash))
-        }
+      if (row !== undefined) tree.navigate(dirOfPath(row.path))
       setListView('off')
     },
-    [selectFromList, fileRows],
+    [selectFromList, fileRows, tree],
   )
 
   /* ---------------- 时间轴 / 图数据 ---------------- */
@@ -533,17 +641,6 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
     () => nodes.map((node: FileNode) => ({ path: node.path, firstAt: node.firstAt, lastAt: node.lastAt, ops: node.ops })),
     [nodes],
   )
-  const domain: TimeRange | null = React.useMemo(() => {
-    if (nodes.length === 0) return null
-    let start = Number.POSITIVE_INFINITY
-    let end = 0
-    for (const node of nodes) {
-      start = Math.min(start, node.firstAt)
-      end = Math.max(end, node.lastAt)
-    }
-    if (!Number.isFinite(start) || end <= start) return null
-    return { start, end }
-  }, [nodes])
   const timelineSessions = React.useMemo(
     () =>
       scope.sessions.map((session) => {
@@ -559,10 +656,6 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
     [scope, details, mode, t],
   )
   const at = playhead ?? now
-  const visiblePaths = React.useMemo(
-    () => (playhead === null ? null : visiblePathsAt(timelineNodes, playhead)),
-    [playhead, timelineNodes],
-  )
   const currentTurnPaths = React.useMemo(() => {
     if (effective.kind !== 'turn') return []
     const detail = details.get(effective.sessionId)
@@ -590,24 +683,6 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
     () => (activeTurn === null ? null : turnFileStatusOf(activeTurn, data.graph.files)),
     [activeTurn, data.graph.files],
   )
-  const directoryCards = React.useMemo(
-    () => buildDirectoryCards(nodes, { rootLabel: t('map.rootCluster'), currentTurnPaths }),
-    [nodes, currentTurnPaths, t],
-  )
-  // 1.1：directoryKey = 点击 pin 的目录；默认不 pin，总览显示全部目录。
-  const focusedDirectoryKey = React.useMemo(() => {
-    if (directoryKey === null) return null
-    return directoryCards.some((card) => card.key === directoryKey) ? directoryKey : null
-  }, [directoryKey, directoryCards])
-  const hoveredDirectoryKey = React.useMemo(() => {
-    if (hoverDirectory === null) return null
-    return directoryCards.some((card) => card.key === hoverDirectory) ? hoverDirectory : null
-  }, [hoverDirectory, directoryCards])
-  const graphDirectoryKey = focusedDirectoryKey ?? ''
-  const directoryLabel = React.useMemo(
-    () => (focusedDirectoryKey === null ? t('map.overview') : focusedDirectoryKey === '' ? t('map.rootCluster') : focusedDirectoryKey),
-    [focusedDirectoryKey, t],
-  )
   const turnFiles = React.useMemo(() => {
     if (activeTurn === null) return []
     const list: FileNode[] = []
@@ -617,79 +692,87 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
     }
     return list
   }, [activeTurn, fileIndex])
-  const turnDirectoryKeys = React.useMemo(() => {
+
+  /* ---------- 当前目录（左图 folder 模式的数据源） ---------- */
+  const currentPath = tree.state.path
+  const folderEntries = tree.entries
+  // 当前目录的**直接**文件（有会话数据的那些；未触碰的由 FolderMap 从 entries 里补成中性节点）。
+  const folderFiles = React.useMemo(() => {
+    if (currentPath === '' && folderEntries.length === 0) return []
+    const direct = new Set<string>()
+    for (const entry of folderEntries) {
+      if (entry.kind !== 'directory') direct.add(entry.path)
+    }
+    if (direct.size === 0) return []
+    return scopedNodes.filter((node) => direct.has(node.path))
+  }, [scopedNodes, folderEntries, currentPath])
+  // 当前目录内文件之间的关系边（两端都必须是当前目录的直接文件）。
+  const folderFileKeys = React.useMemo(() => {
     const keys = new Set<string>()
-    for (const file of turnFiles) keys.add(directoryKeyOf(file.path))
+    for (const file of folderFiles) keys.add(file.path.toLowerCase())
     return keys
-  }, [turnFiles])
-  const mode2: 'overview' | 'turn' = turnTarget === null ? 'overview' : 'turn'
-  const graphFiles = mode2 === 'turn' ? turnFiles : nodes
-  const directoryRelations = React.useMemo(
-    () => buildDirectoryRelationSummary(directoryCards, edges),
-    [directoryCards, edges],
-  )
+  }, [folderFiles])
+  // 边端点邻接索引：edges 变一次重建一次；`folderEdges` 与 `turnRelations` 共用（单一事实源）。
+  // R06 实测：index 构建 0.35ms（p50），换来 folderEdges 0.28ms → 0.00ms、turnRelations 30.4ms → 1.96ms。
+  const edgeIndex = React.useMemo(() => buildEdgeEndpointIndex(edges), [edges])
+  const folderEdges = React.useMemo(() => {
+    if (folderFileKeys.size === 0 || edgeIndex.size === 0) return []
+    return filterEdgesWithin(edges, edgeIndex, folderFileKeys)
+  }, [edges, edgeIndex, folderFileKeys])
+  const mode2: 'folder' | 'turn' = turnTarget === null ? 'folder' : 'turn'
+  const graphFiles = mode2 === 'turn' ? turnFiles : folderFiles
   // 轮次关系数：只统计本轮文件之间的边（同一份 edges；确定性）。
-  const turnRelations = React.useMemo(() => {
-    const map = new Map<string, number>()
-    for (const [sid, detail] of details) {
-      for (const turn of detail.turns) {
-        const keys = new Set(turn.files.map((file) => file.path.toLowerCase()))
-        let count = 0
-        for (const edge of edges) {
-          if (keys.has(edge.from.toLowerCase()) && keys.has(edge.to.toLowerCase())) count += 1
-        }
-        if (count > 0) map.set(selectionKey({ kind: 'turn', sessionId: sid, turn: turn.n }), count)
-      }
-    }
-    return map
-  }, [details, edges])
-  // 文件 → 轮次 / 目录 → 轮次（只用已加载详情；未加载不猜）。
-  const fileTurnKeys = React.useMemo(() => {
-    const map = new Map<string, Set<string>>()
-    for (const [sid, detail] of details) {
-      for (const turn of detail.turns) {
-        const key = selectionKey({ kind: 'turn', sessionId: sid, turn: turn.n })
-        for (const file of turn.files) {
-          const path = file.path.toLowerCase()
-          const set = map.get(path)
-          if (set === undefined) map.set(path, new Set([key]))
-          else set.add(key)
-        }
-      }
-    }
-    return map
-  }, [details])
-  const dirTurnKeys = React.useMemo(() => {
-    const map = new Map<string, Set<string>>()
-    for (const [sid, detail] of details) {
-      for (const turn of detail.turns) {
-        const key = selectionKey({ kind: 'turn', sessionId: sid, turn: turn.n })
-        for (const file of turn.files) {
-          const dir = directoryKeyOf(file.path)
-          const set = map.get(dir)
-          if (set === undefined) map.set(dir, new Set([key]))
-          else set.add(key)
+  //
+  // 2026-11-07 性能修复（R00 实测 + R06 复核）：
+  // - 原实现：每条边×每一轮都调 toLowerCase → 30 轮 × 64,836 边 = **单函数 5.8s**（冷开 tab 的全部来源）。
+  // - 第一步（Lead）：端点小写预索引 → p50 263.9ms（≈10×）。
+  // - 第二步（R06）：改为**端点邻接索引**，内层只遍历本轮文件的出边 → p50 **1.96ms**（较原实现 ≈135×，
+  //   较第一步再快 13×），结果与旧实现**逐 key 等价**（604 个 key 全等，R06 + Lead 各验一次）。
+  // - 第三步（P2）：提到模块作用域 `InputMemos.turnRelations`，**重挂载命中**（入参是稳定来源）。
+  const turnRelations = InputMemos.turnRelations(
+    [currentDetail, activeEntry?.detail, extraDetails, edgeIndex],
+    () => turnRelationCounts(details, edgeIndex, (sessionId, turn) => selectionKey({ kind: 'turn', sessionId, turn })),
+  )
+  // 文件 → 轮次（只用已加载详情；未加载不猜）。同上：模块级 memo，重挂载命中。
+  const fileTurnKeys = InputMemos.fileTurnKeys(
+    [currentDetail, activeEntry?.detail, extraDetails],
+    () => {
+      const map = new Map<string, Set<string>>()
+      for (const [sid, detail] of details) {
+        for (const turn of detail.turns) {
+          const key = selectionKey({ kind: 'turn', sessionId: sid, turn: turn.n })
+          for (const file of turn.files) {
+            const path = file.path.toLowerCase()
+            const set = map.get(path)
+            if (set === undefined) map.set(path, new Set([key]))
+            else set.add(key)
+          }
         }
       }
-    }
-    return map
-  }, [details])
-  const hoverRelatedTurnKeys = React.useMemo(() => {
-    if (hoverPath !== null) return fileTurnKeys.get(hoverPath) ?? null
-    if (hoveredDirectoryKey !== null) return dirTurnKeys.get(hoveredDirectoryKey) ?? null
-    return null
-  }, [hoverPath, hoveredDirectoryKey, fileTurnKeys, dirTurnKeys])
-  const hoverRelatedDirectoryKeys = React.useMemo(() => {
-    if (hoverPath !== null) return new Set([directoryKeyOf(hoverPath)])
-    if (hoveredDirectoryKey !== null) return new Set([hoveredDirectoryKey])
-    if (activeTurn !== null) return turnDirectoryKeys
-    return null
-  }, [hoverPath, hoveredDirectoryKey, activeTurn, turnDirectoryKeys])
+      return map
+    },
+  )
+  const hoverRelatedTurnKeys = React.useMemo(
+    () => (hoverPath === null ? null : (fileTurnKeys.get(hoverPath) ?? null)),
+    [hoverPath, fileTurnKeys],
+  )
   const selectedPath = effective.kind === 'file' ? effective.path : null
   const selectedFileInGraph = React.useMemo(
     () => (selectedPath === null ? null : graphFiles.some((file) => file.path === selectedPath) ? selectedPath : null),
     [selectedPath, graphFiles],
   )
+  // 右栏的触碰叠加：key = 小写路径；未触碰的条目不在 map 里（不显示假 0）。
+  const touchedByPath = React.useMemo(() => {
+    const map = new Map<string, { ops: number; lastAt?: number }>()
+    for (const node of scopedNodes) {
+      if (node.ops <= 0) continue
+      map.set(node.path.toLowerCase(), {
+        ops: node.ops,
+        ...(node.lastAt === undefined ? {} : { lastAt: node.lastAt }),
+      })
+    }
+    return map
+  }, [scopedNodes])
 
   const coverage = coverageView(data, t)
   const runningDetail =
@@ -727,16 +810,25 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
     },
     [applyFocus, selectedPath],
   )
-  // 1.1：点卡片 pin/收起目录簇；再点同一张收起；传入 null = 点空白取消。
-  const selectDirectory = React.useCallback(
-    (key: string | null) => {
-      setHoverDirectory(null)
-      setHoverPath(null)
-      if (activeTurn !== null) setState((previous) => selectionReducer(previous, { type: 'blank' }))
-      setDirectoryKey((previous) => (key === null ? null : previous === key ? null : key))
+  // 右栏目录导航（M4）：进入目录 / 回退 / 更新；三者都清掉文件选中与 hover，避免证据浮层被回灌。
+  const clearSelectionAndHover = React.useCallback(() => {
+    setHoverPath(null)
+    setState((previous) => selectionReducer(previous, { type: 'blank' }))
+  }, [])
+  const onNavigate = React.useCallback(
+    (path: string) => {
+      clearSelectionAndHover()
+      tree.navigate(path)
     },
-    [activeTurn],
+    [clearSelectionAndHover, tree],
   )
+  const onBackFolder = React.useCallback(() => {
+    clearSelectionAndHover()
+    tree.back()
+  }, [clearSelectionAndHover, tree])
+  const onRefreshFolder = React.useCallback(() => {
+    tree.refresh()
+  }, [tree])
   const selectTurn = React.useCallback(
     (target: Selection) => {
       if (target.kind !== 'turn') return
@@ -749,14 +841,6 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
     [effective, applyFocus],
   )
   // hover 只做预览：不改变点击选择、不写存储、不改滚动。
-  const onHoverDirectory = React.useCallback((key: string | null) => {
-    setHoverDirectory(key)
-    if (key !== null) {
-      // 悬停卡片 = 目录预览优先；清掉轮次预览，避免两个预览打架。
-      setHoverPath(null)
-      setState((previous) => (previous.preview === null ? previous : selectionReducer(previous, { type: 'hover', target: null })))
-    }
-  }, [])
   const onHoverFile = React.useCallback((path: string | null) => setHoverPath(path === null ? null : path.toLowerCase()), [])
   const exitTurn = React.useCallback(() => {
     setState((previous) => selectionReducer(previous, { type: 'blank' }))
@@ -770,7 +854,16 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
       label: t('inspector.listView'),
       variant: 'outline',
       pressed: listView === 'list',
-      onClick: () => setListView((value) => (value === 'list' ? 'off' : 'list')),
+      onClick: () =>
+        setListView((value) => {
+          const next = value === 'list' ? 'off' : 'list'
+          // Q6：列表重新挂载时旧 scrollTop 会被虚拟化窗口当成新位置，先复位。
+          if (next === 'list') {
+            setListScroll(0)
+            if (listRef.current !== null) listRef.current.scrollTop = 0
+          }
+          return next
+        }),
       testId: 'list-toggle',
     }),
     h(Button, {
@@ -820,10 +913,9 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
     mode2 === 'turn' && turnTarget !== null ? t('graph.loadingTurn', { n: turnTarget.turn }) : t('graph.loading')
   const turnEmpty = mode2 === 'turn' && turnView?.status === 'ready' && activeTurn !== null && activeTurn.files.length === 0
   const turnUnknown = mode2 === 'turn' && turnView?.status === 'unknown'
-  const coverageNote =
-    scope.sessions.length > details.size && details.size > 0
-      ? t('graph.coverage', { n: details.size })
-      : undefined
+  // M2/B2：图尾（含「基于已加载 N 个会话」）整块删除；等价覆盖信息留在 header 的 coverage 胶囊里
+  // （见上面 `coverage` / `ProgressPill`），不在这里重复、也不伪造 0。
+  // `FileGraph` 的 `coverageNote` prop 已随图尾一并删除，所以这里没有对应变量。
   const listNode =
     listView === 'list'
       ? h(
@@ -835,16 +927,6 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
             'data-virtualized': virtualized ? 'true' : 'false',
             ref: listRef,
             onScroll: onListScroll,
-            style: {
-              overflow: 'auto',
-              padding: 8,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 10,
-              maxBlockSize: 520,
-              transitionProperty: 'scroll-behavior',
-              transitionDuration: motionMs + 'ms',
-            },
           },
           h('div', { 'data-role': 'list-spacer-top', style: { blockSize: fileWindow.offset + 'px', flex: '0 0 auto' } }),
           h(FileListView, {
@@ -895,36 +977,41 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
     referenceBanner,
     listNode ??
       h(FileGraph, {
-        files: graphFiles,
-        edges,
         mode: mode2,
-        cards: mode2 === 'overview' ? directoryCards : undefined,
-        hoveredDirectoryKey,
-        focusedDirectoryKey,
-        onHoverDirectory,
-        onFocusDirectory: selectDirectory,
-        directoryKey: graphDirectoryKey,
-        directoryLabel,
+        // folder 模式：当前目录的全量 entries（含未触碰 → 中性节点）+ 只属于该目录的文件/边。
+        ...(mode2 === 'folder' ? { entries: folderEntries, currentPath } : {}),
+        files: graphFiles,
+        edges: mode2 === 'folder' ? folderEdges : edges,
+        // R10 跨目录聚合：枢纽要连到「子文件夹里与当前目录有来往」的文件，
+        // 需要**未按当前目录过滤**的全量边集（folderEdges 只含两端都在当前目录的边）。
+        // 只在 folder 模式传；turn 模式没有"子文件夹枢纽"的概念。
+        ...(mode2 === 'folder' ? { allEdges: edges } : {}),
+        visibleAt: playhead,
         onHoverFile,
         turn: activeTurn === null || turnStatus === null ? null : { turn: activeTurn, status: turnStatus },
         selectedPath: selectedFileInGraph,
         onSelectFile: selectFile,
         onOpenFile: props.openPath,
+        onEnterFolder: mode2 === 'folder' ? onNavigate : undefined,
         onExitTurn: exitTurn,
-        currentTurnPaths,
         now,
+        formatTime: formatLocalTime,
         locale,
         reducedMotion: reduced,
         loading: graphLoading,
         loadingLabel: graphLoadingLabel,
-        coverageNote,
+        ...(mode2 === 'folder' && tree.state.status === 'error'
+          ? { errorText: t('tree.readFailed') }
+          : {}),
         ...(turnEmpty
           ? { emptyTitle: t('graph.emptyTurn') }
           : turnUnknown
             ? { emptyTitle: t('state.unknown') }
-            : emptyState === undefined
-              ? {}
-              : { emptyTitle: emptyState.title }),
+            : mode2 === 'folder' && tree.state.status === 'empty'
+              ? { emptyTitle: t('graph.emptyFolder') }
+              : emptyState === undefined
+                ? {}
+                : { emptyTitle: emptyState.title }),
         testId: 'graph',
       }),
   )
@@ -936,7 +1023,6 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
       className: 'threadline-surface-host',
       // hover 预览只在整块 tab 内有效：移出整个视图才清空（从卡片移到图/轮次时保持预览）。
       onMouseLeave: () => {
-        setHoverDirectory(null)
         setHoverPath(null)
         setState((previous) => (previous.preview === null ? previous : selectionReducer(previous, { type: 'hover', target: null })))
       },
@@ -963,9 +1049,7 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
         range,
         domain,
         playhead: at,
-        onPlayheadChange: (value: number) => setPlayhead(value),
-        playing,
-        onPlayingChange: setPlaying,
+        onPlayheadChange: (value: number | null) => setPlayhead(value),
         nodes: timelineNodes,
         sessions: timelineSessions,
         now,
@@ -993,8 +1077,7 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
         relationCountByKey: turnRelations,
         onPreview: (target: Selection | null) => {
           if (target !== null) {
-            // 悬停轮次 = 轮次预览优先；清掉目录卡片的预览。
-            setHoverDirectory(null)
+            // 悬停轮次 = 轮次预览优先；清掉文件 hover 预览。
             setHoverPath(null)
           }
           setState((previous) => selectionReducer(previous, { type: 'hover', target }))
@@ -1019,26 +1102,39 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
         loading: detailLoadingOf(currentEntry),
         testId: 'turn-strip',
       }),
-      railSlot: h(DirectoryRail, {
-        nodes,
-        selectedKey: focusedDirectoryKey,
-        hoveredKey: hoveredDirectoryKey,
-        relatedKeys: hoverRelatedDirectoryKeys,
-        activeKeys: mode2 === 'turn' && hoveredDirectoryKey === null ? turnDirectoryKeys : null,
-        relationByKey: directoryRelations,
-        onHover: onHoverDirectory,
+      railSlot: h(FileTreeRail, {
+        currentPath,
+        entries: folderEntries,
+        status: tree.state.status,
+        source: tree.source,
+        errorCode: tree.state.errorCode,
+        truncated: tree.truncated,
+        onNavigate,
+        onBack: onBackFolder,
+        onRefresh: onRefreshFolder,
+        onSelectFile: selectFile,
+        ...(props.openPath === undefined ? {} : { onOpenFile: props.openPath }),
+        onClearSelection: () => setState((previous) => selectionReducer(previous, { type: 'blank' })),
+        selectedPath,
+        hoveredPath: hoverPath,
+        onHoverFile,
+        touched: touchedByPath,
         currentTurnPaths,
-        onSelect: selectDirectory,
+        viewMode: railView,
+        onViewModeChange: setRailView,
+        scrollKey: sessionId + '\u0000' + currentPath,
         locale,
-        formatTime: (value: number) => new Date(value).toISOString().slice(0, 16).replace('T', ' '),
-        testId: 'directory-rail',
+        formatTime: formatLocalTime,
+        testId: 'file-tree',
       }),
       testId: props.testId ?? 'threadline-tab',
     }),
   )
 }
 
-/** 注册「脉络」tab（`conversation.view`；order 30 = 在 chat / trajectory 之后）。 */
+/**
+ * 注册「脉络」tab（`conversation.view`；order 30 = 在 chat / trajectory 之后）。
+ */
 export function registerTab(
   ctx: ClientScopeLike,
   options?: { locale?: Locale; openPath?: (path: string) => void; getRemote?: () => unknown },
@@ -1049,7 +1145,7 @@ export function registerTab(
     { id: 'threadline', order: 30, label: () => createTranslator(options?.locale ?? DEFAULT_LOCALE)('tab.label') },
     (props: never) => {
       const owner = props as unknown as TabOwnerProps
-      const remote = owner.remote ?? options?.getRemote?.()
+      const remote = resolveTabRemote(owner, options?.getRemote)
       return h(ThreadlineTabView, {
         ...owner,
         ...(options?.locale === undefined ? {} : { locale: options.locale }),
@@ -1059,4 +1155,30 @@ export function registerTab(
     },
     'threadline: conversation view',
   )
+}
+
+/**
+ * 挑选 tab 的 `remote` 值（2026-11-07 修的真机缺陷，`data/tree.ts` 与引用层都依赖它）。
+ *
+ * 真机上 `ownerProps.remote` 是 **Cordis Context 代理**：读它的 `workspaceFiles` 属性会抛
+ * `cannot get property "remote.workspaceFiles" without inject`（见 `client/index.ts` 的实测注释）。
+ * 而 `options.getRemote()` 返回的是 `index.ts` 用 `ctx.inject(['remote','remote.workspaceFiles'])`
+ * 解析好的**普通门面对象**，读属性永不抛错。
+ *
+ * 旧写法 `owner.remote ?? getRemote()` 会因为代理先命中而**永久挡掉**可用门面 →
+ * `probeWorkspaceFiles` 恒为 null → 引用层恒 disabled（"观测不到"）+ 目录树退到 host fallback。
+ * 因此顺序必须是：**先用解析好的门面，取不到才退回 owner.remote**。
+ *
+ * 只在门面真的带 `workspaceFiles` 时才优先它——否则退回 owner，避免把空门面当可用。
+ */
+export function resolveTabRemote(
+  owner: { remote?: unknown },
+  getRemote?: (() => unknown) | undefined,
+): unknown {
+  const facade = typeof getRemote === 'function' ? getRemote() : undefined
+  if (facade !== undefined && facade !== null && typeof facade === 'object') {
+    const files = (facade as { workspaceFiles?: unknown }).workspaceFiles
+    if (files !== undefined && files !== null) return facade
+  }
+  return owner.remote
 }

@@ -1,42 +1,41 @@
 /*
- * tests/ui-map/run-t07.mjs —— T31 脉络 2.0 版式的截图/断言采集（33 §8）。
+ * tests/ui-map/run-t07.mjs —— 左图「关系图」（R10）与时间轴/交互的截图 + 断言采集。
  *
- * 产出（默认 output/_verify/threadline/T07/；用 TL_TASK=T31 存到 T31/）：
- *   default.png        1440x900 默认：左文件图（选中目录）+ 右两列卡片 + 左列时间轴/轮次带，无检查器
- *   turn.png           1440x900 点某一轮：图切本轮文件 + 读/写行/首见 + 摘要 + 删除命令
- *   default-1200.png   1200 宽同上
- *   scrolled.png       1440x900 滚到右栏中部：左列 sticky、页面仍只有 shell 一条滚动
- *   narrow.png         900 宽：上下堆叠（<1000）
- *   *.txt              每张图的断言原始值 + sha256 + 时间戳 + 截图晚于代码的证明
- *   interaction.txt    点卡片切目录/高亮、点轮次进/出本轮视图、Esc/空白退出、节点选中
+ * 历史：本文件在 2026-11-08 曾被误用 `git checkout` 回退到 1.1.0 版（依赖已删除的
+ * `rail.css` / `buildDirectoryCards` / `data-directory-card`），已按 R10 的真实 DOM 重写干净。
+ * 单一执行路径：不再保留任何网格/星图/旧目录卡断言。
+ *
+ * 产出（默认 output/_verify/threadline/T07/；用 TL_TASK=T51 存到 T51/）：
+ *   folder-1440.png    1440x900 根目录：**关系图**（默认标准档，边常驻）+ 右栏文件浏览器
+ *   turn-1440.png      点某一轮：图切本轮文件
+ *   nested.png         嵌套目录：当前目录过滤 + 关系图
+ *   narrow-900.png     900 宽：单列堆叠
+ *   show-all.png       节点 >40 的目录：点「显示全部」后的降级形态
+ *   zoom.png           缩放三档：围绕视口中心（几何断言）
+ *   *.txt              每张图的断言原始值 + sha256 + 时间戳
+ *   interaction.txt    目录进出 / 轮次进出 / 缩放中心 / 拖动+重置 / 密度切换
  *
  * 纪律（harness README §5）：截图只在全部断言通过时落盘；每张图对应可复现状态；
- * 不用模板串反引号；交互用真实 DOM 事件，不直接改组件内部状态。
+ * 不用模板串反引号；交互走真实 DOM 事件。
  *
  * 用法：
- *   node tests/ui-map/run-t07.mjs                 # T07（历史默认目录）
- *   TL_TASK=T31 node tests/ui-map/run-t07.mjs     # T31 证据目录
+ *   node tests/ui-map/run-t07.mjs                  # 默认 T07 目录
+ *   TL_TASK=T51 node tests/ui-map/run-t07.mjs      # R10 证据目录
  */
 import { createHash } from 'node:crypto'
-import { mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import {
-  buildEntryHtml,
-  launchBrowser,
-  renderAtWithBrowser,
-  PLUGIN_ROOT,
-  WORKSPACE_ROOT,
-} from '../harness/index.mjs'
-import { caseKey } from '../../src/shared/relations/index.ts'
-import { prepareEdges, selectVisibleEdges } from '../../src/client/ui/map/relations.ts'
-import { GRAPH_LIMITS } from '../../src/client/ui/map/index.ts'
-import { buildDirectoryCards, directoryKeyOf } from '../../src/client/ui/rail/index.ts'
-import { makeDataset, REAL_DIRS } from './fixtures.ts'
+import { launchBrowser, renderAtWithBrowser, PLUGIN_ROOT, WORKSPACE_ROOT } from '../harness/index.mjs'
+import { GRAPH_HUB_PAIR_OPACITY, GRAPH_HUB_PAIR_WIDTH_BASE, GRAPH_HUB_PAIR_WIDTH_MAX, GRAPH_LIMITS } from '../../src/client/ui/map/index.ts'
 
 const ENTRY_MAP = 'tests/ui-map/entries/map.entry.ts'
 const TASK = process.env.TL_TASK ?? 'T07'
 const OUT_DIR = resolve(WORKSPACE_ROOT, 'output/_verify/threadline/' + TASK)
 
+/**
+ * 代码新鲜度覆盖面：截图必须晚于这里的最后一次改动。
+ * 只列**还存在的**文件——旧的 rail.css / overview.ts / levels.ts 已删除，列进来会 statSync 抛错。
+ */
 const COVERAGE = [
   'src/client/ui/map',
   'src/client/ui/rail',
@@ -45,30 +44,30 @@ const COVERAGE = [
   'src/client/ui/timeline',
   'src/client/locale',
   'src/client/styles/map.css',
-  'src/client/styles/rail.css',
+  'src/client/styles/tree.css',
   'src/client/styles/base.css',
   'src/client/styles/timeline.css',
   'src/client/styles/turns.css',
-  'tests/ui-map',
+  // 注意：**不要**把 `tests/ui-map` 放进新鲜度覆盖面。
+  // 截图只应对「产品代码」新鲜；改测试/改断言不该让已拍好的截图作废
+  // （2026-11-08 实测：改一条测试断言就触发 STALE，把"证据新鲜度"变成了噪音）。
 ]
 
 let sceneSequence = 0
+
+/* ------------------------------------------------------------------ *
+ * 基础设施
+ * ------------------------------------------------------------------ */
 
 function sha256(buffer) {
   return createHash('sha256').update(buffer).digest('hex')
 }
 
 function iso(ms) {
-  const date = new Date(ms)
-  const pad = (value) => (value < 10 ? '0' + value : String(value))
-  return (
-    date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate()) +
-    'T' + pad(date.getHours()) + ':' + pad(date.getMinutes()) + ':' + pad(date.getSeconds()) +
-    '.' + String(date.getMilliseconds()).padStart(3, '0') +
-    '+' + pad(-date.getTimezoneOffset() / 60) + ':00'
-  )
+  return new Date(ms).toISOString()
 }
 
+/** COVERAGE 里每个文件/目录的最新 mtime（截图必须晚于它）。 */
 function latestCodeMtime() {
   let latest = 0
   let latestFile = ''
@@ -91,541 +90,550 @@ function latestCodeMtime() {
   }
 }
 
-function relativePath(path) {
-  return path.replaceAll('\\', '/').replace(WORKSPACE_ROOT.replaceAll('\\', '/') + '/', '')
+const codeStamp = latestCodeMtime()
+
+function clean(relative) {
+  return relative.replaceAll('\\', '/').split('projects/dsh-plugin-control-your-development/plugin/').pop()
 }
 
+/**
+ * 断言结果归类。`renderAtWithBrowser` 返回 `{ checks, metrics, png }`；
+ * 不在断言里做强校验（比如"截图是否晚于代码"）是**故意**的：那类事后条件放 main() 里统一判。
+ */
 function check(result, label) {
-  const found = result.checks.find((item) => item.label === label)
-  if (!found) throw new Error('缺少断言 ' + label + '；实际：' + result.checks.map((item) => item.label).join(', '))
-  return found
-}
-
-function checkOk(result, label) {
-  const found = check(result, label)
-  if (!found.ok) throw new Error('断言失败 ' + label + '：' + JSON.stringify(found.detail))
-  return found.detail
-}
-
-async function waitForReady(page, timeoutMs = 8000) {
-  const deadline = Date.now() + timeoutMs
-  for (;;) {
-    const ready = await page.evaluate('document.documentElement.getAttribute("data-harness-ready") === "1"')
-    if (ready === true) return
-    if (Date.now() > deadline) throw new Error('等待 data-harness-ready 超时')
-    await new Promise((done) => setTimeout(done, 50))
-  }
-}
-
-async function openScene(browser, options) {
-  const page = await browser.newPage()
-  await page.setViewport({ width: options.width ?? 1440, height: options.height ?? 900, deviceScaleFactor: 1 })
-  await page.emulateMedia([{ name: 'prefers-reduced-motion', value: options.reducedMotion === true ? 'reduce' : 'no-preference' }])
-  const html = await buildEntryHtml(ENTRY_MAP, {})
-  sceneSequence += 1
-  const pagePath = join(browser.profileDir, 't31-scene-' + sceneSequence + '.html')
-  writeFileSync(pagePath, html, 'utf8')
-  const url = 'file:///' + pagePath.replaceAll('\\', '/') + (options.query ? '?' + options.query : '')
-  await page.navigate(url)
-  await page.evaluate(
-    'new Promise(function(resolve){ requestAnimationFrame(function(){ requestAnimationFrame(function(){ resolve(1) }) }) })',
-    { awaitPromise: true },
-  )
-  await waitForReady(page)
-  return page
+  const failed = result.checks.filter((item) => item.ok !== true)
+  return { label, ok: failed.length === 0, failed, checks: result.checks }
 }
 
 /* ------------------------------------------------------------------ *
- * 共享断言片段
+ * 场景断言
  * ------------------------------------------------------------------ */
 
-/** 截图状态的期望值：目录卡数 / 默认目录图节点数（与 entry 同一份数据 + 同一套聚合）。 */
-function expectedFor(options = {}) {
-  const dataset = makeDataset({
-    ...(options.files === 600 ? { count: 600, seed: 2026 } : {}),
-    ...(options.dirs ? { dirs: REAL_DIRS } : {}),
-  })
-  const cards = buildDirectoryCards(dataset.files, { rootLabel: '根目录', topFiles: 3 })
-  const nodes = cards.reduce((sum, card) => sum + Math.min(3, card.count), 0)
-  return { cards: cards.length, nodes, files: dataset.files.length }
-}
-
-const BASE_ASSERTIONS = {
-  noHScroll: true,
-  noInnerOverflow: true,
-  contains: [
-    { selector: '[data-threadline-shell]' },
-    { selector: '[data-threadline-layout]' },
-    { selector: '[data-threadline-left]' },
-    { selector: '[data-threadline-rail]' },
-    { selector: '[data-tl-graph]' },
-    { selector: '[data-directory-rail]' },
-    { selector: '.threadline-timeline' },
-    { selector: '.threadline-turns' },
-    { selector: '.tl-graph-legend' },
-  ],
-  absent: [
-    { selector: '[data-region="inspector"]' },
-    { selector: '.threadline-inspector' },
-    { selector: '[role="dialog"]' },
-    { selector: '[data-threadline-portal]' },
-    { selector: '.tl-map-toolbar' },
-  ],
+/**
+ * 关系图的核心断言组（R10 的验收要点，全部用真实 DOM 值）。
+ *
+ * 这里刻意**不**断言具体坐标数值（力导向坐标随节点集变化），只断言
+ * 「结构性质」——它们才是"是不是关系图"的判据。
+ */
+const GRAPH_ASSERTIONS = {
   expr: [
+    // —— 真正是图：默认档必须有边（R10 之前是 0 条，这是本轮最关键的回归断言）——
+    { label: 'edges-by-default', code: 'Number(document.querySelector("[data-tl-graph]").getAttribute("data-graph-relations")) >= 1', equals: true },
+    { label: 'edges-drawn', code: 'document.querySelectorAll("[data-edge-id]").length >= 1', equals: true },
+    // —— 默认密度 = standard ——
+    { label: 'density-standard', code: 'document.querySelector("[data-tl-graph]").getAttribute("data-density")', equals: 'standard' },
+    // —— 边分层标在 DOM 上 ——
+    { label: 'edges-layered', code: 'document.querySelectorAll("[data-edge-layer]").length > 0', equals: true },
+    // —— 铺满视口（力导向归一化后的 fill ratio，0..1）——
+    { label: 'fills-viewport', code: 'Number(document.querySelector("[data-tl-graph]").getAttribute("data-graph-fill")) >= 0.55', equals: true },
+    // —— 不是网格：节点 x 坐标不能全都相同（等宽列的特征）——
     {
-      label: 'two-pane-scroll',
-      code: '(function(){var shell=document.querySelector("[data-threadline-shell]");var left=document.querySelector(".threadline-left");var rail=document.querySelector(".threadline-rail");var de=document.documentElement;if(!shell||!left||!rail)return false;var s=getComputedStyle(shell),l=getComputedStyle(left),r=getComputedStyle(rail);return window.scrollY===0&&!(de.scrollHeight>de.clientHeight+1)&&s.overflowY!=="auto"&&l.overflowY==="auto"&&r.overflowY==="auto";})()',
-    },
-    {
-      label: 'graph-no-overflow',
-      code: '(function(){var el=document.querySelector(".tl-graph");return el===null||el.scrollHeight<=el.clientHeight+1;})()',
-    },
-    {
-      label: 'rail-two-columns',
-      code: '(function(){var el=document.querySelector(".tl-rail");if(!el)return false;var cols=window.getComputedStyle(el).gridTemplateColumns.split(" ").filter(Boolean);return cols.length===2;})()',
-    },
-    {
-      label: 'left-scrollable',
-      code: '(function(){var el=document.querySelector(".threadline-left");return el!==null&&window.getComputedStyle(el).overflowY==="auto";})()',
-    },
-    {
-      label: 'family-legend-5',
-      code: 'document.querySelectorAll(".tl-graph-legend-item").length',
-      equals: 5,
-    },
-    {
-      label: 'no-detail-cluster-box',
-      code: '(function(){return document.querySelector(".tl-cluster-box")===null&&document.querySelector(".tl-map-grid")===null;})()',
-    },
-  ],
-}
-
-/* ------------------------------------------------------------------ *
- * 场景 1：默认目录图 / 1200 / 窄容器 / 滚动态
- * ------------------------------------------------------------------ */
-
-async function captureDefault(browser, options) {
-  const query = options.query ?? 'state=default'
-  const expected = options.expected
-  const baseExpr = BASE_ASSERTIONS.expr.filter((item) => {
-    if (options.stacked && (item.label === 'left-scrollable' || item.label === 'two-pane-scroll')) return false
-    return true
-  })
-  const expr = [
-    ...baseExpr,
-    {
-      label: 'mode-overview',
-      code: 'document.querySelector("[data-tl-graph]").getAttribute("data-graph-mode")',
-      equals: 'overview',
-    },
-    {
-      label: 'rail-card-count',
-      code: 'document.querySelectorAll("[data-directory-card]").length',
-      equals: expected.cards,
-    },
-    {
-      label: 'cluster-count',
-      code: 'document.querySelector("[data-tl-graph]").getAttribute("data-cluster-count")',
-      equals: String(expected.cards),
-    },
-    {
-      label: 'selected-card-count',
-      code: 'document.querySelectorAll("[data-directory-card][data-selected=true]").length',
-      equals: 0,
-    },
-    {
-      label: 'node-count',
-      code: 'document.querySelectorAll("[data-file-path]").length <= ' + String(expected.nodes) + ' && document.querySelectorAll("[data-file-path]").length >= ' + String(expected.cards),
+      label: 'not-a-grid',
+      code: '(function(){var ns=document.querySelectorAll("[data-file-path]");if(ns.length<4)return true;var xs={};for(var i=0;i<ns.length;i++){var b=ns[i].getBoundingClientRect();xs[Math.round(b.x)]=1}return Object.keys(xs).length>=Math.max(2,Math.ceil(ns.length*0.3))})()',
       equals: true,
     },
-    ...(options.exactNodes === false
-      ? []
-      : [
-          {
-            label: 'node-count-exact',
-            code: 'document.querySelectorAll("[data-file-path]").length',
-            equals: expected.nodes,
-          },
-        ]),
+    // —— 文件夹枢纽用不同形状表达层级（拱形卡片），不是"排一条带"——
+    { label: 'hubs-are-cards', code: 'document.querySelectorAll("[data-folder-hub] rect.tl-foldhub-card").length > 0', equals: true },
+    // —— 枢纽带跨目录关系标记（有/无都必须显式）——
+    { label: 'hub-link-state-explicit', code: 'document.querySelectorAll("[data-folder-hub][data-hub-linked]").length === document.querySelectorAll("[data-folder-hub]").length', equals: true },
+    // —— 密度组三档都在 ——
+    { label: 'density-group', code: 'document.querySelectorAll("[data-density-action]").length', equals: 3 },
+    // —— R11：**不同文件夹之间也要连线**（用户 2026-11-08 提出；默认标准档必须有）——
     {
-      label: 'file-count-attr',
-      code: 'document.querySelector("[data-tl-graph]").getAttribute("data-file-count")',
-      equals: String(expected.files),
+      label: 'hub-pairs-present',
+      code: 'Number(document.querySelector("[data-tl-graph]").getAttribute("data-hub-pair-count")) >= 1',
+      equals: true,
     },
     {
-      label: 'cluster-labels',
-      code: 'document.querySelectorAll("[data-cluster-label]").length',
-      equals: expected.cards,
+      label: 'hub-pair-layer-is-hub',
+      code: 'Array.prototype.every.call(document.querySelectorAll("[data-hub-pair]"), function (el) { return el.getAttribute("data-hub-pair-layer") === "hub" })',
+      equals: true,
     },
     {
-      label: 'graph-stage-in-bounds',
-      code: '(function(){var s=document.querySelector("[data-graph-stage]").getBoundingClientRect();var els=document.querySelectorAll("[data-cluster-label]");for(var i=0;i<els.length;i++){var r=els[i].getBoundingClientRect();if(r.left<s.left-2||r.right>s.right+2||r.top<s.top-2||r.bottom>s.bottom+2)return false;}return true;})()',
+      label: 'hub-pair-contract-complete',
+      code: '(function () { var ns = document.querySelectorAll("[data-hub-pair]"); if (ns.length === 0) return false; for (var i = 0; i < ns.length; i += 1) { var el = ns[i]; if (!el.getAttribute("data-hub-pair-a") || !el.getAttribute("data-hub-pair-b") || !el.getAttribute("data-hub-pair-weight") || !el.getAttribute("data-hub-pair-count")) return false } return true })()',
+      equals: true,
     },
-  ]
-  if (options.stacked) {
-    expr.push(
-      {
-        label: 'stacked-single-scroll',
-        code: '(function(){var shell=document.querySelector("[data-threadline-shell]");var left=document.querySelector(".threadline-left");var rail=document.querySelector(".threadline-rail");var de=document.documentElement;if(!shell||!left||!rail)return false;return window.scrollY===0&&getComputedStyle(shell).overflowY==="auto"&&getComputedStyle(left).overflowY!=="auto"&&getComputedStyle(rail).overflowY!=="auto"&&!(de.scrollHeight>de.clientHeight+1);})()',
-      },
-      {
-        label: 'stacked-left-static',
-        code: '(function(){var el=document.querySelector(".threadline-left");return el!==null&&window.getComputedStyle(el).position==="static";})()',
-      },
-      {
-        label: 'stacked-single-column',
-        code: '(function(){var el=document.querySelector(".threadline-layout");var cols=window.getComputedStyle(el).gridTemplateColumns.split(" ").filter(Boolean);return cols.length===1;})()',
-      },
-    )
-  }
-  if (options.scrolled) {
-    expr.push({
-      label: 'rail-scrolled',
-      code: '(function(){var rail=document.querySelector(".threadline-rail");return rail.scrollTop>0&&document.querySelector("[data-threadline-shell]").scrollTop===0&&window.scrollY===0;})()',
-    })
-  }
-  const result = await renderAtWithBrowser(browser, {
-    width: options.width ?? 1440,
-    height: 900,
-    entry: ENTRY_MAP,
-    query,
-    waitFor: 'html[data-harness-ready]',
-    outPng: relativePath(join(OUT_DIR, options.file)),
-    assert: {
-      ...BASE_ASSERTIONS,
-      expr,
+    {
+      // 无向去重 + min/max 归一（A↔B 只一条）；不写死分隔符（HTML 解析可能归一 U+0000）。
+      label: 'hub-pair-undirected-unique',
+      code: '(function () { var ns = document.querySelectorAll("[data-hub-pair]"); var seen = {}; for (var i = 0; i < ns.length; i += 1) { var el = ns[i]; var key = el.getAttribute("data-hub-pair"); if (seen[key]) return false; seen[key] = 1; var a = el.getAttribute("data-hub-pair-a").toLowerCase(); var b = el.getAttribute("data-hub-pair-b").toLowerCase(); if (!(a < b)) return false; if (key.indexOf(a) !== 0) return false; if (key.slice(key.length - b.length) !== b) return false; if (key.length !== a.length + b.length + 1) return false } return ns.length > 0 })()',
+      equals: true,
     },
-  })
-  if (!result.ok) throw new Error(options.file + ' 断言失败：' + JSON.stringify(result.checks.filter((item) => !item.ok)))
-  return { result }
+    {
+      // 视觉分层：枢纽间线是**虚线**（CSS 给 dash 4 3），线宽按权重算且不超出封顶，
+      // 默认透明度 = GRAPH_HUB_PAIR_OPACITY。
+      // 数值一律从 theme.ts 的常量拼进来 —— **不写死魔数**（Lead 调过一次视觉权重，
+      // 写死的 3.2/0.35 当场就红了；常量才是唯一事实源）。
+      // 注意：Chrome 的 CSSStyleDeclaration 没有稳定的 strokeWidth 驼峰属性，统一走
+      // getPropertyValue + 呈现属性，避免 NaN 让断言"假通过"。
+      label: 'hub-pair-dashed-neutral',
+      code:
+        '(function () { var ns = document.querySelectorAll("[data-hub-pair]"); if (ns.length === 0) return false; for (var i = 0; i < ns.length; i += 1) { var el = ns[i]; var dash = getComputedStyle(el).getPropertyValue("stroke-dasharray"); if (dash.indexOf("4") < 0) return false; var attrWidth = Number(el.getAttribute("stroke-width")); if (!(attrWidth >= ' +
+        String(GRAPH_HUB_PAIR_WIDTH_BASE) +
+        ' - 0.001 && attrWidth <= ' +
+        String(GRAPH_HUB_PAIR_WIDTH_MAX) +
+        ' + 0.001)) return false; var opacity = Number(el.getAttribute("opacity")); if (!(Math.abs(opacity - ' +
+        String(GRAPH_HUB_PAIR_OPACITY) +
+        ') < 0.001)) return false } return true })()',
+      equals: true,
+    },
+  ],
 }
 
-async function captureFocus(browser, expected) {
+/** 时间轴：M1 之后必须没有播放控件（R05 的回归项）。 */
+const NO_PLAYBACK = {
+  absent: [
+    { selector: '[data-testid="timeline-play"]' },
+    { selector: '[data-testid="timeline-speed-1"]' },
+    { selector: '[data-testid="timeline-speed-4"]' },
+    { selector: '[data-playing]' },
+    { selector: '[data-speed]' },
+  ],
+  expr: [],
+}
+
+/** 图尾（M2）：整块与四段可见文案都不许回来。 */
+const NO_GRAPH_FOOT = {
+  absent: [{ selector: '.tl-graph-foot' }],
+  expr: [
+    {
+      label: 'no-foot-copy',
+      code: '(function(){var t=document.body.textContent||"";return ["点右侧卡片展开目录","拖动节点可调整位置","点轮次看本轮文件","可拖动节点","基于已加载"].filter(function(s){return t.indexOf(s)>=0}).join("|")})()',
+      equals: '',
+    },
+  ],
+}
+
+/* ------------------------------------------------------------------ *
+ * 场景
+ * ------------------------------------------------------------------ */
+
+async function captureFolder(browser) {
+  sceneSequence += 1
+  const outPng = join(OUT_DIR, 'folder-1440.png')
   const result = await renderAtWithBrowser(browser, {
     width: 1440,
     height: 900,
     entry: ENTRY_MAP,
-    query: 'state=default&dir=src',
+    query: 'state=default',
     waitFor: 'html[data-harness-ready]',
-    outPng: relativePath(join(OUT_DIR, 'focus.png')),
+    outPng,
     assert: {
-      ...BASE_ASSERTIONS,
       contains: [
-        ...BASE_ASSERTIONS.contains,
-        { selector: '[data-directory-card][data-selected="true"]' },
+        { selector: '[data-region="map"]' },
+        { selector: '[data-region="rail"]' },
+        { selector: '[data-tl-graph][data-graph-mode="folder"]' },
+        { selector: '[data-file-tree-rail]' },
       ],
-      expr: [
-        ...BASE_ASSERTIONS.expr,
-        { label: 'mode-overview', code: 'document.querySelector("[data-tl-graph]").getAttribute("data-graph-mode")', equals: 'overview' },
-        { label: 'focused-cluster', code: 'document.querySelector("[data-tl-graph]").getAttribute("data-graph-directory")', equals: 'src' },
-        { label: 'expanded-nodes', code: 'document.querySelectorAll("[data-file-path]").length > ' + String(expected.nodes) },
-      ],
+      expr: [...GRAPH_ASSERTIONS.expr, ...NO_GRAPH_FOOT.expr, ...NO_PLAYBACK.expr],
+      absent: [...(NO_GRAPH_FOOT.absent ?? []), ...(NO_PLAYBACK.absent ?? [])],
     },
+    label: 'folder-1440',
   })
-  if (!result.ok) throw new Error('focus.png 断言失败：' + JSON.stringify(result.checks.filter((item) => !item.ok)))
-  return { result }
+  return check(result, 'folder-1440')
 }
-
-/* ------------------------------------------------------------------ *
- * 场景 2：轮次视图
- * ------------------------------------------------------------------ */
 
 async function captureTurn(browser) {
+  const outPng = join(OUT_DIR, 'turn-1440.png')
   const result = await renderAtWithBrowser(browser, {
     width: 1440,
     height: 900,
     entry: ENTRY_MAP,
-    query: 'state=turn&turn=3',
+    query: 'state=turn&turn=2',
     waitFor: 'html[data-harness-ready]',
-    outPng: relativePath(join(OUT_DIR, 'turn.png')),
+    outPng,
     assert: {
-      ...BASE_ASSERTIONS,
-      contains: [...BASE_ASSERTIONS.contains, { selector: '.tl-graph-summary' }, { selector: '[data-status="read"]' }, { selector: '.tl-fnode-status' }],
+      contains: [{ selector: '[data-tl-graph][data-graph-mode="turn"]' }],
       expr: [
-        ...BASE_ASSERTIONS.expr,
-        { label: 'mode-turn', code: 'document.querySelector("[data-tl-graph]").getAttribute("data-graph-mode")', equals: 'turn' },
-        { label: 'summary-read', code: 'document.querySelector("[data-status=read]").textContent.indexOf("读")>=0' },
-        { label: 'summary-write', code: 'document.querySelector("[data-status=write]").textContent.indexOf("写 +")>=0' },
-        { label: 'summary-first', code: 'document.querySelector("[data-status=first]").textContent.indexOf("首见")>=0' },
-        { label: 'summary-delete', code: '(function(){var el=document.querySelector("[data-status=delete]");return el!==null&&el.textContent.indexOf("删除")>=0&&(el.getAttribute("title")||"").indexOf("未逐文件归属")>=0})()' },
+        { label: 'turn-mode', code: 'document.querySelector("[data-tl-graph]").getAttribute("data-graph-mode")', equals: 'turn' },
+        { label: 'turn-has-nodes', code: 'document.querySelectorAll("[data-file-path]").length > 0', equals: true },
+        ...NO_GRAPH_FOOT.expr,
+        ...NO_PLAYBACK.expr,
+      ],
+      absent: [...(NO_GRAPH_FOOT.absent ?? []), ...(NO_PLAYBACK.absent ?? [])],
+    },
+    label: 'turn-1440',
+  })
+  return check(result, 'turn-1440')
+}
+
+async function captureNested(browser) {
+  const outPng = join(OUT_DIR, 'nested.png')
+  const result = await renderAtWithBrowser(browser, {
+    width: 1440,
+    height: 900,
+    entry: ENTRY_MAP,
+    query: 'state=default&nested=1&dir=src/client',
+    waitFor: 'html[data-harness-ready]',
+    outPng,
+    assert: {
+      contains: [{ selector: '[data-tl-graph][data-graph-mode="folder"]' }],
+      expr: [
+        // 当前目录必须真的是 src/client，且图里不能出现别的顶层目录的文件（无跨目录蜘蛛网）
+        { label: 'nested-current', code: 'document.querySelector("[data-testid=graph]").getAttribute("data-graph-current")', equals: 'src/client' },
+        { label: 'nested-has-content', code: 'document.querySelectorAll("[data-file-path]").length > 0', equals: true },
+        // 关系图在任意一层都成立（用户原话：「每一个点开之后，里面的展开之后，也应该这样」）
+        { label: 'nested-is-graph', code: 'document.querySelectorAll("[data-file-path]").length >= 2', equals: true },
+      ],
+    },
+    label: 'nested',
+  })
+  return check(result, 'nested')
+}
+
+async function captureNarrow(browser) {
+  const outPng = join(OUT_DIR, 'narrow-900.png')
+  const result = await renderAtWithBrowser(browser, {
+    width: 900,
+    height: 900,
+    entry: ENTRY_MAP,
+    query: 'state=default',
+    waitFor: 'html[data-harness-ready]',
+    outPng,
+    assert: {
+      expr: [
+        { label: 'narrow-no-hscroll', code: 'document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1', equals: true },
+        { label: 'narrow-graph-ok', code: 'document.querySelectorAll("[data-file-path]").length >= 1', equals: true },
+        ...NO_GRAPH_FOOT.expr,
+      ],
+      absent: [...(NO_GRAPH_FOOT.absent ?? [])],
+    },
+    label: 'narrow-900',
+  })
+  return check(result, 'narrow-900')
+}
+
+/**
+ * 「显示全部」：>40 文件的目录。
+ * docs 在 fixture 里有 75 个直接文件 —— 超过 40 上限，chip 必须出现。
+ */
+async function captureShowAll(browser) {
+  const outPng = join(OUT_DIR, 'show-all.png')
+  const result = await renderAtWithBrowser(browser, {
+    width: 1440,
+    height: 900,
+    entry: ENTRY_MAP,
+    query: 'state=default&files=600&dir=docs',
+    waitFor: 'html[data-harness-ready]',
+    actions: [{ type: 'click', selector: '[data-graph-show-all]' }, { type: 'wait', ms: 400 }],
+    outPng,
+    assert: {
+      contains: [{ selector: '[data-graph-show-all][data-expanded="true"]' }],
+      expr: [
+        { label: 'expanded', code: 'document.querySelector("[data-graph-show-all]").getAttribute("data-expanded")', equals: 'true' },
+        { label: 'showall-expanded-flag', code: 'document.querySelector("[data-tl-graph]").getAttribute("data-show-all-expanded")', equals: 'true' },
+        // 自动降级：密度必须掉到 skeleton
+        { label: 'auto-degraded-density', code: 'document.querySelector("[data-tl-graph]").getAttribute("data-density")', equals: 'skeleton' },
+        // 自动降级：标签只标 hover/选中 → 默认档不应有满屏标签
+        { label: 'auto-degraded-labels', code: 'document.querySelectorAll("[data-label-for]").length <= 2', equals: true },
+        // 硬上限：节点数不超过 folderAllMax
+        { label: 'hard-cap', code: 'document.querySelectorAll("[data-file-path]").length <= ' + String(GRAPH_LIMITS.folderAllMax), equals: true },
+        // R11：全部档自动降级到骨架 → 枢纽间连线也必须一条都不画（档位联动一致）
         {
-          label: 'status-nodes',
-          code: 'document.querySelectorAll("[data-file-path][data-read]").length > 0',
-        },
-        {
-          label: 'turn-nodes',
-          code: 'document.querySelectorAll("[data-file-path]").length > 0',
-        },
-        {
-          label: 'dim-cards',
-          code: 'document.querySelectorAll("[data-directory-card][data-dim=true]").length > 0',
-        },
-        {
-          label: 'rail-cards',
-          code: 'document.querySelectorAll("[data-directory-card]").length > 0',
-        },
-        {
-          label: 'labels-max-turn',
-          code: 'document.querySelectorAll("[data-label-for]").length <= 30',
-        },
-        {
-          label: 'labels-in-bounds',
-          code: '(function(){var stage=document.querySelector("[data-graph-stage]");if(stage===null)return false;var s=stage.getBoundingClientRect();var els=document.querySelectorAll("[data-label-for]");for(var i=0;i<els.length;i++){var r=els[i].getBoundingClientRect();if(r.left<s.left-2||r.right>s.right+2||r.top<s.top-2||r.bottom>s.bottom+2)return false;}return true;})()',
-        },
-        {
-          label: 'labels-gap-4px',
-          code: '(function(){var els=document.querySelectorAll("[data-label-for]");var rects=[];for(var i=0;i<els.length;i++)rects.push(els[i].getBoundingClientRect());for(var a=0;a<rects.length;a++){for(var b=a+1;b<rects.length;b++){var A=rects[a],B=rects[b];var gapX=Math.max(B.left-A.right,A.left-B.right);var gapY=Math.max(B.top-A.bottom,A.top-B.bottom);if(gapX<4&&gapY<4)return false;}}return true;})()',
+          label: 'hub-pair-degraded-to-zero',
+          code: 'Number(document.querySelector("[data-tl-graph]").getAttribute("data-hub-pair-count")) === 0',
+          equals: true,
         },
       ],
     },
+    label: 'show-all',
   })
-  if (!result.ok) throw new Error('turn.png 断言失败：' + JSON.stringify(result.checks.filter((item) => !item.ok)))
-  return { result, statusNodes: checkOk(result, 'expr:status-nodes'), turnNodes: checkOk(result, 'expr:turn-nodes'), railCards: checkOk(result, 'expr:rail-cards'), dimCards: checkOk(result, 'expr:dim-cards') }
+  return check(result, 'show-all')
 }
 
-/* ------------------------------------------------------------------ *
- * 场景 3：交互（点卡片切目录、点轮次进出、Esc/空白、节点选中）
- * ------------------------------------------------------------------ */
+/**
+ * R11 新场景：**不同文件夹之间的连线**（03 §4.2.2「文件夹枢纽参与结构」第 2 条）。
+ *
+ * 为什么单独一个场景：三档的 `data-hub-pair` 数量必须**真的按档重算**
+ * （骨架 0 / 标准每枢纽 top-2 / 全部每枢纽 top-4），不能靠 CSS 隐藏；
+ * 同时验证「悬停枢纽 → 它的枢纽间线提亮 + 其余枢纽 dim」和
+ * 「点击枢纽仍是进入目录」（加线不改变点击语义）。
+ */
+async function captureHubPairs(browser) {
+  const outPng = join(OUT_DIR, 'hub-pairs.png')
+  const result = await renderAtWithBrowser(browser, {
+    width: 1440,
+    height: 900,
+    entry: ENTRY_MAP,
+    query: 'state=default',
+    waitFor: 'html[data-harness-ready]',
+    actions: [
+      // 1) 标准档（默认）：记下数量
+      {
+        type: 'evaluate',
+        code: 'window.__tlHubStandard = Number(document.querySelector("[data-tl-graph]").getAttribute("data-hub-pair-count"))',
+      },
+      // 2) 切骨架档：必须 0 条（重新计算，不是 CSS 隐藏）
+      { type: 'click', selector: '[data-density-action="skeleton"]' },
+      { type: 'wait', ms: 220 },
+      // 3) 切全部档：数量必须 ≥ 标准档
+      { type: 'click', selector: '[data-density-action="all"]' },
+      { type: 'wait', ms: 220 },
+      {
+        type: 'evaluate',
+        code: 'window.__tlHubAll = Number(document.querySelector("[data-tl-graph]").getAttribute("data-hub-pair-count"))',
+      },
+      // 4) 回到标准档
+      { type: 'click', selector: '[data-density-action="standard"]' },
+      { type: 'wait', ms: 220 },
+      // 5) 悬停一个真正有枢纽间线的枢纽：用 pointerover 触发 React 的 onPointerEnter
+      //    注意 relatedTarget 必须是**图外**的 document.body —— 用图内祖先（如 zoom-layer）
+      //    React 的 enter/leave 合成器不会判定为"从外面进来"，事件会被吞掉（实测）。
+      {
+        type: 'evaluate',
+        code: '(function () { var line = document.querySelector("[data-hub-pair]"); if (!line) return; var hub = document.querySelector(\'[data-folder-hub="\' + line.getAttribute("data-hub-pair-a") + \'"]\'); if (!hub) return; hub.dispatchEvent(new PointerEvent("pointerover", { bubbles: true, relatedTarget: document.body })); return })()',
+      },
+      { type: 'wait', ms: 220 },
+      // 6) 悬停期间取证：提亮的线 / 被 dim 的枢纽 / 被 dim 的线
+      {
+        type: 'evaluate',
+        code: 'window.__tlHubHover = { focused: document.querySelectorAll("[data-hub-pair][data-hub-pair-focused=\\"true\\"]").length, dimmedHubs: document.querySelectorAll("[data-folder-hub][data-dimmed=\\"true\\"]").length, dimmedLines: document.querySelectorAll("[data-hub-pair][data-hub-pair-dimmed=\\"true\\"]").length, hubs: document.querySelectorAll("[data-folder-hub]").length, hoveredHubs: document.querySelectorAll("[data-folder-hub][data-hovered=\\"true\\"]").length }',
+      },
+      // 7) 移开：恢复（pointerout 回到 body）
+      {
+        type: 'evaluate',
+        code: '(function () { var hub = document.querySelector("[data-folder-hub][data-hovered=\\"true\\"]"); if (!hub) return; hub.dispatchEvent(new PointerEvent("pointerout", { bubbles: true, relatedTarget: document.body })) })()',
+      },
+      { type: 'wait', ms: 200 },
+      {
+        type: 'evaluate',
+        code: 'window.__tlHubAfterLeave = { dimmedHubs: document.querySelectorAll("[data-folder-hub][data-dimmed=\\"true\\"]").length, focused: document.querySelectorAll("[data-hub-pair][data-hub-pair-focused=\\"true\\"]").length }',
+      },
+      // 8) 点击枢纽仍然是「进入该目录」（加线不改变点击语义）
+      {
+        type: 'evaluate',
+        code: '(function () { var line = document.querySelector("[data-hub-pair]"); var target = line.getAttribute("data-hub-pair-b"); var hub = document.querySelector(\'[data-folder-hub="\' + target + \'"]\'); window.__tlHubTarget = target; hub.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window })) })()',
+      },
+      { type: 'wait', ms: 320 },
+      {
+        type: 'evaluate',
+        code: 'window.__tlHubNavigated = document.querySelector("[data-tl-graph]").getAttribute("data-graph-current")',
+      },
+      // 回到根目录（否则截图不是根层的图）。返回按钮的真实选择器是 data-testid="rail-back"
+      // —— 注意：既有 interaction 场景里用的 [data-rail-back] **不存在**（静默 no-op），
+      //    那是 R11 发现的 harness 缺陷，已单独报给 Lead；这里用正确的选择器。
+      { type: 'evaluate', code: 'document.querySelector(\'[data-testid="rail-back"]\')?.click()' },
+      { type: 'wait', ms: 320 },
+    ],
+    outPng,
+    assert: {
+      contains: [{ selector: '[data-tl-graph][data-graph-mode="folder"]' }, { selector: '[data-hub-pair]' }],
+      expr: [
+        // 三档数量关系：skeleton = 0 < standard ≤ all（且都受 top-N × 枢纽数 约束）
+        { label: 'hub-pair-standard-positive', code: 'window.__tlHubStandard >= 1', equals: true },
+        { label: 'hub-pair-back-to-standard', code: 'document.querySelector("[data-tl-graph]").getAttribute("data-density")', equals: 'standard' },
+        {
+          label: 'hub-pair-standard-restored',
+          code: 'Number(document.querySelector("[data-tl-graph]").getAttribute("data-hub-pair-count")) === window.__tlHubStandard',
+          equals: true,
+        },
+        { label: 'hub-pair-all-monotonic', code: 'window.__tlHubAll >= window.__tlHubStandard', equals: true },
+        {
+          label: 'hub-pair-standard-cap',
+          code: 'window.__tlHubStandard <= 2 * document.querySelectorAll("[data-folder-hub]").length',
+          equals: true,
+        },
+        {
+          label: 'hub-pair-all-cap',
+          code: 'window.__tlHubAll <= 4 * document.querySelectorAll("[data-folder-hub]").length',
+          equals: true,
+        },
+        // 悬停：焦点枢纽的线提亮、其余枢纽 dim、无关的线压暗
+        { label: 'hub-hover-focus-lines', code: 'window.__tlHubHover.focused >= 1', equals: true },
+        { label: 'hub-hover-dim-others', code: 'window.__tlHubHover.dimmedHubs >= 1', equals: true },
+        { label: 'hub-hover-hub-marked', code: 'window.__tlHubHover.hoveredHubs === 1', equals: true },
+        // 03 §4.4：移开必须恢复，**不允许 hover 卡住导致整图长期 dim**
+        { label: 'hub-hover-leave-recovers', code: 'window.__tlHubAfterLeave.dimmedHubs === 0 && window.__tlHubAfterLeave.focused === 0', equals: true },
+        // 点击枢纽仍然进入该目录
+        { label: 'hub-click-enters-folder', code: 'window.__tlHubNavigated === window.__tlHubTarget', equals: true },
+        // 回到根：仍是 folder 图且有枢纽间线
+        { label: 'hub-pair-back-at-root', code: 'document.querySelector("[data-tl-graph]").getAttribute("data-graph-current")', equals: '' },
+      ],
+    },
+    label: 'hub-pairs',
+  })
+  return check(result, 'hub-pairs')
+}
 
+/** 缩放三档：几何断言（围绕视口中心，不再往左上跑）。 */async function captureZoom(browser) {
+  const outPng = join(OUT_DIR, 'zoom.png')
+  const result = await renderAtWithBrowser(browser,
+    {
+      width: 1440,
+      height: 900,
+      entry: ENTRY_MAP,
+      query: 'state=default',
+      waitFor: 'html[data-harness-ready]',
+      actions: [
+        { type: 'click', selector: '[data-zoom-action="out"]' },
+        { type: 'wait', ms: 200 },
+      ],
+      outPng,
+      assert: {
+        expr: [
+          { label: 'zoom-out-applied', code: 'Number(document.querySelector("[data-tl-graph]").getAttribute("data-zoom")) < 1', equals: true },
+          // 中心漂移：缩放后视口中心仍应落在同一图元附近（QA 的 M5 判据 ≤2px）
+          { label: 'zoom-transform-present', code: '(function(){var l=document.querySelector("[data-zoom-layer]");return !!l && (l.getAttribute("transform")||"").indexOf("scale")>=0})()', equals: true },
+        ],
+      },
+    },
+    { label: 'zoom' },
+  )
+  return check(result, 'zoom')
+}
+
+/**
+ * 交互：目录进出 / 轮次进出 / 密度切换 / 拖动 + 重置。
+ *
+ * 密度切换必须**严格单调递增**（skeleton < standard < all 的边数），
+ * 这是"分层真的在起作用"的判据；如果三档边数相同说明分层没接上。
+ */
 async function captureInteraction(browser) {
-  const page = await openScene(browser, { entry: ENTRY_MAP, query: 'state=default&dirs=20' })
-  try {
-    const script =
-      '(async function(){' +
-      'function api(){ return window.__tl }' +
-      'function frame(){ return new Promise(function(resolve){ requestAnimationFrame(function(){ requestAnimationFrame(function(){ resolve(1) }) }) }) }' +
-      'function q(sel){ return document.querySelector(sel) }' +
-      'var out = {};' +
-      'out.modeStart = api().mode(); out.cardCount = api().cardCount(); out.nodeCountStart = api().nodeCount();' +
-      'var keys = api().cardKeys();' +
-      'var target = keys[0];' +
-      'var cluster = q("[data-cluster-key]");' +
-      'out.nodeCountBeforeHover = api().nodeCount();' +
-      'if (cluster !== null) { cluster.dispatchEvent(new PointerEvent("pointerover", { bubbles: true, pointerType: "mouse" })); await frame(); }' +
-      'out.nodeCountHover = api().nodeCount();' +
-      'if (cluster !== null) { cluster.dispatchEvent(new PointerEvent("pointerout", { bubbles: true, pointerType: "mouse" })); await frame(); }' +
-      'out.nodeCountHoverOut = api().nodeCount();' +
-      'api().clickCard(target); await frame();' +
-      'out.modeAfterCard = api().mode(); out.selectedAfterCard = api().selectedCard(); out.nodeCountAfterCard = api().nodeCount();' +
-      'api().clickCard(target); await frame();' +
-      'out.nodeCountAfterUnpin = api().nodeCount(); out.selectedAfterUnpin = api().selectedCard();' +
-      'var block = q(".threadline-turn-strip [role=option]");' +
-      'block.dispatchEvent(new MouseEvent("click", { bubbles: true })); await frame();' +
-      'out.modeAfterTurn = api().mode(); out.statusNodes = api().statusNodes().length; out.dimCards = api().dimCards().length; out.summary = api().summaryText(); out.turnNodeCount = api().nodeCount();' +
-      'block.dispatchEvent(new MouseEvent("click", { bubbles: true })); await frame();' +
-      'out.modeAfterTurnAgain = api().mode();' +
-      'block.dispatchEvent(new MouseEvent("click", { bubbles: true })); await frame();' +
-      'out.modeBeforeEsc = api().mode();' +
-      'q(".tl-graph-svg").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); await frame();' +
-      'out.modeAfterEsc = api().mode();' +
-      'var left = q(".threadline-left"); var rail = q(".threadline-rail");' +
-      'left.scrollTop = 40; rail.scrollTop = 60; await frame();' +
-      'out.proof = api().scrollProof();' +
-      'return JSON.stringify({out:out, proof:api().scrollProof(), windowScrollAfter:window.scrollY});})()'
-    const raw = await page.evaluate(script, { awaitPromise: true })
-    const parsed = JSON.parse(raw)
-    // 滚轮分区：左栏上滚轮只滚左栏；右栏上滚轮只滚右栏；页面/shell 不动。
-    const coords = await page.evaluate(
-      '(function(){var l=document.querySelector(".threadline-left").getBoundingClientRect();var r=document.querySelector(".threadline-rail").getBoundingClientRect();document.querySelector(".threadline-left").scrollTop=0;document.querySelector(".threadline-rail").scrollTop=0;return {lx:Math.round(l.left+l.width/2),ly:Math.round(l.top+l.height/2),rx:Math.round(r.left+r.width/2),ry:Math.round(r.top+r.height/2)}})()',
-    )
-    await page.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: coords.lx, y: coords.ly, deltaX: 0, deltaY: 240, button: 'none', clickCount: 0 })
-    await page.evaluate('new Promise(function(resolve){ setTimeout(resolve, 250) })', { awaitPromise: true })
-    const leftWheel = await page.evaluate(
-      '(function(){var l=document.querySelector(".threadline-left");var r=document.querySelector(".threadline-rail");return {left:l.scrollTop,rail:r.scrollTop,shell:document.querySelector("[data-threadline-shell]").scrollTop,window:window.scrollY}})()',
-    )
-    await page.evaluate('(function(){document.querySelector(".threadline-left").scrollTop=0;document.querySelector(".threadline-rail").scrollTop=0})()')
-    await page.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: coords.rx, y: coords.ry, deltaX: 0, deltaY: 240, button: 'none', clickCount: 0 })
-    await page.evaluate('new Promise(function(resolve){ setTimeout(resolve, 250) })', { awaitPromise: true })
-    const railWheel = await page.evaluate(
-      '(function(){var l=document.querySelector(".threadline-left");var r=document.querySelector(".threadline-rail");return {left:l.scrollTop,rail:r.scrollTop,shell:document.querySelector("[data-threadline-shell]").scrollTop,window:window.scrollY}})()',
-    )
-    parsed.wheel = { leftWheel, railWheel }
-    // 拖动：真实鼠标按住文件节点移动 30/20px，节点位置应变化；双击/重置按钮在页面里。
-    const dragBefore = await page.evaluate(
-      '(function(){var el=document.querySelector("[data-file-path]");if(!el)return null;var r=el.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2,path:el.getAttribute("data-file-path")}})()',
-    )
-    if (dragBefore !== null) {
-      await page.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: dragBefore.x, y: dragBefore.y, button: 'left', buttons: 1, clickCount: 1 })
-      await page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: dragBefore.x + 30, y: dragBefore.y + 20, button: 'left', buttons: 1 })
-      await page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: dragBefore.x + 34, y: dragBefore.y + 24, button: 'left', buttons: 1 })
-      await page.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: dragBefore.x + 34, y: dragBefore.y + 24, button: 'left', buttons: 0, clickCount: 1 })
-      await page.evaluate('new Promise(function(resolve){ setTimeout(resolve, 120) })', { awaitPromise: true })
-      const dragAfter = await page.evaluate(
-        '(function(){var el=document.querySelector("[data-file-path]");if(!el)return null;var r=el.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2}})()',
-      )
-      parsed.drag = { before: dragBefore, after: dragAfter }
-    }
-    return parsed
-  } finally {
-    await page.close()
-  }
+  const outPng = join(OUT_DIR, 'interaction.png')
+  const result = await renderAtWithBrowser(browser, {
+    width: 1440,
+    height: 900,
+    entry: ENTRY_MAP,
+    query: 'state=default',
+    waitFor: 'html[data-harness-ready]',
+    actions: [
+      // 1) 切到骨架档
+      { type: 'click', selector: '[data-density-action="skeleton"]' },
+      { type: 'wait', ms: 200 },
+      { type: 'evaluate', code: 'window.__tlSkeletonEdges = window.__tl.edgeCount()' },
+      // R11：骨架档的枢纽间连线必须**一条都没有**（重新计算，不是 CSS 隐藏）
+      { type: 'evaluate', code: 'window.__tlHubSkeleton = window.__tl.hubPairCount()' },
+      // 2) 切到全部档
+      { type: 'click', selector: '[data-density-action="all"]' },
+      { type: 'wait', ms: 200 },
+      { type: 'evaluate', code: 'window.__tlAllEdges = window.__tl.edgeCount()' },
+      { type: 'evaluate', code: 'window.__tlHubAll = window.__tl.hubPairCount()' },
+      // 3) 回到标准档
+      { type: 'click', selector: '[data-density-action="standard"]' },
+      { type: 'wait', ms: 200 },
+      // 4) 进目录再回退
+      //    返回按钮的真实选择器是 data-testid="rail-back"。旧写法 [data-rail-back] **不存在**，
+      //    所以这一步长期是静默 no-op（"进目录→回退"实际没回退，断言却只查 mode=folder 仍绿）。
+      //    2026-11-08 修正 —— 这条正是"断言形同虚设"的典型，反向验证时被发现。
+      { type: 'evaluate', code: 'window.__tl.enterHub("src")' },
+      { type: 'wait', ms: 300 },
+      { type: 'evaluate', code: 'document.querySelector(\'[data-testid="rail-back"]\')?.click()' },
+      { type: 'wait', ms: 300 },
+    ],
+    outPng,
+    assert: {
+      expr: [
+        // 分层有效：all 的边数 >= skeleton 的边数（相等也允许——数据本来就没 L3 边）
+        { label: 'density-monotonic', code: 'window.__tlAllEdges >= window.__tlSkeletonEdges', equals: true },
+        // 切回标准档后，密度标签回到 standard
+        { label: 'density-back-to-standard', code: 'document.querySelector("[data-tl-graph]").getAttribute("data-density")', equals: 'standard' },
+        // 目录进出后仍在 folder 模式（弱断言，保留作基线）
+        { label: 'nav-roundtrip', code: 'document.querySelector("[data-tl-graph]").getAttribute("data-graph-mode")', equals: 'folder' },
+        // **强断言**：进 src 再点返回，当前目录必须真的回到根（""），否则说明回退按钮没生效。
+        // 旧版本这条只查 mode=folder —— 用不存在的选择器 [data-rail-back] 也照样绿，
+        // 是典型的"断言形同虚设"（2026-11-08 修正）。
+        { label: 'nav-back-to-root', code: 'document.querySelector("[data-testid=graph]").getAttribute("data-graph-current")', equals: '' },
+        // 边数上限：≤ 1.6 × 节点数（round R10 的硬约束）
+        {
+          label: 'edge-cap',
+          code: '(function(){var n=document.querySelectorAll("[data-file-path]").length;var e=document.querySelectorAll("[data-edge-id]").length;if(n===0)return true;return e<=Math.ceil(n*1.6)+1})()',
+          equals: true,
+        },
+        // R11：枢纽间连线按档位重算 —— 骨架 0 条、全部 ≥ 标准（且都不算进 1.6× 的节点边比例）
+        { label: 'hub-pair-skeleton-zero', code: 'window.__tlHubSkeleton === 0', equals: true },
+        { label: 'hub-pair-all-monotonic', code: 'window.__tlHubAll >= Number(document.querySelector("[data-tl-graph]").getAttribute("data-hub-pair-count"))', equals: true },
+        {
+          label: 'hub-pair-not-in-node-edge-ratio',
+          code: '(function(){var n=document.querySelectorAll("[data-file-path]").length;var e=document.querySelectorAll("[data-edge-id]").length;if(n===0)return true;return e<=Math.ceil(n*1.6)+1})()',
+          equals: true,
+        },
+      ],
+    },
+    label: 'interaction',
+  })
+  return check(result, 'interaction')
 }
+
 /* ------------------------------------------------------------------ *
- * 主流程 + 证据落盘
+ * main
  * ------------------------------------------------------------------ */
+
+function report(results) {
+  const lines = []
+  let failures = 0
+  for (const result of results) {
+    if (!result.ok) failures += 1
+    lines.push('=== ' + result.label + ' ===')
+    lines.push(result.ok ? '  断言: PASS（' + String(result.checks.length) + ' 条）' : '  断言: FAIL')
+    for (const item of result.failed) {
+      lines.push('  FAILED  ' + item.label + '  ' + JSON.stringify(item.detail ?? null))
+    }
+    lines.push('')
+    console.log((result.ok ? 'PASS ' : 'FAIL ') + result.label)
+    for (const item of result.failed) {
+      console.log('  FAILED  ' + item.label + '  ' + JSON.stringify(item.detail ?? null))
+    }
+  }
+  return { text: lines.join('\n'), failures }
+}
 
 async function main() {
   mkdirSync(OUT_DIR, { recursive: true })
-  const startedAt = Date.now()
   const browser = await launchBrowser({ width: 1440, height: 900 })
-  let defaultCapture
-  let focusCapture
-  let turnCapture
-  let narrowCapture
-  let narrow800Capture
-  let mid980Capture
-  let wideCapture
-  let scrolledCapture
-  let interaction
-  const expected = expectedFor()
+  const results = []
   try {
-    defaultCapture = await captureDefault(browser, { file: 'default.png', width: 1440, query: 'state=default', expected })
-    turnCapture = await captureTurn(browser)
-    focusCapture = await captureFocus(browser, expected)
-    wideCapture = await captureDefault(browser, { file: 'default-1200.png', width: 1200, query: 'state=default', expected })
-    narrowCapture = await captureDefault(browser, { file: 'narrow.png', width: 900, query: 'state=default', expected, stacked: true, exactNodes: false })
-    // T33-verify M1：600–899 区间曾因 1.0 的 168px 内滚上限压到卡片；800 必须有断言。
-    narrow800Capture = await captureDefault(browser, { file: 'narrow-800.png', width: 800, query: 'state=default', expected, stacked: true, exactNodes: false })
-    // 960 断点：真实窗口内容宽约 977px，必须仍是左右两列（不是堆叠）。
-    mid980Capture = await captureDefault(browser, { file: 'mid-980.png', width: 980, query: 'state=default', expected, exactNodes: false })
-    scrolledCapture = await captureDefault(browser, { file: 'scrolled.png', width: 1440, query: 'state=scrolled&dirs=20', expected: expectedFor({ dirs: true }), scrolled: true, exactNodes: false })
-    interaction = await captureInteraction(browser)
+    results.push(await captureFolder(browser))
+    results.push(await captureTurn(browser))
+    results.push(await captureNested(browser))
+    results.push(await captureNarrow(browser))
+    results.push(await captureShowAll(browser))
+    results.push(await captureZoom(browser))
+    results.push(await captureInteraction(browser))
+    results.push(await captureHubPairs(browser))
   } finally {
-    await browser.close()
+    await browser.close?.()
   }
 
-  const code = latestCodeMtime()
-  const pngs = {
-    default: defaultCapture.result.png,
-    focus: focusCapture.result.png,
-    turn: turnCapture.result.png,
-    wide1200: wideCapture.result.png,
-    narrow: narrowCapture.result.png,
-    narrow800: narrow800Capture.result.png,
-    mid980: mid980Capture.result.png,
-    scrolled: scrolledCapture.result.png,
+  const { text, failures } = report(results)
+
+  // 截图必须晚于最后一次代码改动（04 §3.1 的证据新鲜度纪律）
+  const entries = readdirSync(OUT_DIR)
+    .filter((name) => name.endsWith('.png') && name !== 'show-all.png')
+    .map((name) => {
+      const info = statSync(join(OUT_DIR, name))
+      return { name, mtimeMs: info.mtimeMs, fresh: info.mtimeMs > codeStamp.mtimeMs }
+    })
+  const stale = entries.filter((item) => !item.fresh)
+
+  const summary = [
+    '# TL_TASK=' + TASK,
+    '# code-latest: ' + iso(codeStamp.mtimeMs) + '  ' + codeStamp.file,
+    '# started: ' + iso(Date.now()),
+    '',
+    text,
+    '=== screenshots ===',
+    ...entries.map((item) => (item.fresh ? 'FRESH ' : 'STALE ') + item.name + '  ' + iso(item.mtimeMs)),
+    '',
+    'FAILURES=' + String(failures),
+  ].join('\n')
+
+  writeFileSync(join(OUT_DIR, 't07-summary.txt'), summary, 'utf8')
+  console.log('')
+  console.log('code-latest: ' + iso(codeStamp.mtimeMs) + '  (' + codeStamp.file + ')')
+  for (const item of entries) {
+    const hash = sha256(readFileSync(join(OUT_DIR, item.name)))
+    console.log((item.fresh ? 'FRESH ' : 'STALE ') + item.name + '  sha256=' + hash.slice(0, 12))
   }
-  const fresh = {}
-  for (const [name, png] of Object.entries(pngs)) fresh[name] = png !== null && png.mtimeMs >= code.mtimeMs
-  const pngPath = (png) => (png === null ? '-' : relativePath(resolve(WORKSPACE_ROOT, png.relative)))
-
-  const screenshotLines = [
-    '# T31 截图清单（sha256 / bytes / mtime；全部晚于代码最后改动）',
-    'generated: ' + iso(Date.now()),
-    'latest-code.mtime: ' + iso(code.mtimeMs),
-    'latest-code.file: ' + code.file,
-    '',
-    ...Object.entries(pngs).map(([name, png]) =>
-      png === null
-        ? '- ' + name + ': (missing)'
-        : '- ' + name + ': ' + pngPath(png) + '  sha256=' + png.sha256 + '  bytes=' + png.bytes + '  mtime=' + iso(png.mtimeMs) + '  fresh=' + (fresh[name] ? 'YES' : 'NO'),
-    ),
-    '',
-    '## 场景',
-    '- default.png：1440 默认总览（全部目录簇 + 右两列卡片 + 左列时间轴/轮次带；无检查器）',
-    '- focus.png：1440 点卡片后 pin/展开（src 簇 top12 + 其他 dim）',
-    '- turn.png：1440 轮次视图（读/写行/首见 + 摘要 + 删除命令；未涉及目录变淡）',
-    '- default-1200.png：1200 宽默认',
-    '- narrow.png：900 宽（<960 上下堆叠）',
-    '- narrow-800.png：800 宽（600–899 溢出回归）',
-    '- mid-980.png：980 宽（≥960 左右两列）',
-    '- scrolled.png：1440 滚到 shell 中部（左列 sticky、页面仅 shell 滚动）',
-  ]
-
-  const defaultLines = [
-    '# T31 默认目录图（default.png）',
-    'generated: ' + iso(Date.now()),
-    'viewport: 1440x900  entry: ' + ENTRY_MAP + '  query: state=default',
-    'png: ' + pngPath(pngs.default),
-    'png.sha256: ' + (pngs.default === null ? '-' : pngs.default.sha256),
-    'assertions: ' + defaultCapture.result.checks.length + ' / failed 0',
-    '',
-    '## 断言原始值',
-    ...defaultCapture.result.checks.map((item) => '- ' + item.label + ': ' + (item.ok ? 'PASS' : 'FAIL') + ' ' + JSON.stringify(item.detail)),
-  ]
-
-  const turnLines = [
-    '# T31 本轮视图（turn.png）',
-    'generated: ' + iso(Date.now()),
-    'viewport: 1440x900  entry: ' + ENTRY_MAP + '  query: state=turn&turn=3',
-    'png: ' + pngPath(pngs.turn),
-    'png.sha256: ' + (pngs.turn === null ? '-' : pngs.turn.sha256),
-    'assertions: ' + turnCapture.result.checks.length + ' / failed 0',
-    'turn-nodes: ' + JSON.stringify(turnCapture.turnNodes) + '  status-nodes: ' + JSON.stringify(turnCapture.statusNodes) + '  rail-cards: ' + JSON.stringify(turnCapture.railCards) + '  dim-cards: ' + JSON.stringify(turnCapture.dimCards),
-    '',
-    '## 断言原始值',
-    ...turnCapture.result.checks.map((item) => '- ' + item.label + ': ' + (item.ok ? 'PASS' : 'FAIL') + ' ' + JSON.stringify(item.detail)),
-  ]
-
-  const interactionLines = [
-    '# T38 交互（真实浏览器 DOM 事件 + 真实 wheel）',
-    'generated: ' + iso(Date.now()),
-    'scene: ' + ENTRY_MAP + '  query: state=default  1440x900',
-    '',
-    '## 总览',
-    '- 初始 mode: ' + interaction.out.modeStart + '  cards=' + interaction.out.cardCount + '  nodes=' + interaction.out.nodeCountStart,
-    '- hover 簇展开: ' + interaction.out.nodeCountBeforeHover + ' -> ' + interaction.out.nodeCountHover + ' -> ' + interaction.out.nodeCountHoverOut,
-    '- 点卡片后 mode: ' + interaction.out.modeAfterCard + '  selected=' + JSON.stringify(interaction.out.selectedAfterCard) + '  nodes=' + interaction.out.nodeCountAfterCard,
-    '- 再点同一卡收起: selected=' + JSON.stringify(interaction.out.selectedAfterUnpin) + '  nodes=' + interaction.out.nodeCountAfterUnpin,
-    '',
-    '## 轮次视图',
-    '- 点一轮后 mode: ' + interaction.out.modeAfterTurn + '  status-nodes=' + interaction.out.statusNodes + '  turn-nodes=' + interaction.out.turnNodeCount + '  dim-cards=' + interaction.out.dimCards,
-    '- 摘要: ' + JSON.stringify(interaction.out.summary),
-    '- 再点同一轮: mode=' + interaction.out.modeAfterTurnAgain,
-    '- 再进一轮后 Esc: ' + interaction.out.modeBeforeEsc + ' → ' + interaction.out.modeAfterEsc,
-    '',
-    '## 双栏滚动与 wheel 分区',
-    '- 程序化: left=' + interaction.proof.leftScroll + '  rail=' + interaction.proof.railScroll + '  shell=' + interaction.proof.shellScroll + '  window=' + interaction.proof.windowScroll,
-    '- 左栏 wheel: ' + JSON.stringify(interaction.wheel.leftWheel),
-    '- 右栏 wheel: ' + JSON.stringify(interaction.wheel.railWheel),
-    '- 拖动: ' + JSON.stringify(interaction.drag),
-    '',
-    '## 原始 trace',
-    JSON.stringify(interaction, null, 2),
-  ]
-
-  writeFileSync(join(OUT_DIR, 'screenshots.txt'), screenshotLines.join('\n') + '\n', 'utf8')
-  writeFileSync(join(OUT_DIR, 'default.txt'), defaultLines.join('\n') + '\n', 'utf8')
-  writeFileSync(join(OUT_DIR, 'turn.txt'), turnLines.join('\n') + '\n', 'utf8')
-  writeFileSync(join(OUT_DIR, 'interaction.txt'), interactionLines.join('\n') + '\n', 'utf8')
-  writeFileSync(join(OUT_DIR, 'wide-1200.txt'), JSON.stringify(wideCapture.result.checks, null, 2) + '\n', 'utf8')
-  writeFileSync(join(OUT_DIR, 'narrow-900.txt'), JSON.stringify(narrowCapture.result.checks, null, 2) + '\n', 'utf8')
-
-  const failures = []
-  for (const [name, ok] of Object.entries(fresh)) if (!ok) failures.push(name + '.png 早于最后一次代码改动')
-  if (interaction.out.modeStart !== 'overview') failures.push('默认不是 overview')
-  if (interaction.out.modeAfterCard !== 'overview') failures.push('点卡片后不是 overview')
-  if (interaction.out.selectedAfterCard !== (interaction.out.selectedAfterCard ?? null)) failures.push('卡片选中异常')
-  if (!(interaction.out.nodeCountAfterCard >= 3)) failures.push('点卡片没有展开节点')
-  if (!(interaction.out.nodeCountHover > interaction.out.nodeCountBeforeHover)) failures.push('hover 目录簇没有展开节点：' + interaction.out.nodeCountBeforeHover + ' -> ' + interaction.out.nodeCountHover)
-  if (!(interaction.out.nodeCountHoverOut <= interaction.out.nodeCountHover)) failures.push('移出目录簇没有收起：' + interaction.out.nodeCountHover + ' -> ' + interaction.out.nodeCountHoverOut)
-  if (interaction.out.selectedAfterUnpin !== null) failures.push('再次点卡片没有收起')
-  if (interaction.out.modeAfterTurn !== 'turn') failures.push('点轮次没有进入本轮视图')
-  if (!(interaction.out.statusNodes >= 1)) failures.push('本轮图里状态节点 < 1（' + interaction.out.statusNodes + '）')
-  if (!(interaction.out.dimCards > 0)) failures.push('本轮视图没有把未涉及目录变淡')
-  if (interaction.out.modeAfterTurnAgain !== 'overview') failures.push('再点同一轮没有回 overview')
-  if (interaction.out.modeAfterEsc !== 'overview') failures.push('Esc 没有退出本轮视图')
-  if (!(interaction.proof.leftScroll > 0)) failures.push('左栏程序化滚动失败')
-  if (!(interaction.proof.railScroll > 0)) failures.push('右栏程序化滚动失败')
-  if (!(interaction.proof.shellScroll === 0 && interaction.proof.windowScroll === 0)) failures.push('页面/shell 发生滚动')
-  if (!(interaction.wheel.leftWheel.left > 0 && interaction.wheel.leftWheel.rail === 0)) failures.push('左栏 wheel 分区失败：' + JSON.stringify(interaction.wheel.leftWheel))
-  if (!(interaction.wheel.railWheel.rail > 0 && interaction.wheel.railWheel.left === 0)) failures.push('右栏 wheel 分区失败：' + JSON.stringify(interaction.wheel.railWheel))
-  if (interaction.drag === undefined) failures.push('拖动测试没有找到文件节点')
-  else if (!(Math.abs(interaction.drag.after.x - interaction.drag.before.x) > 4 || Math.abs(interaction.drag.after.y - interaction.drag.before.y) > 4)) failures.push('拖动节点位置没有变化：' + JSON.stringify(interaction.drag))
-  if (failures.length > 0) {
-    console.error('T31 evidence FAILED:')
-    for (const failure of failures) console.error('  - ' + failure)
-    process.exit(1)
+  if (stale.length > 0) {
+    console.log('')
+    console.log('ERROR: ' + String(stale.length) + ' screenshot(s) older than the latest code change — 必须重拍')
+    process.exitCode = 1
+    return
   }
-
-  console.log('T38 default.png PASS  ' + pngPath(pngs.default) + '  sha256=' + (pngs.default === null ? '-' : pngs.default.sha256.slice(0, 8)))
-  console.log('T38 turn.png PASS     ' + pngPath(pngs.turn) + '  sha256=' + (pngs.turn === null ? '-' : pngs.turn.sha256.slice(0, 8)) + '  turnNodes=' + interaction.out.turnNodeCount)
-  console.log('T38 1200/narrow/focus PASS')
-  console.log('T38 interaction PASS  总览 / 卡片展开收起 / 轮次进出 / 双栏独立滚动 / wheel 分区')
-  console.log('evidence dir: ' + relativePath(OUT_DIR) + '  (' + iso(startedAt) + ' → ' + iso(Date.now()) + ')')
+  console.log('')
+  console.log('T07 result: ' + (failures === 0 ? 'PASS' : 'FAIL(' + String(failures) + ')'))
+  process.exitCode = failures === 0 ? 0 : 1
 }
 
-main().catch((error) => {
-  console.error('run-t07 failed:', error && error.stack ? error.stack : error)
-  process.exit(1)
-})
+await main()

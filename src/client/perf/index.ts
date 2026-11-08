@@ -48,3 +48,17 @@ export {
   type BenchTiming,
   type BenchVerdict,
 } from './bench.ts'
+
+/* R06：无感加载的两件基础设施（同输入复用 + 边端点索引） */
+export {
+  buildEdgeEndpointIndex,
+  createInputMemo,
+  filterEdgesWithin,
+  turnRelationCounts,
+  type DetailLike,
+  type EdgeEndpoint,
+  type EdgeEndpointIndex,
+  type InputMemo,
+  type LowerEdge,
+  type TurnLike,
+} from './derived.ts'

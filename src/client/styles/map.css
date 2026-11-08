@@ -1,5 +1,5 @@
 /*
- * map.css —— 文件关系图（33 §3）的样式。
+ * map.css —— 左列文件图（folder = 当前目录节点图 / turn = 轮次图）的样式。
  *
  * 纪律（与 base.css 相同）：
  * - 选择器一律挂插件根前缀；颜色只引用 tokens.css 的 --tl-*（不写颜色字面量）；
@@ -7,7 +7,11 @@
  * - reduced-motion 下关闭过渡（tokens.css 全局归零 + 本文件兜底）；
  * - 注入路径仍是 styles/index.ts 的 installStyles()（枚举 styles/*.css）。
  *
- * 2.0 删除了 1.0 星图的簇框/网格/缩放相关样式：这里只有文件节点、关系线、标签、状态与摘要。
+ * 2.1（R04）删除：星图簇框/簇头/目录级弱边/关系类型 chip/图尾 「.tl-graph-foot」 与 「.tl-graph-reset」。
+ * R10（2026-11-08）删除：文件夹带与文件网格的分隔线 「.tl-foldhub-rule」（网格布局已整体废除）；
+ * 新增：关系密度组（.tl-graph-density*）、「显示 N/M」chip（.tl-graph-showall）、
+ * 图头关系计数（.tl-graph-relations）、枢纽聚合边（.tl-hub-edge）、
+ * 枢纽有/无跨目录关系的两种描边（[data-hub-linked]）、焦点 dim（[data-dimmed]）。
  */
 
 :is(.threadline-app, .threadline-impact-root) .tl-graph {
@@ -25,14 +29,29 @@
   line-height: var(--tl-lh-body);
 }
 
-/* ---------- 图头：标题 + 5 类图例 ---------- */
+/* ---------- 图头：标题 + 「显示 N/M」chip + 关系计数 + 密度组 + 5 类图例 + 缩放组 ---------- */
 
+/*
+ * 图头：**高度必须恒定**（2026-11-08 修 hover 抖动）。
+ *
+ * 为什么：folder 模式的图头有 5 类元素（标题/关系计数/密度组/图例/缩放组），
+ * 在 672px 宽里放不下 → flex-wrap 换成两行（75px）；turn 模式少两类 → 一行（43px）。
+ * 于是「悬停轮次 → 切 turn → 图头矮 32px → 轮次带上移 4px → 鼠标脱离轮次块
+ * → 预览清除 → 回 folder → 图头变高 → 轮次带下移 → 鼠标又落回块上」→ **无限抖动循环**。
+ *
+ * 修法：给两行留足空间（min-block-size），两种模式高度一致，布局不再因内容变化而跳动。
+ * 这是**布局稳定性**要求，不是美观取舍：任何会改变自身高度的 hover 反馈都会引发同类循环。
+ */
 :is(.threadline-app, .threadline-impact-root) .tl-graph-head {
   display: flex;
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
   padding: 12px 14px 8px;
+  /* 两行的高度下限：一行内容 ≈19px + 行间距 12px + 纵向 padding 20px ≈ 51px；
+     取 75px 覆盖「两行 + 回旋余量」，保证 folder / turn 两种模式同高。 */
+  min-block-size: 75px;
+  align-content: flex-start;
   border-block-end: 1px solid var(--tl-border-weak);
 }
 
@@ -48,6 +67,84 @@
   color: var(--tl-fg-tertiary);
   font-size: var(--tl-fs-meta-sm);
   font-weight: 400;
+}
+
+/*
+ * 「显示 40/137」chip：>40 节点时**常驻**（诚实性信息，不是菜单、不是弹窗）。
+ * 它是**可点的按钮**：点击就地切到全部，同一颗 chip 变「全部 137 · 收起」（pressed 描边）。
+ */
+:is(.threadline-app, .threadline-impact-root) .tl-graph-note {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border: 1px solid var(--tl-warn);
+  border-radius: var(--tl-radius-pill);
+  background: var(--tl-surface-raised);
+  color: var(--tl-fg);
+  font-size: var(--tl-fs-caption);
+  white-space: nowrap;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-showall {
+  font: inherit;
+  font-size: var(--tl-fs-caption);
+  cursor: pointer;
+  transition: background var(--tl-dur-fast) ease, border-color var(--tl-dur-fast) ease;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-showall:hover {
+  background: var(--tl-hover);
+  border-color: var(--tl-accent);
+}
+
+/* 展开态（全部档）：pressed 描边 + 强调色文字。 */
+:is(.threadline-app, .threadline-impact-root) .tl-graph-showall[data-expanded='true'] {
+  border-color: var(--tl-accent);
+  border-width: 2px;
+  color: var(--tl-accent);
+  font-weight: 600;
+}
+
+/* 图头关系计数（「关系 N 条」/「关系 N 条 · 已按权重收拢」）。 */
+:is(.threadline-app, .threadline-impact-root) .tl-graph-relations {
+  color: var(--tl-fg-caption);
+  font-size: var(--tl-fs-caption);
+  white-space: nowrap;
+}
+
+/* 关系密度组（骨架 / 标准 / 全部）：三个小按钮，当前档 aria-pressed=true。 */
+:is(.threadline-app, .threadline-impact-root) .tl-graph-density {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-density-btn {
+  min-inline-size: 26px;
+  block-size: 20px;
+  padding: 0 6px;
+  border: 1px solid var(--tl-border-weak);
+  border-radius: var(--tl-radius-pill);
+  background: transparent;
+  color: var(--tl-fg-tertiary);
+  font: inherit;
+  font-size: var(--tl-fs-caption);
+  line-height: 1;
+  cursor: pointer;
+  transition: background var(--tl-dur-fast) ease, color var(--tl-dur-fast) ease, border-color var(--tl-dur-fast) ease;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-density-btn:hover {
+  background: var(--tl-hover);
+  color: var(--tl-fg);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-density-btn[aria-pressed='true'] {
+  border-color: var(--tl-accent);
+  background: var(--tl-surface-raised);
+  color: var(--tl-fg);
+  font-weight: 600;
 }
 
 :is(.threadline-app, .threadline-impact-root) .tl-graph-legend {
@@ -74,6 +171,56 @@
   flex: 0 0 auto;
 }
 
+/* ---------- 缩放组（− / 适应 / + / 重置布局） ---------- */
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-zoom {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-zoom-btn {
+  min-inline-size: 24px;
+  block-size: 22px;
+  padding: 0 7px;
+  border: 1px solid var(--tl-border-weak);
+  border-radius: var(--tl-radius-pill);
+  background: transparent;
+  color: var(--tl-fg-secondary);
+  font: inherit;
+  font-size: var(--tl-fs-caption);
+  line-height: 1;
+  cursor: pointer;
+  transition: background var(--tl-dur-fast) ease, color var(--tl-dur-fast) ease, border-color var(--tl-dur-fast) ease;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-zoom-btn:hover:not(:disabled) {
+  background: var(--tl-hover);
+  color: var(--tl-fg);
+  border-color: var(--tl-border);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-zoom-btn:disabled {
+  color: var(--tl-fg-caption);
+  cursor: default;
+  opacity: 0.55;
+}
+
+/* 重置布局：只有图标（无可见文字），因此做成方形小按钮，图标居中。 */
+:is(.threadline-app, .threadline-impact-root) .tl-graph-zoom-reset {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 24px;
+  padding: 0;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-zoom-icon {
+  font-size: 13px;
+  line-height: 1;
+}
+
 /* ---------- 本轮摘要条（**始终占位**；固定高度、强制单行） ---------- */
 
 :is(.threadline-app, .threadline-impact-root) .tl-graph-summary {
@@ -92,7 +239,7 @@
   overflow: hidden;
 }
 
-/* 目录视图：摘要条空着，但占位不消失（hover 预览时不会改变面板高度）。 */
+/* 非轮次视图：摘要条空着，但占位不消失（切换视图时面板高度不变）。 */
 :is(.threadline-app, .threadline-impact-root) .tl-graph-summary[data-empty='true'] {
   visibility: hidden;
   pointer-events: none;
@@ -137,7 +284,7 @@
   flex: 0 0 auto;
 }
 
-/* ---------- 画布（无网格、无簇框、无缩放） ---------- */
+/* ---------- 画布 ---------- */
 
 :is(.threadline-app, .threadline-impact-root) .tl-graph-stage {
   position: relative;
@@ -165,10 +312,81 @@
   outline-offset: -2px;
 }
 
-/* 关系线：默认淡；选中/悬停的焦点边由行内 opacity 加深。 */
+/* 视图层：缩放只改 transform（不改布局坐标）；reduced-motion 下无过渡。 */
+:is(.threadline-app, .threadline-impact-root) .tl-graph-zoom-layer {
+  transition: transform var(--tl-dur-base) ease;
+}
+
+/* ---------- 文件夹枢纽（当前目录的直接子文件夹；圆角方卡，不再是"一条带"） ---------- */
+
+:is(.threadline-app, .threadline-impact-root) .tl-foldhub {
+  cursor: pointer;
+}
+
+/* 文件夹枢纽也可拖（2026-11-08）：拖动中给抓取光标，与文件节点同口径。 */
+:is(.threadline-app, .threadline-impact-root) .tl-foldhub[data-dragging='true'] {
+  cursor: grabbing;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-foldhub:focus {
+  outline: none;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-foldhub:focus-visible .tl-foldhub-card {
+  stroke: var(--tl-accent);
+  stroke-width: 2;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-foldhub-card {
+  fill: var(--tl-surface-sunken);
+  stroke: var(--tl-border);
+  stroke-width: 1;
+  transition: fill var(--tl-dur-fast) ease, stroke var(--tl-dur-fast) ease;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-foldhub:hover .tl-foldhub-card,
+:is(.threadline-app, .threadline-impact-root) .tl-foldhub[data-hovered='true'] .tl-foldhub-card {
+  fill: var(--tl-hover);
+  stroke: var(--tl-accent);
+}
+
+/*
+ * 有真实跨目录关系的枢纽：描边用强调色（能看出它连到当前目录的谁）；
+ * 没有关系的枢纽（data-hub-linked=false）保持中性弱描边 —— 它在**外围环**上、不画线，
+ * 视觉上就能读出"这个文件夹和当前目录没有来往"，不伪造关系。
+ */
+:is(.threadline-app, .threadline-impact-root) .tl-foldhub[data-hub-linked='true'] .tl-foldhub-card {
+  stroke: var(--tl-accent);
+  stroke-width: 1.4;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-foldhub[data-hub-linked='false'] .tl-foldhub-card {
+  fill: transparent;
+  stroke: var(--tl-border-weak);
+  stroke-dasharray: 3 3;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-foldhub-icon {
+  fill: none;
+  stroke: var(--tl-warn);
+  stroke-width: 1.3;
+  pointer-events: none;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-foldhub-label {
+  fill: var(--tl-fg);
+  font-family: var(--tl-font);
+  font-size: 11px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+/* ---------- 关系边（**常驻**分层画：L1 骨架 / L2 强共现 / L3 悬停淡入） ---------- */
+
 :is(.threadline-app, .threadline-impact-root) .tl-graph-edge {
   fill: none;
   stroke-linecap: round;
+  transition: opacity var(--tl-dur-fast) ease;
 }
 
 :is(.threadline-app, .threadline-impact-root) .tl-graph-edge[data-layer='structure'] {
@@ -191,7 +409,77 @@
   stroke: var(--tl-warn);
 }
 
-/* 文件节点：选中 = 填充加深 + 同色 1.5px 细环（点击不出大框/outline）。 */
+/* L3 其余边：细、低对比（默认只在悬停/选中或「全部」档淡入）。 */
+:is(.threadline-app, .threadline-impact-root) .tl-graph-edge[data-edge-layer='L3'] {
+  stroke-dasharray: 2 5;
+}
+
+/*
+ * 枢纽聚合边（跨目录真实关系）：线宽 = 聚合权重。
+ *
+ * 视觉定位是「**背景上下文**」，不是主信息：
+ * - 真信息是当前目录内文件之间的关系（SOLID、带类型色）；
+ * - 枢纽线只表达「这个子文件夹里有东西跟当前目录有来往」，属于补充说明。
+ *
+ * 因此刻意压暗：中性色（不用 warn 橙色——那是警告语义，会把图变成"警报网"）、
+ * 细线、默认低透明度；只有 hover/选中相关节点时才淡入（透明度由内联 opacity 控制）。
+ */
+:is(.threadline-app, .threadline-impact-root) .tl-hub-edge {
+  stroke: var(--tl-fg-caption);
+  stroke-width: 0.9;
+  stroke-linecap: round;
+  stroke-dasharray: 1.5 3.5;
+}
+
+/*
+ * 枢纽 ↔ 枢纽的聚合连线（R11：不同文件夹之间也要相连）。
+ *
+ * **三层视觉权重必须拉开**（这是本轮最容易做错的地方）：
+ *   1. 文件 ↔ 文件   实线 + 关系类型色        ← 主角，最重
+ *   2. 文件夹 ↔ 文件夹 粗虚线 dash 4 3 + 中性色  ← 目录层结构，中等
+ *   3. 文件夹 ↔ 文件   细点线 dash 1.5 3.5      ← 背景上下文，最轻
+ *
+ * 因此这里：
+ * - **中性**令牌色 --tl-fg-tertiary（绝不用 --tl-warn 橙色：那是警告语义，
+ *   上一轮 16 条橙线看起来像"警报网"，用户会觉得乱）；
+ * - 线宽由内联 stroke-width 按聚合权重算（数值与封顶见 theme.ts 的
+ *   GRAPH_HUB_PAIR_WIDTH_BASE / _FACTOR / _MAX，CSS 一律不覆盖）；
+ * - 默认透明度由内联 opacity 给（GRAPH_HUB_PAIR_OPACITY；悬停枢纽提亮到 1.0、无关的降到 0.1）。
+ */
+:is(.threadline-app, .threadline-impact-root) .tl-hub-pair {
+  stroke: var(--tl-fg-tertiary);
+  stroke-linecap: round;
+  stroke-dasharray: 4 3;
+  transition: opacity var(--tl-dur-fast) ease;
+}
+
+/* 悬停某个枢纽时，它的枢纽间连线提亮（data-hub-pair-focused）。 */
+:is(.threadline-app, .threadline-impact-root) .tl-hub-pair[data-hub-pair-focused='true'] {
+  stroke: var(--tl-fg-secondary);
+}
+
+/* 无关的枢纽间连线压暗（data-hub-pair-dimmed；数值由内联 opacity 给，这里只兜底）。 */
+:is(.threadline-app, .threadline-impact-root) .tl-hub-pair[data-hub-pair-dimmed='true'] {
+  opacity: 0.1;
+}
+
+/* 悬停枢纽时其余枢纽 dim 0.4（03 §4.2.2「其余枢纽 dim 0.4」）。 */
+:is(.threadline-app, .threadline-impact-root) .tl-foldhub[data-dimmed='true'] {
+  opacity: 0.4;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-edge-badge {
+  fill: var(--tl-fg-tertiary);
+  font-size: 9px;
+  paint-order: stroke;
+  stroke: var(--tl-surface);
+  stroke-width: 2px;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+/* ---------- 轮次图节点（turn 模式） ---------- */
+
 :is(.threadline-app, .threadline-impact-root) .tl-fnode {
   cursor: pointer;
 }
@@ -241,265 +529,87 @@
   pointer-events: none;
 }
 
-/* ---------- 图尾：提示 / 状态图例 / 截断说明 ---------- */
-
-:is(.threadline-app, .threadline-impact-root) .tl-graph-foot {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 14px 10px;
-  border-block-start: 1px solid var(--tl-border-weak);
-  color: var(--tl-fg-tertiary);
-  font-size: var(--tl-fs-meta-sm);
-}
-
-:is(.threadline-app, .threadline-impact-root) .tl-graph-hint {
-  min-inline-size: 0;
-}
-
-:is(.threadline-app, .threadline-impact-root) .tl-graph-status-legend {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-:is(.threadline-app, .threadline-impact-root) .tl-graph-status-legend .tl-graph-chip {
-  block-size: 18px;
-  padding: 0 6px;
-  font-size: 10px;
-}
-
-:is(.threadline-app, .threadline-impact-root) .tl-graph-note {
-  margin-inline-start: auto;
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 8px;
-  border: 1px solid var(--tl-warn);
-  border-radius: var(--tl-radius-pill);
-  background: var(--tl-surface-raised);
-  color: var(--tl-fg);
-  white-space: nowrap;
-}
-
-:is(.threadline-app, .threadline-impact-root) .tl-graph-stage .threadline-empty {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-}
-
-/* ---------- 响应式（容器查询） ---------- */
-
-@container threadline (max-width: 1279.98px) {
-  .threadline-app .tl-graph-stage {
-    block-size: 360px;
-    min-block-size: 360px;
-  }
-}
-
-@container threadline (max-width: 999.98px) {
-  .threadline-app .tl-graph-stage {
-    block-size: 340px;
-    min-block-size: 340px;
-  }
-}
-
-@container threadline (max-width: 599.98px) {
-  .threadline-app .tl-graph-head {
-    padding: 10px 10px 6px;
-    gap: 8px;
-  }
-
-  .threadline-app .tl-graph-legend {
-    margin-inline-start: 0;
-  }
-
-  .threadline-app .tl-graph-summary {
-    padding: 8px 10px;
-  }
-
-  .threadline-app .tl-graph-stage {
-    block-size: 320px;
-    min-block-size: 320px;
-  }
-
-  .threadline-app .tl-graph-foot {
-    padding: 8px 10px 10px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .threadline-app .tl-fnode-core {
-    transition: none;
-  }
-}
-
-:is(.threadline-app, .threadline-impact-root) .tl-graph[data-reduced-motion='true'] .tl-fnode-core {
-  transition: none;
-}
-
-/* ================================================================
- * 星图总览（T35，脉络 1.1 默认左图）
- * 目录簇 + 聚合弱边 + 关系类型过滤 + 图内证据浮层 + 拖动/重置
- * ================================================================ */
-
-:is(.threadline-app, .threadline-impact-root) .tl-graph-filters {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border-block-end: 1px solid var(--tl-border-weak);
-}
-
-:is(.threadline-app, .threadline-impact-root) .tl-graph-filter-hint {
-  color: var(--tl-fg-caption);
-  font-size: var(--tl-fs-caption);
-  margin-inline-end: 2px;
-}
-
-:is(.threadline-app, .threadline-impact-root) .tl-graph-filter {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  min-block-size: 22px;
-  padding: 2px 8px;
-  border: 1px solid var(--tl-border-weak);
-  border-radius: var(--tl-radius-pill);
-  background: transparent;
-  color: var(--tl-fg-secondary);
-  font: inherit;
-  font-size: var(--tl-fs-caption);
-  cursor: pointer;
-  transition: background var(--tl-dur-base) ease, border-color var(--tl-dur-base) ease, color var(--tl-dur-base) ease;
-}
-
-:is(.threadline-app, .threadline-impact-root) .tl-graph-filter:hover {
-  background: var(--tl-hover);
-  color: var(--tl-fg);
-}
-
-:is(.threadline-app, .threadline-impact-root) .tl-graph-filter[aria-pressed='true'] {
-  border-color: var(--tl-accent);
-  color: var(--tl-fg);
-}
-
-:is(.threadline-app, .threadline-impact-root) .tl-graph-filter-count {
-  color: var(--tl-fg-caption);
-  font-variant-numeric: tabular-nums;
-}
-
-:is(.threadline-app, .threadline-impact-root) .tl-graph-filter[aria-pressed='true'] .tl-graph-filter-count {
-  color: var(--tl-accent);
-}
-
-:is(.threadline-app, .threadline-impact-root) .tl-ocluster {
-  cursor: pointer;
-  transition: opacity var(--tl-dur-base) ease;
-}
-
-:is(.threadline-app, .threadline-impact-root) .tl-ocluster[data-dim='true'] {
-  opacity: 0.4;
-}
-
-:is(.threadline-app, .threadline-impact-root) .tl-ocluster-box {
-  fill: var(--tl-hover);
-  fill-opacity: 0.35;
-  stroke: var(--tl-border-weak);
-  stroke-width: 1;
-  stroke-dasharray: 3 5;
-  transition: fill var(--tl-dur-base) ease, fill-opacity var(--tl-dur-base) ease, stroke var(--tl-dur-base) ease, stroke-width var(--tl-dur-base) ease;
-}
-
-:is(.threadline-app, .threadline-impact-root) .tl-ocluster[data-expanded='true'] .tl-ocluster-box {
-  fill: var(--tl-surface-raised);
-  fill-opacity: 0.55;
-  stroke: var(--tl-accent);
-  stroke-width: 1.5;
-  stroke-dasharray: none;
-}
-
-:is(.threadline-app, .threadline-impact-root) .tl-ocluster[data-focused='true'] .tl-ocluster-box {
-  stroke: var(--tl-accent);
-}
-
-:is(.threadline-app, .threadline-impact-root) .tl-ocluster-label {
-  fill: var(--tl-fg);
-  font-size: 11px;
-  font-weight: 600;
-  pointer-events: none;
-}
-
-:is(.threadline-app, .threadline-impact-root) .tl-ocluster-meta {
-  fill: var(--tl-fg-caption);
-  font-size: 9px;
-  pointer-events: none;
-}
-
-:is(.threadline-app, .threadline-impact-root) .tl-ocluster-more {
-  fill: var(--tl-fg-tertiary);
-  font-size: 9px;
-  pointer-events: none;
-}
+/* ---------- 当前目录文件节点（folder 模式） ---------- */
 
 :is(.threadline-app, .threadline-impact-root) .tl-ofile {
   cursor: grab;
   transition: opacity var(--tl-dur-base) ease;
 }
 
-:is(.threadline-app, .threadline-impact-root) .tl-ofile[data-dim='true'] {
-  opacity: 0.35;
-}
-
 :is(.threadline-app, .threadline-impact-root) .tl-ofile[data-dragging='true'] {
   cursor: grabbing;
 }
 
-:is(.threadline-app, .threadline-impact-root) .tl-ofile-core {
-  transform-box: fill-box;
-  transform-origin: center;
-  transition: transform var(--tl-dur-base) ease, fill-opacity var(--tl-dur-base) ease, stroke var(--tl-dur-base) ease, filter var(--tl-dur-base) ease;
+/* Q3：鼠标点击不抢 <g> 焦点（组件 pointerdown 已 preventDefault），默认大焦点框一律不画；
+   只有键盘 :focus-visible 才给 --tl-accent 2px 细环。 */
+:is(.threadline-app, .threadline-impact-root) .tl-ofile:focus {
+  outline: none;
 }
 
-:is(.threadline-app, .threadline-impact-root) .tl-ofile:hover .tl-ofile-core,
-:is(.threadline-app, .threadline-impact-root) .tl-ofile[data-selected='true'] .tl-ofile-core {
-  transform: scale(1.45);
-  filter: drop-shadow(0 0 3px var(--tl-accent));
+:is(.threadline-app, .threadline-impact-root) .tl-ofile:focus-visible {
+  outline: var(--dsw-focus-ring-width, 2px) solid var(--tl-accent);
+  outline-offset: 2px;
 }
 
-:is(.threadline-app, .threadline-impact-root) .tl-ofile-label {
-  fill: var(--tl-fg-secondary);
-  font-size: 9.5px;
-  paint-order: stroke;
-  stroke: var(--tl-surface);
-  stroke-width: 1.5px;
-  stroke-linejoin: round;
+/* 键盘聚焦时 SVG outline 在部分浏览器不生效，用同色细环兜底。 */
+:is(.threadline-app, .threadline-impact-root) .tl-ofile:focus-visible .tl-ofile-core {
+  stroke: var(--tl-accent);
+  stroke-width: 2;
+}
+
+/* r + 8 透明命中圆（扩大命中区；不影响拖动/click 判定）。 */
+:is(.threadline-app, .threadline-impact-root) .tl-ofile-hit {
+  fill: transparent;
+  pointer-events: all;
+}
+
+/* 播放头之后的未来节点只隐藏，不参与 hover/命中/标签（布局坐标保留，不重排）。 */
+:is(.threadline-app, .threadline-impact-root) .tl-ofile[data-future='true'] {
+  opacity: 0;
   pointer-events: none;
 }
 
-:is(.threadline-app, .threadline-impact-root) .tl-dir-edge {
-  stroke: var(--tl-border-strong);
-  pointer-events: stroke;
-  transition: opacity var(--tl-dur-base) ease, stroke var(--tl-dur-base) ease;
+/* hover 焦点下：无关节点 dim 0.5（03 §4.2.5；只改透明度，不改坐标/大小）。 */
+:is(.threadline-app, .threadline-impact-root) .tl-ofile[data-dimmed='true'] {
+  opacity: 0.5;
 }
 
-:is(.threadline-app, .threadline-impact-root) .tl-dir-edge:hover {
-  stroke: var(--tl-accent);
+:is(.threadline-app, .threadline-impact-root) .tl-ofile-core {
+  transition: fill-opacity var(--tl-dur-fast) ease, stroke var(--tl-dur-fast) ease;
 }
 
-:is(.threadline-app, .threadline-impact-root) .tl-edge-badge {
-  fill: var(--tl-fg-tertiary);
-  font-size: 9px;
+/* 悬停只提亮描边，不放大（力导向图里节点挨得近，放大反而压住邻居标签）。 */
+:is(.threadline-app, .threadline-impact-root) .tl-ofile[data-hovered='true'] .tl-ofile-core {
+  stroke-width: 1.8;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-ofile[data-selected='true'] .tl-ofile-core {
+  stroke-width: 1.5;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-ofile-halo {
+  pointer-events: none;
+  transition: fill-opacity var(--tl-dur-fast) ease;
+}
+
+/* 文件名标签：整词或隐藏（绝不截断成 「relati…」），描边保证压在连线上仍可读。 */
+:is(.threadline-app, .threadline-impact-root) .tl-ofile-label {
+  fill: var(--tl-fg-secondary);
+  font-family: var(--tl-mono);
+  font-size: 11px;
   paint-order: stroke;
   stroke: var(--tl-surface);
   stroke-width: 2px;
   stroke-linejoin: round;
   pointer-events: none;
 }
+
+:is(.threadline-app, .threadline-impact-root) .tl-ofile-label[data-selected='true'] {
+  fill: var(--tl-fg);
+  font-weight: 600;
+}
+
+/* ---------- 图内证据浮层（非模态 region；不是旧检查器/弹窗） ---------- */
 
 :is(.threadline-app, .threadline-impact-root) .tl-graph-evidence {
   position: absolute;
@@ -585,6 +695,8 @@
   font-size: var(--tl-fs-caption);
 }
 
+/* ---------- 加载态 ---------- */
+
 :is(.threadline-app, .threadline-impact-root) .tl-graph-loading {
   display: flex;
   align-items: center;
@@ -603,35 +715,74 @@
   animation: threadline-graph-pulse 1.2s ease-in-out infinite;
 }
 
-:is(.threadline-app, .threadline-impact-root) .tl-graph-reset {
-  margin-inline-start: auto;
-  padding: 2px 8px;
-  border: 1px solid var(--tl-border-weak);
-  border-radius: var(--tl-radius-pill);
-  background: transparent;
-  color: var(--tl-fg-secondary);
-  font: inherit;
-  font-size: var(--tl-fs-caption);
-  cursor: pointer;
-}
-
-:is(.threadline-app, .threadline-impact-root) .tl-graph-reset:hover {
-  background: var(--tl-hover);
-  color: var(--tl-fg);
-}
-
 @keyframes threadline-graph-pulse {
   0%, 100% { opacity: 0.35; }
   50% { opacity: 1; }
 }
 
+/* ---------- 画布内的空/错误态 ---------- */
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-stage .threadline-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+/* ---------- 响应式（容器查询） ---------- */
+
+@container threadline (max-width: 1279.98px) {
+  .threadline-app .tl-graph-stage {
+    block-size: 360px;
+    min-block-size: 360px;
+  }
+}
+
+@container threadline (max-width: 999.98px) {
+  .threadline-app .tl-graph-stage {
+    block-size: 340px;
+    min-block-size: 340px;
+  }
+}
+
+@container threadline (max-width: 599.98px) {
+  .threadline-app .tl-graph-head {
+    padding: 10px 10px 6px;
+    gap: 8px;
+    /* 窄容器下元素更容易换行 → 高度更不稳定；同样要钉住下限（理由见上方 .tl-graph-head）。 */
+    min-block-size: 79px;
+  }
+
+  .threadline-app .tl-graph-legend {
+    margin-inline-start: 0;
+  }
+
+  .threadline-app .tl-graph-summary {
+    padding: 8px 10px;
+  }
+
+  .threadline-app .tl-graph-stage {
+    block-size: 320px;
+    min-block-size: 320px;
+  }
+}
+
+/* ---------- reduced-motion（无过渡/无动画） ---------- */
+
 @media (prefers-reduced-motion: reduce) {
-  :is(.threadline-app, .threadline-impact-root) .tl-ocluster,
-  :is(.threadline-app, .threadline-impact-root) .tl-ocluster-box,
+  :is(.threadline-app, .threadline-impact-root) .tl-fnode-core,
   :is(.threadline-app, .threadline-impact-root) .tl-ofile,
   :is(.threadline-app, .threadline-impact-root) .tl-ofile-core,
-  :is(.threadline-app, .threadline-impact-root) .tl-dir-edge,
-  :is(.threadline-app, .threadline-impact-root) .tl-graph-evidence {
+  :is(.threadline-app, .threadline-impact-root) .tl-ofile-halo,
+  :is(.threadline-app, .threadline-impact-root) .tl-foldhub-card,
+  :is(.threadline-app, .threadline-impact-root) .tl-graph-edge,
+  :is(.threadline-app, .threadline-impact-root) .tl-graph-evidence,
+  :is(.threadline-app, .threadline-impact-root) .tl-graph-zoom-layer,
+  :is(.threadline-app, .threadline-impact-root) .tl-graph-zoom-btn,
+  :is(.threadline-app, .threadline-impact-root) .tl-graph-density-btn,
+  :is(.threadline-app, .threadline-impact-root) .tl-graph-showall {
     transition: none;
   }
 
@@ -640,58 +791,20 @@
   }
 }
 
-:is(.threadline-app, .threadline-impact-root) .tl-graph[data-reduced-motion='true'] .tl-ocluster,
-:is(.threadline-app, .threadline-impact-root) .tl-graph[data-reduced-motion='true'] .tl-ocluster-box,
+:is(.threadline-app, .threadline-impact-root) .tl-graph[data-reduced-motion='true'] .tl-fnode-core,
 :is(.threadline-app, .threadline-impact-root) .tl-graph[data-reduced-motion='true'] .tl-ofile,
 :is(.threadline-app, .threadline-impact-root) .tl-graph[data-reduced-motion='true'] .tl-ofile-core,
-:is(.threadline-app, .threadline-impact-root) .tl-graph[data-reduced-motion='true'] .tl-dir-edge,
-:is(.threadline-app, .threadline-impact-root) .tl-graph[data-reduced-motion='true'] .tl-graph-evidence {
+:is(.threadline-app, .threadline-impact-root) .tl-graph[data-reduced-motion='true'] .tl-ofile-halo,
+:is(.threadline-app, .threadline-impact-root) .tl-graph[data-reduced-motion='true'] .tl-foldhub-card,
+:is(.threadline-app, .threadline-impact-root) .tl-graph[data-reduced-motion='true'] .tl-graph-edge,
+:is(.threadline-app, .threadline-impact-root) .tl-graph[data-reduced-motion='true'] .tl-graph-evidence,
+:is(.threadline-app, .threadline-impact-root) .tl-graph[data-reduced-motion='true'] .tl-graph-zoom-layer,
+:is(.threadline-app, .threadline-impact-root) .tl-graph[data-reduced-motion='true'] .tl-graph-zoom-btn,
+:is(.threadline-app, .threadline-impact-root) .tl-graph[data-reduced-motion='true'] .tl-graph-density-btn,
+:is(.threadline-app, .threadline-impact-root) .tl-graph[data-reduced-motion='true'] .tl-graph-showall {
   transition: none;
 }
 
-/* T35 对比度与过渡：浅色主题下簇框用 sunken 层，避免白底白框；展开/轮次切换 180-240ms 淡入缩放 */
-:is(.threadline-app, .threadline-impact-root) .tl-ocluster-box {
-  fill: var(--tl-surface-sunken);
-  stroke: var(--tl-border);
-}
-
-:is(.threadline-app, .threadline-impact-root) .tl-ocluster[data-expanded='true'] .tl-ocluster-box {
-  fill: var(--tl-surface-raised);
-  stroke: var(--tl-accent);
-}
-
-:is(.threadline-app, .threadline-impact-root) .tl-graph[data-animate='true'] .tl-ocluster-box-wrap {
-  animation: threadline-ocluster-in var(--tl-dur-base) ease;
-}
-
-:is(.threadline-app, .threadline-impact-root) .tl-graph[data-animate='true'] .tl-graph-svg {
-  animation: threadline-graph-fade var(--tl-dur-slow) ease;
-}
-
-@keyframes threadline-graph-fade {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes threadline-ocluster-in {
-  from { opacity: 0.4; transform: scale(0.97); }
-  to { opacity: 1; transform: scale(1); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  :is(.threadline-app, .threadline-impact-root) .tl-ocluster-box-wrap,
-  :is(.threadline-app, .threadline-impact-root) .tl-graph-svg {
-    animation: none;
-  }
-}
-
-:is(.threadline-app, .threadline-impact-root) .tl-graph[data-reduced-motion='true'] .tl-ocluster-box-wrap,
-:is(.threadline-app, .threadline-impact-root) .tl-graph[data-reduced-motion='true'] .tl-graph-svg {
+:is(.threadline-app, .threadline-impact-root) .tl-graph[data-reduced-motion='true'] .tl-graph-loading-dot {
   animation: none;
-}
-
-
-:is(.threadline-app, .threadline-impact-root) .tl-ofile-halo {
-  pointer-events: none;
-  transition: fill-opacity var(--tl-dur-fast) ease;
 }

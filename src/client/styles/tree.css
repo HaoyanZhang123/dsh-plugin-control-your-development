@@ -1,0 +1,519 @@
+/*
+ * tree.css —— 右栏工作区文件浏览器（R03；07 §3；03 任务卡 R03）。
+ *
+ * 纪律（照 03 §13 / §15、styles.test.ts 的门禁）：
+ * - 只用 --tl-* tokens（颜色字面量只允许出现在 tokens.css）；
+ * - 每个选择器挂 .threadline-app 前缀（styles.test.ts 逐条检查）；
+ * - 长文本 min-width:0 + 省略号 + title；**不产生横向滚动**（所有行都是
+ *   min-inline-size:0 + 单行省略，宽度 100% 不超容器）；
+ * - 响应式只用容器查询（「@container threadline」，宿主面板宽度变化）：
+ *   收窄时卡片 2 列 → 1 列，列表隐藏类型/大小列（保留名称 + ops）；
+ * - reduced-motion 由 tokens.css 统一归零（这里不写 !important、不写 viewport media query）；
+ * - 行高常量与 「ui/rail/model.ts」 的 RAIL_LIST_ROW_HEIGHT 一致（tests/ui-map/rail.test.ts 守着）。
+ */
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-inline-size: 0;
+  font-family: var(--tl-font);
+  color: var(--tl-fg);
+}
+
+/* ---------------- 头部：面包屑 + 图标动作 ---------------- */
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-inline-size: 0;
+  min-block-size: 28px;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-crumbs {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-crumb-list {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  /* 单行：不换行、不横向滚动（超长时最后一段省略）。 */
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-crumb {
+  min-inline-size: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 根段与第一层优先保留宽度；中间段可以被压缩省略。 */
+:is(.threadline-app, .threadline-impact-root) .tl-tree-crumb:first-child {
+  flex: 0 0 auto;
+  max-inline-size: 45%;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-crumb-sep {
+  flex: 0 0 auto;
+  padding: 0 2px;
+  color: var(--tl-fg-tertiary);
+  font-size: var(--tl-fs-meta-sm);
+  line-height: var(--tl-lh-tight);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-crumb-btn {
+  display: block;
+  max-inline-size: 100%;
+  margin: 0;
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: var(--tl-radius-sm);
+  background: transparent;
+  color: var(--tl-fg-secondary);
+  font: inherit;
+  font-size: var(--tl-fs-meta);
+  line-height: var(--tl-lh-tight);
+  text-align: start;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  appearance: none;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-crumb-btn:hover {
+  background: var(--tl-hover);
+  color: var(--tl-fg);
+}
+
+/* aria-current = 当前层：颜色之外还有 600 字重 + 下划线（不靠颜色单独承载信息）。 */
+:is(.threadline-app, .threadline-impact-root) .tl-tree-crumb-btn[aria-current] {
+  color: var(--tl-fg);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: var(--tl-accent);
+  text-underline-offset: 2px;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-btn {
+  inline-size: 24px;
+  block-size: 24px;
+  padding: 0;
+  color: var(--tl-fg-secondary);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-glyph {
+  display: block;
+  font-size: var(--tl-fs-body);
+  line-height: 1;
+  /* 图标旋转：reduced-motion 下由 tokens.css 的 animation-duration:0 归零。 */
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-glyph[data-spinning='true'] {
+  animation: threadline-spin 900ms linear infinite;
+}
+
+@keyframes threadline-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------------- 内联进度（loading 不整块空白：细条，不挤掉旧内容） ---------------- */
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-progress {
+  position: relative;
+  block-size: 2px;
+  border-radius: var(--tl-radius-pill);
+  overflow: hidden;
+  background: var(--tl-skeleton);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-progress-bar {
+  position: absolute;
+  inset-block: 0;
+  inline-size: 32%;
+  border-radius: var(--tl-radius-pill);
+  background: var(--tl-accent);
+  animation: threadline-progress 1.1s ease-in-out infinite;
+}
+
+@keyframes threadline-progress {
+  from {
+    inset-inline-start: -32%;
+  }
+  to {
+    inset-inline-start: 100%;
+  }
+}
+
+/* ---------------- 状态：空 / 错误 / 截断 ---------------- */
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-status {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-inline-size: 0;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-empty,
+:is(.threadline-app, .threadline-impact-root) .tl-tree-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-inline-size: 0;
+  padding: 12px;
+  border: 1px dashed var(--tl-border);
+  border-radius: var(--tl-radius-md);
+  background: var(--tl-surface);
+  color: var(--tl-fg-secondary);
+  font-size: var(--tl-fs-meta);
+  line-height: var(--tl-lh-body);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-error {
+  border-style: solid;
+  border-color: var(--tl-danger);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-empty-mark,
+:is(.threadline-app, .threadline-impact-root) .tl-tree-error-mark {
+  flex: 0 0 auto;
+  font-size: var(--tl-fs-title);
+  line-height: 1;
+  color: var(--tl-fg-tertiary);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-error-mark {
+  color: var(--tl-danger);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-empty-text,
+:is(.threadline-app, .threadline-impact-root) .tl-tree-error-text {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-truncated {
+  padding: 4px 8px;
+  border-radius: var(--tl-radius-sm);
+  background: var(--tl-hover);
+  color: var(--tl-fg-tertiary);
+  font-size: var(--tl-fs-meta-sm);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--tl-lh-tight);
+}
+
+/* ---------------- 卡片模式（两列网格；目录在前由数据层排序保证） ---------------- */
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-body[role='group'] {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  align-content: start;
+  min-inline-size: 0;
+  /* 页面单滚动：右栏自己不设 overflow。 */
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid var(--tl-border);
+  border-radius: var(--tl-radius-md);
+  background: var(--tl-surface);
+  box-shadow: var(--tl-shadow-1);
+  color: var(--tl-fg);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  appearance: none;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-card:hover {
+  border-color: var(--tl-border-strong);
+  background: var(--tl-surface-raised);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-card[data-hover='true'] {
+  border-color: var(--tl-accent);
+  background: var(--tl-hover);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-card[data-selected='true'] {
+  border-color: var(--tl-accent);
+  box-shadow: inset 0 0 0 1px var(--tl-accent);
+}
+
+/* other / 文件是终端：不显示"可进入"的暗示（不改变颜色语义，只改光标）。 */
+:is(.threadline-app, .threadline-impact-root) .tl-tree-card[data-terminal='true'] {
+  cursor: default;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-inline-size: 0;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-kind {
+  flex: 0 0 auto;
+  inline-size: 14px;
+  color: var(--tl-fg-tertiary);
+  font-size: var(--tl-fs-meta-sm);
+  line-height: 1;
+  text-align: center;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-kind[data-kind='directory'] {
+  color: var(--tl-accent);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-name {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--tl-fs-subtitle);
+  font-weight: 600;
+  line-height: var(--tl-lh-tight);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-inline-size: 0;
+  overflow: hidden;
+  color: var(--tl-fg-tertiary);
+  font-size: var(--tl-fs-meta-sm);
+  line-height: var(--tl-lh-tight);
+  white-space: nowrap;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-type {
+  flex: 0 0 auto;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-size {
+  flex: 0 0 auto;
+  font-family: var(--tl-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-family {
+  flex: 0 0 auto;
+  inline-size: 6px;
+  block-size: 6px;
+  border-radius: var(--tl-radius-pill);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-current {
+  flex: 0 0 auto;
+  color: var(--tl-accent);
+  font-size: 8px;
+  line-height: 1;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-card-badges {
+  display: flex;
+  gap: 4px;
+  min-inline-size: 0;
+}
+
+/* ops 徽标：未触碰的条目**没有这个节点**（不显示假 0）。 */
+:is(.threadline-app, .threadline-impact-root) .tl-tree-ops {
+  flex: 0 0 auto;
+  block-size: 16px;
+  padding: 0 6px;
+  border-radius: var(--tl-radius-pill);
+  background: var(--tl-hover);
+  color: var(--tl-fg-secondary);
+  font-family: var(--tl-mono);
+  font-size: var(--tl-fs-meta-sm);
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+}
+
+/* ---------------- 列表模式（表格语义；固定行高 = 虚拟化单位） ---------------- */
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-body[role='table'] {
+  display: block;
+  min-inline-size: 0;
+  /* 页面单滚动：这里不开内层滚动条；虚拟化靠窗口切片（见 model.ts）。 */
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-thead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-inline-size: 0;
+  padding: 0 8px;
+  block-size: 22px;
+  border-block-end: 1px solid var(--tl-border);
+  color: var(--tl-fg-tertiary);
+  font-size: var(--tl-fs-meta-sm);
+  line-height: var(--tl-lh-tight);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-th {
+  flex: 0 0 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-th[data-col='name'] {
+  flex: 1 1 auto;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-th[data-col='type'] {
+  inline-size: 56px;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-th[data-col='size'] {
+  inline-size: 64px;
+  text-align: end;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-th[data-col='ops'] {
+  inline-size: 44px;
+  text-align: end;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-list {
+  display: block;
+  min-inline-size: 0;
+}
+
+/* 行高必须等于 RAIL_LIST_ROW_HEIGHT（30px）：虚拟化按固定行高算窗口。 */
+:is(.threadline-app, .threadline-impact-root) .tl-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  inline-size: 100%;
+  block-size: 30px;
+  min-block-size: 30px;
+  margin: 0;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--tl-radius-sm);
+  background: transparent;
+  color: var(--tl-fg);
+  font: inherit;
+  font-size: var(--tl-fs-meta);
+  line-height: var(--tl-lh-tight);
+  text-align: start;
+  cursor: pointer;
+  appearance: none;
+  /* 无横向滚动：内容宽度受容器约束，超长一律省略。 */
+  overflow: hidden;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-row:hover {
+  background: var(--tl-hover);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-row[data-hover='true'] {
+  background: var(--tl-hover);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-row[data-selected='true'] {
+  background: var(--tl-active);
+  box-shadow: inset 2px 0 0 var(--tl-accent);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-row[data-terminal='true'] {
+  cursor: default;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-row .tl-tree-name {
+  flex: 1 1 auto;
+  font-size: var(--tl-fs-meta);
+  font-weight: 500;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-row .tl-tree-type {
+  flex: 0 0 auto;
+  inline-size: 56px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--tl-fg-tertiary);
+  font-size: var(--tl-fs-meta-sm);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-row .tl-tree-size {
+  flex: 0 0 auto;
+  inline-size: 64px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--tl-fg-tertiary);
+  font-size: var(--tl-fs-meta-sm);
+  text-align: end;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-row-tail {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  max-inline-size: 44px;
+  overflow: hidden;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-pad {
+  display: block;
+  min-inline-size: 0;
+}
+
+/* ---------------- 窄栏降级（容器查询；不换 viewport media query） ---------------- */
+
+@container threadline (max-width: 899.98px) {
+  :is(.threadline-app, .threadline-impact-root) .tl-tree-body[role='group'] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* 窄栏列表：隐藏类型/大小列，只留名称 + ops（不产生横向滚动）。 */
+@container threadline (max-width: 599.98px) {
+  :is(.threadline-app, .threadline-impact-root) .tl-tree-th[data-col='type'],
+  :is(.threadline-app, .threadline-impact-root) .tl-tree-th[data-col='size'],
+  :is(.threadline-app, .threadline-impact-root) .tl-tree-row .tl-tree-type,
+  :is(.threadline-app, .threadline-impact-root) .tl-tree-row .tl-tree-size {
+    display: none;
+  }
+
+  :is(.threadline-app, .threadline-impact-root) .tl-tree-head {
+    flex-wrap: wrap;
+  }
+}

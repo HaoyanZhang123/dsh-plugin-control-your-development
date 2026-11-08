@@ -98,7 +98,7 @@
   /* —— 骨架（区域高度，8px 网格；Now/轮次带取规范给定值） —— */
   --tl-header-h: 56px;
   --tl-now-h: 36px;
-  --tl-timeline-h: 48px;
+  --tl-timeline-h: 104px;
   --tl-turns-h: 92px;
   --tl-turns-h-collapsed: 40px;
   --tl-inspector-w: 340px;

@@ -21,6 +21,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import esbuild from 'esbuild'
+import { hostShapeFailures } from './host-shape.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const LIB = join(ROOT, 'lib')
@@ -115,10 +116,9 @@ function assertClientShape(text) {
 function assertHostShape(text) {
   if (!/(^|\n)export\b/.test(text)) fail('host: 产物不是 ESM（找不到 export 语句）')
   if (!text.includes('dsh-plugin-control-your-development')) fail('host: 产物里没有插件 id')
-  // host 半区不许碰文件系统：出现 fs 导入就说明越界了。
-  if (/from\s*["']node:fs/.test(text) || /from\s*["']fs["']/.test(text)) {
-    fail('host: 空壳阶段不许 import fs')
-  }
+  // fs 边界（1.2.0：只读白名单 + 写 API 黑名单，见 tools/host-shape.mjs 与 04 §9.5）。
+  // 规则抽到独立模块，便于 tests/integration/host-shape.test.ts 正反两侧审计。
+  for (const reason of hostShapeFailures(text)) fail(reason)
 }
 
 const pkg = JSON.parse(await readFile(join(ROOT, 'package.json'), 'utf8'))

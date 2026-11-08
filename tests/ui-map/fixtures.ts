@@ -136,6 +136,11 @@ export function makeFiles(options: FileFixtureOptions = {}): FileNode[] {
   const random = makeRandom(options.seed ?? 42)
   const from = options.from ?? NOW - 30 * DAY
   const to = options.to ?? NOW
+  // 根层文件数：默认仍按比例推导（保持既有夹具规模不变——很多测试按 count 推算分布）。
+  // 想看"根目录像真的"时（R10 截图验收），调用方显式传 rootFiles，例如
+  //   makeDataset({ count: 200, rootFiles: 18 })
+  // R10 截图用的就是显式值；不要在这里抬高默认下限，否则 count 小的测试会因为
+  // "前 N 个文件全落在根层"而拿不到子目录文件（实测会让 folder.test.ts 的 6 条红）。
   const rootFiles = Math.max(0, Math.trunc(options.rootFiles ?? Math.min(4, Math.floor(count / 40))))
   const dirs = options.dirs ?? DEFAULT_DIRS
   const files: FileNode[] = []

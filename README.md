@@ -1,107 +1,108 @@
 <p align="center">
-  <img src="assets/images/threadline-cover.png" alt="Threadline 1.1: all directory clusters at once, two independent scroll panes, relation evidence and draggable nodes" width="100%">
+  <img src="assets/cover.png" alt="Threadline cover: a force-directed relation graph above a dual-track timeline" width="100%">
 </p>
 
-<h1 align="center">Threadline · 脉络</h1>
-<p align="center">A permanent read-only visual map of how a DeepSeek Harness workspace actually developed.</p>
+<h1 align="center">Threadline / 脉络</h1>
+<p align="center">A read-only DSH plugin that turns what a conversation did to your workspace into a drillable timeline.</p>
 <p align="center"><a href="README.zh.md">中文</a></p>
+
 <p align="center">
-  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white" alt="TypeScript"></a>
+  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-%E2%89%A524-339933?logo=node.js&logoColor=white" alt="Node.js 24+"></a>
+  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white" alt="TypeScript 5.9"></a>
   <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white" alt="React 18"></a>
-  <a href="https://github.com/deepseek-ai/deepseek-harness"><img src="https://img.shields.io/badge/DeepSeek%20Harness-plugin-4B6BFB" alt="DeepSeek Harness plugin"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green" alt="License MIT"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.1.0-blue" alt="Version 1.1.0"></a>
+  <a href="https://esbuild.github.io/"><img src="https://img.shields.io/badge/esbuild-0.28-FFCF00?logo=esbuild&logoColor=black" alt="esbuild 0.28"></a>
+  <a href="https://www.npmjs.com/package/dsh-plugin-control-your-development"><img src="https://img.shields.io/npm/v/dsh-plugin-control-your-development?color=CB3837&label=npm" alt="npm version"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-3DA639" alt="MIT license"></a>
 </p>
 
 ## Overview
 
-Threadline answers a question that chat logs do not: **what did this workspace actually go through, and what did each turn change?**
+Threadline is a plugin for [DeepSeek Harness](https://github.com/deepseek-ai) (DSH) that answers a
+narrow question well: **what did this conversation actually change in my workspace?**
 
-It reads what DeepSeek Harness has already recorded — sessions, subagents, tool calls, file operations, commands, background jobs — and turns it into a growing relationship map of the current workspace. Files that DSH touched become nodes, grouped by directory; turns become a strip at the bottom; every number can be traced back to a recorded event.
+It collects the files a turn touched, the commands it ran, the subagents it spawned and the relations
+between turns, then presents them as one drillable timeline embedded in the DSH session view. Everything
+is **read-only**: the plugin never writes to your workspace, never stores anything, never opens an extra
+entry point.
 
-It is **permanently read-only**. It never writes to your workspace, your session logs or your settings, never calls a model, and never makes an outbound request. It cannot start, stop or retry anything — there is deliberately no control surface at all.
-
-Typical use: you come back to a long session, or hand a workspace to someone else, and want to see where the work went.
+It is built for people who let an agent work in a repository and then need to review the result — not for
+planning, task assignment or code editing.
 
 ## Features
 
-- **Overview star map by default** — all directory clusters (every directory card; top 3 files each + `+N`), not single-directory drill-down.
-  Only directory-level weak relations are drawn by default; hover/click a card or cluster to expand its top 12 files and avoid a 3,000-node hairball.
-- **Two independent scroll panes** — the wheel scrolls the left pane only over the left pane and the right pane only over the right pane; the page/shell does not scroll; below 960px it falls back to one page scroll with stacked sections.
-- **Interactive nodes** — hover scales/glows the node, brightens connected edges and dims unrelated ones; drag nodes (in-memory only; double-click or Reset restores); 180–240ms transitions on turn changes.
-- **Explainable relations** — multiple relations between the same file pair merge into one line with type badges; relation-type chips show counts and filter; click a file/edge for an evidence popover; the footer shows loaded-session coverage. Co-occurrence is not dependency; weight is count only.
-- **Directory relation summary / turn relation badge** — cards show how many other directories they relate to and the top partner; turn blocks show the number of relations among that turn's files.
-- **Turn status only from recorded facts** — `read N`, `write +A / −D lines`, `first seen`; file-level add/delete is not provable and is not shown. The summary bar is fixed to one line, full wording in the tooltip.
-- **Per-turn impact icon** — under a finished assistant message; click jumps to the Threadline tab and focuses that turn, with no dialog.
-- **`/threadline` command** — a shortcut to the tab; no dialog, no fourth entry.
-- **Loading does not lie** — a skeleton plus “Loading files for T{n}…” while detail is pending; “no file operations” only after ready with zero files.
-- **Privacy mode / list view / progressive load / permanently read-only** — paths and titles can be masked; keyboard reachable; unloaded, failed and unobserved are labelled.
+- **Relation graph of the current directory.** A deterministic force-directed layout where folders are
+  rounded cards and files are dots. Edges are layered (skeleton, top-3 co-occurrence, the rest on hover),
+  capped at `1.6 ×` node count so the graph never turns into a spider web.
+- **Folder-to-folder links.** Aggregated from real cross-directory relations only. Folders with no real
+  relation go to a perimeter ring and are never connected by a fabricated edge.
+- **Node cap with an honest switch.** Up to 40 files by default; a persistent `Show N/M` chip switches to
+  the full set in place and auto-degrades density, labels and radius. Hard ceiling 300.
+- **Dual-track timeline.** An activity histogram per time bucket on the upper track, one row per session on
+  the lower track, a single playhead label, and exactly three scale ticks.
+- **Turn strip with lock-first selection.** Click a turn to lock it, hover another turn without losing the
+  lock, click again to release. Double-click the timeline to snap back to "now".
+- **Workspace file browser.** Starts at the workspace root, navigates to any depth, breadcrumb / back /
+  refresh, card or list view, virtualization beyond 200 rows.
+- **Zero third-party runtime dependencies.** `dependencies` is an empty object; React and `@deepseek-ai/*`
+  are peer dependencies provided by the host.
 
 ## Installation
 
-Requirements: DeepSeek Harness **0.2.2-rc.1** or newer, on a desktop or web profile.
-
-Install it as a DSH plugin from npm:
-
-```text
-Plugin manager → Add plugin → dsh-plugin-control-your-development@1.1.0
-```
-
-Or install into a profile directly:
+Threadline is a DSH plugin. Install it through the DSH plugin manager, or with npm:
 
 ```bash
-dsh plugin add dsh-plugin-control-your-development@1.1.0 --profile desktop
+npm install dsh-plugin-control-your-development
 ```
 
-Then reload the page (client code) or restart DSH (host code).
+Requirements:
 
-> Installed DSH plugins do not update automatically. Upgrading means uninstalling and installing the new version — this is a DSH behaviour, not a Threadline one.
+- DSH with runtime `0.2.1-rc.5` or later (`@deepseek-ai/dsh-session >= 0.2.0-0`)
+- React 18 and React DOM 18 provided by the host (not bundled)
+
+Restart DSH after installing or replacing the package. Replacing an already-loaded plugin requires a
+process restart; a page refresh alone does not reload it.
 
 ## Usage
 
-Open a conversation and pick the **Threadline** tab next to chat / trajectory. The tab fills the conversation area; the left and right panes scroll independently.
+Three surfaces, no fourth entry point:
 
-<p align="center">
-  <img src="assets/images/threadline-map.png" alt="Threadline 1.1: all directory clusters and two directory card columns; two independent scroll panes" width="100%">
-</p>
+| Surface | Where | What you get |
+| --- | --- | --- |
+| **Threadline tab** | `conversation.view`, id `threadline` | Left column: relation graph of the current directory + dual-track timeline + turn strip. Right column: workspace file browser. Both columns scroll independently. |
+| **Impact count** | assistant message actions, id `threadline-impact` | Files / commands / subagents touched by that turn. Clicking jumps to the Threadline tab focused on that turn — no dialog. |
+| **`/threadline`** | input box command (also `/脉络`) | Jumps to the Threadline tab for the current session. |
 
-- See every directory cluster by default; hover/click a directory card or a cluster in the map to expand its files; click to pin.
-- Click a file node for relations; click relation-type chips to filter; drag nodes to arrange; double-click or “Reset layout” restores.
-- Click a turn to see its files, read/written lines, first-seen and relations; click again or Esc to return to the overview.
-- The timeline plays the workspace back in time; ranges are **today / 7 days / 30 days / all**.
-- `/threadline` jumps to the tab; the per-turn impact icon jumps and focuses that turn.
+Typical flow:
 
-<p align="center">
-  <img src="assets/images/threadline-focus.png" alt="A directory cluster expanded to its top 12 files; other clusters dimmed" width="100%">
-</p>
-
-<p align="center">
-  <img src="assets/images/threadline-turn.png" alt="Turn view: read / written-line / first-seen status and relation types" width="100%">
-</p>
-
-Threadline only reads the workspace the current session belongs to. Sessions from other workspaces, profiles or machines are not aggregated.
+1. Open a session and switch to the **Threadline** tab.
+2. The left graph shows the current directory. Click a folder card to enter it; the right column follows.
+3. Hover a file to highlight its relations; click to pin the evidence panel.
+4. Click a turn in the strip to lock that turn's file graph. Click it again to release.
+5. Drag a folder card or a file dot to rearrange. Use `Fit` to reset the camera and `Reset` to clear drags.
 
 ## Configuration
 
-None. There is no configuration file, no setting, no stored preference and no cached artefact — all filters, selections and time ranges live in memory and reset when you reload. The only thing it needs is the workspace it is already in.
+No configuration is required. The plugin reads the session's working directory from DSH and needs no
+environment variables, tokens or storage paths.
 
 ## Project structure
 
-```text
+```
 plugin/
-  src/shared/      event reducer, relation engine, reference parsers
-  src/host/        read-only scan, in-memory index, local read-only routes
-  src/client/      data layer, UI, three entries
-  lib/             build output loaded by DSH (do not edit)
-  tests/           unit, integration and screenshot harness
+  src/host/       read-only directory listing, routes, session scan
+  src/client/     UI: graph, timeline, turn strip, file browser, inspector
+  src/shared/     relation model, path utilities, parsers
+  lib/            build output (generated; never edit by hand)
+  tests/          node --test suites and browser harness
 ```
 
 ## Releases
 
-Current release: **panel plugin v1.1.0** (stable).
+Current release: **panel plugin v1.4.0** (stable).
 
-See [CHANGELOG.md](CHANGELOG.md) for what changed in each version, and the [Releases](https://github.com/HaoyanZhang123/dsh-plugin-control-your-development/releases) page for installable versions.
+- Changelog: [CHANGELOG.md](CHANGELOG.md)
+- GitHub Releases: https://github.com/HaoyanZhang123/dsh-plugin-control-your-development/releases
 
 ## License
 
-[MIT](LICENSE)
+MIT — see [LICENSE](LICENSE).

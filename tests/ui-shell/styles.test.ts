@@ -174,7 +174,7 @@ test('断点齐全：1100 / 900 / 600 / 420 都有对应容器查询', () => {
   assert.equal(BREAKPOINTS.minimum, 420)
 })
 
-test('区域高度来自规范（56/36/48/92/40/340/360/320）', () => {
+test('区域高度来自规范（SHELL_METRICS 与 tokens.css 逐项一致）', () => {
   const expectations: Array<[string, number]> = [
     ['--tl-header-h', SHELL_METRICS.header],
     ['--tl-now-h', SHELL_METRICS.now],

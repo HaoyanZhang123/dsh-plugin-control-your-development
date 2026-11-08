@@ -1,109 +1,103 @@
 <p align="center">
-  <img src="assets/images/threadline-cover.png" alt="脉络 1.1：目录簇总览 + 双栏独立滚动 + 关系证据与可拖动节点" width="100%">
+  <img src="assets/cover.png" alt="脉络封面：上方是力导向关系图，下方是双轨时间轴" width="100%">
 </p>
 
-<h1 align="center">脉络 · Threadline</h1>
-<p align="center">永久只读地呈现一个 DeepSeek Harness 工作区实际是怎么长出来的。</p>
+<h1 align="center">脉络 / Threadline</h1>
+<p align="center">只读的 DSH 插件：把一段对话对工作区做了什么，串成一条可下钻的时间线。</p>
 <p align="center"><a href="README.md">English</a></p>
+
 <p align="center">
-  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white" alt="TypeScript"></a>
+  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-%E2%89%A524-339933?logo=node.js&logoColor=white" alt="Node.js 24+"></a>
+  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white" alt="TypeScript 5.9"></a>
   <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white" alt="React 18"></a>
-  <a href="https://github.com/deepseek-ai/deepseek-harness"><img src="https://img.shields.io/badge/DeepSeek%20Harness-%E6%8F%92%E4%BB%B6-4B6BFB" alt="DeepSeek Harness 插件"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green" alt="MIT 许可证"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.1.0-blue" alt="版本 1.1.0"></a>
+  <a href="https://esbuild.github.io/"><img src="https://img.shields.io/badge/esbuild-0.28-FFCF00?logo=esbuild&logoColor=black" alt="esbuild 0.28"></a>
+  <a href="https://www.npmjs.com/package/dsh-plugin-control-your-development"><img src="https://img.shields.io/npm/v/dsh-plugin-control-your-development?color=CB3837&label=npm" alt="npm 版本"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-3DA639" alt="MIT 许可证"></a>
 </p>
 
 ## 简介
 
-对话记录回答不了这个问题：**这个工作区到底经历了什么，每一轮改动了什么？**
+脉络是 [DeepSeek Harness](https://github.com/deepseek-ai)（DSH）的插件，只回答一个很窄的问题：
+**这段对话到底改了工作区里的什么？**
 
-脉络读取 DeepSeek Harness 已经记录下来的内容——会话、子智能体、工具调用、文件操作、命令、后台任务——把它变成当前工作区一张会生长的关系图。被 DSH 触碰过的文件成为节点、按目录分簇；轮次在底部排成一条带；每一个数字都能追溯到某条记录。
+它把某一轮碰过的文件、跑过的命令、派生过的子智能体，以及轮次之间的关系收集起来，
+在 DSH 会话页里呈现为一条可下钻的时间线。整个产品是**只读**的：不写工作区、不做任何存储、
+不注册多余入口。
 
-它是**永久只读**的：不写工作区、不写会话日志、不改设置、不调用模型、不发出任何外部请求；也没有开始 / 停止 / 重试这类控制面——**刻意一个都没有**。
-
-适合的场景：回到一段很长的会话，或把一个工作区交给别人，想知道这些工作是怎么走过来的。
+它面向的是让 agent 在仓库里干活、随后需要复核结果的人——不是排期、任务分派或写代码本身。
 
 ## 核心特性
 
-- **默认总览星图** —— 左图显示全部目录簇（右卡全部目录；每簇 top3 文件 + `+N` 聚合），不再是单目录钻取；
-  簇间只画目录级弱关系，hover/点击卡片或簇才展开 top12 文件，避免数千节点蜘蛛网。
-- **双栏独立滚动** —— 指针在左栏只滚左栏、在右栏只滚右栏；页面与 shell 不滚；<960px 回退单页滚动 + 上下堆叠。
-- **可交互节点** —— 节点 hover 放大/光晕、相连边提亮、无关 dim；节点可拖动（仅内存，双击/重置恢复）；轮次切换 180–240ms 过渡。
-- **关系可解释** —— 同一对文件多条关系按 pair 合并为一条线 + 类型徽标；关系类型 chip 有计数可过滤；
-  点击文件/边显示 evidence 浮层；图尾显示已加载会话覆盖。共现不是依赖，权重只表示次数。
-- **目录卡关系摘要 / 轮次关系徽标** —— 卡片显示与多少其它目录相关、top partner；轮次块显示本轮文件之间关系数。
-- **轮次状态只在可证事实上叠加** —— `读 N` / `写 +A/−D 行` / `首见`；文件级删除/新增不可证，不显示；
-  摘要条固定单行，完整语义在 tooltip。
-- **每轮影响入口** —— 已定稿助手消息下的图标；点击直接切到「脉络」tab 并聚焦该轮，不打开窗口。
-- **`/threadline` 命令** —— 快捷入口：切到「脉络」tab；无弹窗、无第四入口。
-- **加载不撒谎** —— detail 未就绪显示骨架 +「正在读取 T{n} 的文件…」；只有 ready 且 0 文件才说“这一轮没有文件操作”。
-- **隐私模式 / 列表视图 / 渐进加载 / 永只读** —— 路径/标题可掩码；键盘可达；未加载/失败/观测不到显式标注。
+- **当前目录的关系图**：确定性力导向布局，文件夹是圆角卡片、文件是圆点。
+  边分三档（骨架 / 每个节点 top-3 共现 / 其余悬停淡入），总边数硬上限 `1.6 ×` 节点数，不会糊成蜘蛛网。
+- **文件夹之间也有连线**：只用真实的跨目录关系聚合。没有真实关系的文件夹放在外围环上，
+  **绝不伪造**连线。
+- **节点上限 + 诚实的开关**：默认最多 40 个文件；常驻的 `显示 N/M` chip 可就地切到全部，
+  并自动降级（关系密度、标签、半径）。硬上限 300。
+- **双轨时间轴**：上轨是按时间分桶的活跃度柱状图，下轨每个会话一行，
+  播放头只有一个标签，底部只留三个刻度。
+- **轮次带「锁定优先」**：点一下锁定某一轮，悬停其他轮次不会抢走画面，再点一下释放。
+  双击时间轴回到"最新"。
+- **工作区文件浏览器**：从工作区根开始，可下钻任意深度，面包屑 / 回退 / 更新，
+  卡片或列表两种视图，超过 200 行自动虚拟化。
+- **零第三方运行时依赖**：`dependencies` 是空对象；React 与 `@deepseek-ai/*` 都是宿主提供的 peer 依赖。
 
 ## 安装
 
-前提：DeepSeek Harness **0.2.2-rc.1** 或更新版本（桌面版或 Web 版 profile）。
-
-从 npm 安装：
-
-```text
-插件管理 → Add plugin → dsh-plugin-control-your-development@1.1.0
-```
-
-或直接装进 profile：
+脉络是 DSH 插件。通过 DSH 插件管理器安装，或用 npm：
 
 ```bash
-dsh plugin add dsh-plugin-control-your-development@1.1.0 --profile desktop
+npm install dsh-plugin-control-your-development
 ```
 
-装完刷新页面（客户端代码生效）或重启 DSH（宿主代码生效）。
+环境要求：
 
-> DSH 已安装的插件不会自动更新。升级 = 卸载后重装，这是 DSH 的行为，不是脉络的限制。
+- DSH 运行时 `0.2.1-rc.5` 或更新（`@deepseek-ai/dsh-session >= 0.2.0-0`）
+- React 18 与 React DOM 18 由宿主提供（不打包进产物）
+
+安装或替换包之后需要**重启 DSH**。替换一个已经加载过的插件必须重启进程，
+仅刷新页面不会重新加载。
 
 ## 使用方式
 
-打开任意会话，点对话页的 **脉络 / Threadline** tab（在「对话」「轨迹」之后）。tab 占满会话区域，左右栏各自滚动。
+三个表面，没有第四个入口：
 
-<p align="center">
-  <img src="assets/images/threadline-map.png" alt="脉络 1.1：全部目录簇总览与右侧两列目录卡片；双栏独立滚动" width="100%">
-</p>
+| 表面 | 位置 | 看到什么 |
+| --- | --- | --- |
+| **脉络 tab** | `conversation.view`，id `threadline` | 左列：当前目录的关系图 + 双轨时间轴 + 轮次带。右列：工作区文件浏览器。左右两栏独立滚动。 |
+| **影响计数** | 助手消息操作区，id `threadline-impact` | 这一轮碰了几个文件 / 跑了几条命令 / 派了几个子智能体。点击直接跳到「脉络」tab 并聚焦该轮，不弹窗。 |
+| **`/threadline`** | 输入框命令（中文 `/脉络` 同效） | 跳到当前会话的「脉络」tab。 |
 
-- 默认看到全部目录簇；点/hover 右侧目录卡或左图簇展开内部文件，点击 pin/收起。
-- 点文件节点看关系；点关系类型 chip 过滤；拖动节点调整位置，双击或「重置布局」恢复。
-- 点轮次查看该轮文件、读/写行/首见与关系；再点或 Esc 回总览。
-- 时间轴把工作区按时间回放；范围有 **今天 / 7 天 / 30 天 / 全部**。
-- `/threadline` 命令 = 跳 tab；每轮「影响」图标 = 跳 tab 并聚焦该轮。
+典型流程：
 
-<p align="center">
-  <img src="assets/images/threadline-focus.png" alt="点目录卡后的簇展开：top12 文件、其他簇变暗" width="100%">
-</p>
-
-<p align="center">
-  <img src="assets/images/threadline-turn.png" alt="轮次视图：读 / 写行 / 首见状态与关系类型" width="100%">
-</p>
-
-脉络只读当前会话所属的**那一个工作区**；不汇总其它工作区、profile 或机器。
+1. 打开一个会话，切到 **脉络** tab。
+2. 左图显示当前目录。点文件夹卡片进入该目录，右栏跟着走。
+3. 悬停文件高亮它的关系；点击钉住证据面板。
+4. 点轮次带里的某一轮，锁定该轮的文件图；再点一次释放。
+5. 拖动文件夹卡片或文件圆点可以重新摆位；`适应` 复位相机，`重置` 清掉拖动。
 
 ## 配置
 
-不需要。没有配置文件、没有设置项、不保存偏好、不落任何缓存产物——所有筛选、选择与时间范围都只在内存里，刷新即重置。它唯一需要的就是它已经在的那个工作区。
+无需配置。插件从 DSH 读取当前会话的工作目录，不需要环境变量、令牌或存储路径。
 
 ## 项目结构
 
-```text
+```
 plugin/
-  src/shared/      事件归约、关系引擎、引用解析
-  src/host/        只读扫描、内存索引、本地只读路由
-  src/client/      数据层、界面、三个入口
-  lib/             DSH 实际加载的构建产物（不要手改）
-  tests/           单元、集成与截图夹具
+  src/host/       只读目录列举、路由、会话扫描
+  src/client/     界面：关系图、时间轴、轮次带、文件浏览器、检查器
+  src/shared/     关系模型、路径工具、解析器
+  lib/            构建产物（生成物，禁止手改）
+  tests/          node --test 套件与浏览器 harness
 ```
 
-## 发布
+## 更新与发布
 
-当前版本：**面板插件 v1.1.0**（正式版）。
+当前发布：**面板插件 v1.4.0**（稳定）。
 
-每个版本改了什么见 [CHANGELOG.md](CHANGELOG.md)，可安装的版本见 [Releases](https://github.com/HaoyanZhang123/dsh-plugin-control-your-development/releases)。
+- 更新记录：[CHANGELOG.md](CHANGELOG.md)
+- GitHub Releases：https://github.com/HaoyanZhang123/dsh-plugin-control-your-development/releases
 
 ## 许可证
 
-[MIT](LICENSE)
+MIT —— 见 [LICENSE](LICENSE)。
