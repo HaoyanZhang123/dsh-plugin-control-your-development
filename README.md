@@ -72,6 +72,8 @@ Three surfaces, no fourth entry point:
 | **Impact count** | assistant message actions, id `threadline-impact` | Files / commands / subagents touched by that turn. Clicking jumps to the Threadline tab focused on that turn — no dialog. |
 | **`/threadline`** | input box command (also `/脉络`) | Jumps to the Threadline tab for the current session. |
 
+![The Threadline tab: relation graph and dual-track timeline on the left, workspace file browser on the right](docs/images/overview.png)
+
 Typical flow:
 
 1. Open a session and switch to the **Threadline** tab.
@@ -79,6 +81,29 @@ Typical flow:
 3. Hover a file to highlight its relations; click to pin the evidence panel.
 4. Click a turn in the strip to lock that turn's file graph. Click it again to release.
 5. Drag a folder card or a file dot to rearrange. Use `Fit` to reset the camera and `Reset` to clear drags.
+
+### Folder-to-folder links
+
+A directory with many subfolders is not a scatter of isolated cards: folders that really exchanged
+files are connected, so you can see which parts of the workspace move together.
+
+![Twenty folder hubs connected by folder-to-folder links derived from real cross-directory relations](docs/images/folder-links.png)
+
+### One turn in isolation
+
+Clicking a turn switches the left graph to that turn's files and overlays the read / write line counts.
+
+![The graph while a single turn is selected, with per-file added and removed line counts](docs/images/turn-graph.png)
+
+### Node cap
+
+Directories with more than 40 files keep the most active ones and show a persistent `Show N/M` chip.
+Switching to the full set degrades density, labels and radius automatically.
+
+![A directory with more files than the node cap, after switching to the full set](docs/images/show-all.png)
+
+> The screenshots above are rendered from the real component with a synthetic fixture dataset, so the
+> file names are test data; the interface itself is not a mock-up.
 
 ## Configuration
 

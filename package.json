@@ -19,7 +19,8 @@
     "PLUGIN.md",
     "LICENSE",
     "assets/icon.webp",
-    "assets/cover.png"
+    "assets/cover.png",
+    "docs/images"
   ],
   "//": [
     "JSON 没有注释语法，说明按惯例放在 \"//\" 键里（npm/pnpm 忽略它，实测不影响 pack 与 npm pkg get）。",
