@@ -240,6 +240,7 @@ export function createIdleControllerSnapshot(): ControllerSnapshot {
     graph,
     coverage: graph.coverage,
     degrade: degradeNone(),
+    skipped: { request: 0, ownership: 0, refresh: 0 },
     retries: 0,
     reopens: 0,
     workspaceId: '',

@@ -33,8 +33,9 @@ function body(overrides: Record<string, unknown> = {}): Record<string, unknown> 
   }
 }
 
-test('参数校验：sessionId/cwd/updatedAt/refresh/数组上限各自拒绝为 bad-request（不读日志）', () => {
-  const cases: Array<[string, unknown]> = [
+test('参数校验：**结构性**错误拒绝为 bad-request，**行级**问题跳过并记账（不读日志）', () => {
+  // 第一层：结构性错误 —— 请求本身不成立，必须响亮失败。
+  const structural: Array<[string, unknown]> = [
     ['body 非对象', 'nope'],
     ['workspaceId 空', body({ workspaceId: '' })],
     ['cwd 相对', body({ cwd: 'relative/path' })],
@@ -42,34 +43,85 @@ test('参数校验：sessionId/cwd/updatedAt/refresh/数组上限各自拒绝为
     ['generation 负数', body({ generation: -1 })],
     ['generation 非整数', body({ generation: 1.5 })],
     ['sessions 非数组', body({ sessions: {} })],
-    ['session id 路径穿越', body({ sessions: [sessionInput('../etc', NOW)] })],
-    ['session id 绝对路径', body({ sessions: [sessionInput('C:/Windows/win.ini', NOW)] })],
-    ['session id 超长', body({ sessions: [sessionInput('a'.repeat(201), NOW)] })],
-    ['updatedAt 负数', body({ sessions: [{ id: 's-1', updatedAt: -1, running: false }] })],
-    ['updatedAt 非有限', body({ sessions: [{ id: 's-1', updatedAt: Number.POSITIVE_INFINITY, running: false }] })],
-    ['running 非布尔', body({ sessions: [{ id: 's-1', updatedAt: 1, running: 'yes' }] })],
-    ['refresh 非数组', body({ refresh: 's-1' })],
-    ['refresh 不在 sessions', body({ refresh: ['s-other'] })],
-    ['refresh 非法 id', body({ refresh: ['../x'] })],
   ]
-  for (const [label, value] of cases) {
+  for (const [label, value] of structural) {
     const result = validateScanRequest(value)
     assert.equal(result.ok, false, label)
     if (result.ok === false) assert.equal(result.code, 'threadline/bad-request', label)
   }
 
+  // 第二层：行级问题 —— 只跳过那一行并计数，**不让整条扫描失败**
+  // （2026-11-09 真机事故：一个 title: null 打掉了 153 个会话的工作区）。
+  const rowLevel: Array<[string, unknown]> = [
+    ['session id 路径穿越', body({ sessions: [{ id: '../etc', updatedAt: NOW, running: false }] })],
+    ['session id 绝对路径', body({ sessions: [{ id: 'C:/Windows/win.ini', updatedAt: NOW, running: false }] })],
+    ['session id 超长', body({ sessions: [{ id: 'a'.repeat(201), updatedAt: NOW, running: false }] })],
+    ['updatedAt 负数', body({ sessions: [{ id: 's-1', updatedAt: -1, running: false }] })],
+    ['updatedAt 非有限', body({ sessions: [{ id: 's-1', updatedAt: Number.POSITIVE_INFINITY, running: false }] })],
+  ]
+  for (const [label, value] of rowLevel) {
+    const result = validateScanRequest(value)
+    assert.equal(result.ok, true, label)
+    if (result.ok === true) {
+      assert.equal(result.value.request.sessions.length, 0, label)
+      assert.equal(result.value.skipped.length, 1, label)
+    }
+  }
+
+  // 可选字段是 null / 类型不对：视为**缺省**，不拒绝、不跳过（这是本轮事故的直接成因）。
+  for (const label of ['parentId', 'title', 'origin'] as const) {
+    const result = validateScanRequest(
+      body({ sessions: [{ id: 's-1', updatedAt: NOW, running: false, [label]: null }] }),
+    )
+    assert.equal(result.ok, true, label + ' = null 应视为缺省')
+    if (result.ok === true) {
+      assert.equal(result.value.request.sessions.length, 1, label)
+      assert.equal(result.value.skipped.length, 0, label)
+      assert.equal((result.value.request.sessions[0] as unknown as Record<string, unknown>)[label], undefined, label)
+    }
+  }
+
+  // running 非布尔 → 归一到 false（保留这一行，而不是丢掉整个会话）。
+  const coercedRunning = validateScanRequest(
+    body({ sessions: [{ id: 's-1', updatedAt: NOW, running: 'yes' }] }),
+  )
+  assert.equal(coercedRunning.ok, true)
+  if (coercedRunning.ok) {
+    assert.equal(coercedRunning.value.request.sessions.length, 1)
+    assert.equal(coercedRunning.value.request.sessions[0].running, false)
+  }
+
+  // refresh 是优化提示：非法/不存在的 id 丢弃并计数，绝不因此拒绝整条请求。
+  const refresh = validateScanRequest(
+    body({ refresh: ['s-1', 's-other', '../x'] }),
+  )
+  assert.equal(refresh.ok, true)
+  if (refresh.ok) assert.equal(refresh.value.refreshDropped, 2)
+
+  // 未知字段一律忽略（宿主以后加字段时前向兼容）。
+  const unknownField = validateScanRequest(
+    body({ sessions: [{ id: 's-1', updatedAt: NOW, running: false, brandNewField: { nested: 1 } }] }),
+  )
+  assert.equal(unknownField.ok, true)
+  if (unknownField.ok) {
+    assert.equal(unknownField.value.request.sessions.length, 1)
+    assert.equal('brandNewField' in unknownField.value.request.sessions[0], false)
+  }
+
   // 合法请求通过
   assert.equal(validateScanRequest(body()).ok, true)
-  // 3000 上限：3001 条拒绝
+  // 3000 上限：3001 条拒绝（资源性硬上限仍属结构性错误）
   const tooMany = Array.from({ length: 3001 }, (_, index) => sessionInput(`s-${index}`, NOW))
-  const over = validateScanRequest(body({ sessions: tooMany }))
-  assert.equal(over.ok, false)
+  assert.equal(validateScanRequest(body({ sessions: tooMany })).ok, false)
   // 重复 id 去重（同一会话只处理一次，total 不错算）
   const deduped = validateScanRequest(
     body({ sessions: [sessionInput('s-1', NOW), sessionInput('s-1', NOW + 1)] }),
   )
   assert.equal(deduped.ok, true)
-  if (deduped.ok) assert.equal(deduped.value.sessions.length, 1)
+  if (deduped.ok) {
+    assert.equal(deduped.value.request.sessions.length, 1)
+    assert.equal(deduped.value.skipped.length, 1)
+  }
 })
 
 test('参数校验：snapshot/detail 的 scanId、sessionId、sinceRev 拒绝坏输入', () => {
@@ -108,10 +160,13 @@ test('N-07 归属校验：工作区外会话（无父）→ bad-request，且从
   const routes = makeRoutes(persistence)
   try {
     const reply = await post(routes, 'scan', body({ sessions: [sessionInput('s-1', NOW), sessionInput('s-foreign', NOW)] }))
-    assert.equal(errorCode(reply), 'threadline/bad-request')
-    // 归属校验只读 header（stat），从未 open 读取事件：不接受任意 sessionId 就能读日志。
+    // 新策略（2026-11-09）：工作区外的会话被**跳过并计数**，同 workspace 的会话照常扫描。
+    assert.equal(reply.json.ok, true, '不应整条拒绝')
+    assert.equal((reply.json.skipped as { ownership?: number } | undefined)?.ownership, 1,
+      '被跳过的会话要计数上报，不能静默丢')
+    // 安全性质不变：工作区外的会话**永远不被 open**（只 stat 过 header）——
+    // 不接受任意 sessionId 就能读日志。本工作区的会话 s-1 正常进入扫描（可能被 open）。
     assert.equal(persistence.opens.get('s-foreign'), undefined)
-    assert.equal(persistence.opens.get('s-1'), undefined)
     assert.ok((persistence.stats.get('s-foreign') ?? 0) >= 1)
   } finally {
     routes.dispose()
@@ -125,7 +180,9 @@ test('N-07 归属校验：无法验证的会话（header 读不到）→ bad-req
   const routes = makeRoutes(persistence)
   try {
     const reply = await post(routes, 'scan', body({ sessions: [sessionInput('s-1', NOW), sessionInput('s-ghost', NOW)] }))
-    assert.equal(errorCode(reply), 'threadline/bad-request')
+    // 读不到 header 的会话跳过并计数，其余照常（单条坏不该毁掉整个工作区）。
+    assert.equal(reply.json.ok, true, '不应整条拒绝')
+    assert.equal((reply.json.skipped as { ownership?: number } | undefined)?.ownership, 1)
   } finally {
     routes.dispose()
   }

@@ -18,6 +18,7 @@ import type { DetailEntry, DetailStore } from './detail.ts'
 import type { Coverage, WorkspaceGraph } from './merge.ts'
 import type { DegradeState } from './degrade.ts'
 import type { FetchLike } from './http.ts'
+import type { ScanSkippedSummary } from '../../shared/events/index.ts'
 import type { ThreadlineError } from '../../shared/events/index.ts'
 import {
   createIdleControllerSnapshot,
@@ -50,6 +51,8 @@ export interface ThreadlineDataView {
   generation: number
   scanId?: string
   error?: ThreadlineError
+  /** 被容错跳过的会话计数（数据不完整时必须让用户看见）。 */
+  skipped: ScanSkippedSummary
   /** 重新读取（保留已加载数据，直到新数据到达）。 */
   refresh(): void
   /** failed 后重试。 */
@@ -71,6 +74,7 @@ function viewOf(
     generation: current.generation,
     ...(current.scanId === undefined ? {} : { scanId: current.scanId }),
     ...(current.error === undefined ? {} : { error: current.error }),
+    skipped: current.skipped,
     refresh,
     retry,
   }

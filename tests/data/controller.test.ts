@@ -180,7 +180,8 @@ test('A20-2 渐进加载：顺序、进度、partial、complete 都真实', asyn
 
 test('A20-2 scan 请求只含当前 workspace 的会话（A20-1 的请求侧证据）', () => {
   const scope = makeScope()
-  const request = buildScanRequest(scope, 3)
+  // buildScanRequest 返回 { body, skipped }：body 是发出去的请求，skipped 是归一化丢掉的计数
+  const request = buildScanRequest(scope, 3).body
   assert.equal(request.workspaceId, 'ws-main')
   assert.equal(request.cwd, CWD)
   assert.equal(request.generation, 3)
@@ -189,8 +190,8 @@ test('A20-2 scan 请求只含当前 workspace 的会话（A20-1 的请求侧证�
     ['s-current', 's-child', 's-recent', 's-history'],
   )
   assert.equal(request.sessions.some((session) => session.id.startsWith('s-other')), false)
-  // refresh 只保留 scope 内的 id（host 会拒绝 scope 外的 id）
-  const withRefresh = buildScanRequest(scope, 4, ['s-current', 's-other-root'])
+  // refresh 只保留 scope 内的 id（host 侧非法 id 会被丢弃而不是整条拒绝）
+  const withRefresh = buildScanRequest(scope, 4, ['s-current', 's-other-root']).body
   assert.deepEqual(withRefresh.refresh, ['s-current'])
 })
 

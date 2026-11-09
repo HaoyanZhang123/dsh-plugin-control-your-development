@@ -484,7 +484,7 @@ test('N-17 归档会话：标记归档、可筛选、不混入活跃', () => {
   assert.equal(scope.counts.current, 1)
   const filtered = withoutArchived(scope)
   assert.equal(filtered.sessions.some((session) => session.id === 's-archived'), false)
-  assert.equal(toScanSessions(scope).some((session) => session.id === 's-archived'), true) // 扫描含归档（带标记）
+  assert.equal(toScanSessions(scope).sessions.some((session) => session.id === 's-archived'), true) // 扫描含归档（带标记）
   const options = buildScopeOptions(withoutArchived(scope).sessions as never, t)
   assert.equal(options.some((option) => option.label.includes('归档')), false)
 })

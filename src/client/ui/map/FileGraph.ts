@@ -29,6 +29,8 @@ import { graphRadius, layoutFileGraph, type GraphLayout, type GraphLayoutNode, t
 import { FAMILY_COLOR, FAMILY_MESSAGE_KEY, GRAPH_CLASS, GRAPH_DATA, GRAPH_EDGE_LIMITS, GRAPH_LABEL_LIMITS, RELATION_MESSAGE_KEY, STATUS_COLOR } from './theme.ts'
 import { ZoomGroup } from './zoomGroup.ts'
 
+import { graphSkeleton } from './skeleton.ts'
+
 const h = React.createElement
 
 /** 本轮信息（turn 视图用；由入口算好状态后传入）。 */
@@ -571,9 +573,14 @@ function TurnMap(props: TurnMapProps): React.ReactElement {
       props.loading === true
         ? h(
             'div',
-            { className: 'tl-graph-loading', role: 'status', [GRAPH_DATA.loading]: 'true' },
-            h('span', { className: 'tl-graph-loading-dot', 'aria-hidden': true }),
-            h('span', null, props.loadingLabel ?? t('graph.loadingTurn', { n: props.turn?.turn.n ?? '' })),
+            { className: 'tl-graph-loading tl-graph-loading-skeleton', [GRAPH_DATA.loading]: 'true' },
+            graphSkeleton('turn'),
+            h(
+              'div',
+              { className: 'tl-graph-loading-label', role: 'status' },
+              h('span', { className: 'tl-graph-loading-dot', 'aria-hidden': true }),
+              h('span', null, props.loadingLabel ?? t('graph.loadingTurn', { n: props.turn?.turn.n ?? '' })),
+            ),
           )
         : empty
           ? h(EmptyState, { title: emptyTitle, mark: '◌', testId: 'graph-empty' })

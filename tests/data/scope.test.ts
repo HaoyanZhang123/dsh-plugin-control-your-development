@@ -88,7 +88,7 @@ test('A20-1 排序：当前 → 子智能体 → 最近 7 天 → 历史 → 归
 
 test('A20-1 toScanSessions 只含当前 workspace，且行形状满足 04 §2.4', () => {
   const { scope } = build()
-  const sessions = toScanSessions(scope)
+  const sessions = toScanSessions(scope).sessions
   assert.equal(sessions.length, 7)
   const ids = sessions.map((session) => session.id)
   assert.equal(ids.includes('s-other-root'), false)

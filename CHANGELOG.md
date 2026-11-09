@@ -9,6 +9,59 @@
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-11-09
+
+### 优化 | Improved（2026-11-09 首次打开与轮次切换的等待感）
+
+- **图区骨架**：loading 时不再只有一个居中转圈点，而是渲染与真实布局同构的占位
+  （文件夹卡片 + 文件圆点 + 虚线关系；坐标来自固定表，不用随机数，两次渲染逐字节相同）。
+  整块 `aria-hidden`，状态播报仍由 `role="status"` 那行文字负责；尊重 `prefers-reduced-motion`。
+- **预热当前会话详情**：扫描一开始就在后台拉起「当前会话 + 其直接子智能体」（上限 4 个）的
+  `detail`，这样一个会话只读一次、点它的**任意**轮次都命中缓存。
+  原先只有「全部轮次」视图预热了前 8 个根会话，**默认单会话视图完全没有预热**。
+- 不做全量预载：153 个会话全解析会让「打开 tab」变成几十秒，比现状更差。
+
+### 修复 | Fixed（2026-11-09 真机事故：整条扫描被一行脏数据打掉）
+
+**现象**：某个 153 个会话的工作区，「脉络」左图永远停在「正在加载文件关系…」，
+诊断条显示 `status=failed degrade=failed code=threadline/bad-request sessions=153 files=0`。
+右栏文件浏览器正常（它走 `/tree`，由 host 自己从持久层取 cwd），只有左图挂掉。
+
+**根因（两层，都属于「一行坏 → 整条请求 400」）**
+1. **协议层零容忍**：客户端 `toScanSessions` 只判 `!== undefined` 未判类型，
+   宿主给的 `title: null` / `parentId: null` / `origin: null` 被原样发出，
+   host 判定 `invalid title/parentId/origin` → 整条 `/scan` 400。
+   TypeScript 的可选类型在运行时被擦除，**类型声明不构成防线**。
+2. **归属校验全有全无**：`validateOwnership` 里任一会话读不出 header、
+   或 `header.cwd` 与**客户端算出的 cwd**不完全相等 → 整条 400。
+   客户端 cwd 与会话 header cwd 本就是两份事实来源，形态差异即致命。
+
+**修法（改策略，不是加判断）**
+- 新增 `src/shared/events/normalize.ts`：**边界归一化**（parse, don't validate）。
+  客户端与 host 共用同一份实现，`isSessionId` / `SESSION_ID_RE` 上提到此处，
+  host 内的重复副本删除 —— 两处各写一份正是"一边放行一边拒绝"的来源。
+- `/scan` 校验分两层：**结构性错误**仍 `bad-request`（body 非对象、workspaceId/cwd/generation
+  不可用、sessions 非数组或超 3000）；**行级问题**跳过并记账，不再打断整体。
+- `validateOwnership` 改为**逐会话判定**：读不出 header 或不属于本工作区 → 跳过该会话；
+  **空工作区仍合法**，只有「请求里有会话但一个都不属于本工作区」才响亮失败。
+- `/scan` 的**权威 cwd 改为取会话 header cwd 的众数**，客户端传的只作兜底；
+  并允许**子目录会话**（`containsPath`），不再要求 cwd 完全相等。
+- `refresh` 是优化提示：非法/越界 id 丢弃并计数，绝不因此拒绝整条请求。
+- 未知字段一律忽略（宿主以后加字段时前向兼容）。
+
+**可见性（容错不等于静默）**
+- `ScanResponse` 新增 `skipped: { request, ownership, refresh }`，只出数字不出 id/路径。
+- 客户端 `ControllerSnapshot.skipped` → UI 诊断条新增 `skipped=N`，
+  只在真的丢了东西时出现（`shouldShowDiag` 也据此显示）。
+
+**测试**
+- 新增 `tests/events/normalize.test.ts`：9 个**敌意输入**表驱动用例
+  （`null` / 数字 / 嵌套对象 / 超长串 / 路径穿越 / 原型污染键 / 未知字段 / 非数组输入），
+  钉住策略「数据形状再怪也不许整条失败、也不许静默丢」。
+- 改写 `tests/events/limits.test.ts` 的校验与归属用例：
+  断言从「整条拒绝」改为「跳过并计数」，同时**保留原安全性质**
+  （工作区外会话永远不被 `open`，只 `stat` 读 header）。
+
 ## [1.4.0] - 2026-11-08
 
 > **发布号说明**：开发树内部曾用 `1.2.0` 编号；正式发布跳到 **1.4.0**，因为发布仓的

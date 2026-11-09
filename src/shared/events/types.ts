@@ -384,6 +384,24 @@ export interface ScanResponse {
   total: number
   /** 实际处理顺序（当前会话/子智能体 → 最近 7 天 → 更早 → 归档）。 */
   order: string[]
+  /**
+   * 被**容错跳过**的会话行计数（2026-11-09）。
+   *
+   * 行级数据问题不再让整条扫描 400，而是跳过并记账；这里回传计数，
+   * 客户端必须显示给用户（「N 条会话未能读取」），不允许静默丢失。
+   * 全零时字段可省略以保持旧响应形状。
+   */
+  skipped?: ScanSkippedSummary
+}
+
+/** 跳过计数的分类（只出数字，不含 id/路径，避免泄露）。 */
+export interface ScanSkippedSummary {
+  /** 请求里被跳过的行数（协议层：id/时间戳不可用等）。 */
+  request: number
+  /** 归属校验阶段被跳过的会话数（读不出 header 或不属于本工作区）。 */
+  ownership: number
+  /** `refresh` 提示里被丢弃的 id 数量。 */
+  refresh: number
 }
 
 /** `POST /api/dsh-threadline/snapshot` 请求（04 §2.5）。 */

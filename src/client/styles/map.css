@@ -808,3 +808,68 @@
 :is(.threadline-app, .threadline-impact-root) .tl-graph[data-reduced-motion='true'] .tl-graph-loading-dot {
   animation: none;
 }
+
+/* ========== 图区骨架（首次加载占位，2026-11-09） ==========
+ * 首次打开 tab 时图区原本只有一个居中转圈点，看起来像"卡住了"。
+ * 骨架给出与真实布局同构的占位（卡片 + 圆点 + 虚线关系），数据一到就地替换。
+ * 纪律：纯装饰（aria-hidden 由组件给出）、不用随机坐标、尊重 reduced-motion。
+ */
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-loading-skeleton {
+  position: relative;
+  display: block;
+  padding: 0;
+  block-size: 100%;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-skeleton {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  padding: 12px;
+  box-sizing: border-box;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-skeleton-card {
+  fill: var(--tl-surface-sunken);
+  stroke: var(--tl-border-weak);
+  stroke-width: 1;
+  animation: threadline-skeleton-breathe 1.8s ease-in-out infinite;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-skeleton-dot {
+  fill: var(--tl-border-strong);
+  animation: threadline-skeleton-breathe 1.8s ease-in-out infinite;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-skeleton-edge {
+  stroke: var(--tl-border-weak);
+  stroke-width: 1;
+  stroke-dasharray: 3 5;
+  opacity: 0.7;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-loading-skeleton .tl-graph-loading-label {
+  position: absolute;
+  inset-block-end: 10px;
+  inset-inline: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--tl-fg-secondary);
+  font-size: var(--tl-fs-body);
+}
+
+@keyframes threadline-skeleton-breathe {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 0.9; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :is(.threadline-app, .threadline-impact-root) .tl-graph-skeleton-card,
+  :is(.threadline-app, .threadline-impact-root) .tl-graph-skeleton-dot {
+    animation: none;
+  }
+}

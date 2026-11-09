@@ -17,6 +17,8 @@ import {
   sameWorkspaceCwd,
   utf8Length,
 } from '../shared/events/index.ts'
+// 路径包含关系只有一份实现（host/tree.ts 也用同一个），不在这里另写一套。
+import { containsPath } from '../shared/relations/path.ts'
 import type {
   DetailRequest,
   DetailResponse,
@@ -28,6 +30,7 @@ import type {
   ScanProgress,
   ScanRequest,
   ScanResponse,
+  ScanSessionSkip,
   SessionDetail,
   SessionHeaderLite,
   SessionSummary,
@@ -123,7 +126,48 @@ interface OwnershipResult {
   ok: boolean
   headers?: Map<string, SessionHeaderLite>
   parents?: Map<string, string | undefined>
+  /** 由会话 header 推导出的**权威 cwd**（客户端 cwd 只作兜底）。 */
+  cwd?: string
   error?: { code: ThreadlineErrorCode; message: string; detail?: string }
+}
+
+/** 取会话 header cwd 的众数（并列取先出现者 → 确定性）。空集合返回 undefined。 */
+function pickAuthoritativeCwd(headers: ReadonlyMap<string, SessionHeaderLite>): string | undefined {
+  const counts = new Map<string, { count: number; firstAt: number }>()
+  let order = 0
+  for (const header of headers.values()) {
+    const cwd = normalizeCwd(typeof header.cwd === 'string' ? header.cwd : '')
+    if (cwd === '') continue
+    const existing = counts.get(cwd)
+    if (existing === undefined) counts.set(cwd, { count: 1, firstAt: order })
+    else existing.count += 1
+    order += 1
+  }
+  let best: string | undefined
+  let bestCount = 0
+  let bestFirst = Number.POSITIVE_INFINITY
+  for (const [cwd, stat] of counts) {
+    if (stat.count > bestCount || (stat.count === bestCount && stat.firstAt < bestFirst)) {
+      best = cwd
+      bestCount = stat.count
+      bestFirst = stat.firstAt
+    }
+  }
+  return best
+}
+
+/**
+ * `target` 是否与 `root` 相同、或位于 `root` 之下（分隔符/大小写不敏感）。
+ *
+ * 为什么需要它：会话可能在**子目录**里开过（header.cwd 是子目录），
+ * 那仍然属于这个工作区；旧实现要求 cwd 完全相等，于是这类会话会让整条扫描失败。
+ */
+function isSameOrInside(root: string, target: string | undefined): boolean {
+  const left = normalizeCwd(root)
+  const right = normalizeCwd(typeof target === 'string' ? target : '')
+  if (left === '' || right === '') return false
+  if (sameWorkspaceCwd(left, right)) return true
+  return containsPath(left, right)
 }
 
 /* ------------------------------------------------------------------ *
@@ -343,15 +387,20 @@ export class ScanManager {
 
   /* ---------------- scan ---------------- */
 
-  /** `POST /scan`：校验归属后启动后台扫描，立即返回 scanId/total/order。 */
-  async startRequest(request: ScanRequest): Promise<ThreadlineResponse<ScanResponse>> {
+  /**
+   * `POST /scan`：校验归属后启动后台扫描，立即返回 scanId/total/order。
+   *
+   * `tolerance` 携带协议层已容错掉的计数（脏行、被丢弃的 refresh id），
+   * 与归属阶段的跳过数合并后一并在响应里上报 —— 容错必须可见。
+   */
+  async startRequest(
+    request: ScanRequest,
+    tolerance: { skipped?: readonly ScanSessionSkip[]; refreshDropped?: number } = {},
+  ): Promise<ThreadlineResponse<ScanResponse>> {
     const persistence = this.services.getPersistence()
     if (persistence === undefined) {
       return { ok: false, error: { code: 'threadline/capability-missing', message: 'session persistence unavailable' } }
     }
-    const workspace = this.workspaceFor(request.workspaceId, request.cwd)
-    // 同一 workspace 只保留一个活动扫描：新扫描取消旧的。
-    if (workspace.activeScanId !== undefined) this.cancelScan(workspace.activeScanId)
 
     const ownership = await this.validateOwnership(persistence, request)
     if (!ownership.ok || ownership.headers === undefined || ownership.parents === undefined) {
@@ -360,8 +409,17 @@ export class ScanManager {
         error: ownership.error ?? { code: 'threadline/bad-request', message: 'session ownership rejected' },
       }
     }
+    // 归属校验后**以数据为准**的权威 cwd（客户端传的只作兜底）：
+    // 客户端算出的 cwd 与会话 header 里的 cwd 是两份事实来源，
+    // 以客户端那份为准时，任何形态差异都会让整条扫描失败（2026-11-09 事故根因之一）。
+    const authoritativeCwd = ownership.cwd !== undefined && ownership.cwd !== '' ? ownership.cwd : request.cwd
+    const sessions = request.sessions.filter((input) => ownership.headers?.has(input.id) === true)
 
-    const order = orderSessions(request.sessions, ownership.parents, this.now())
+    const workspace = this.workspaceFor(request.workspaceId, authoritativeCwd)
+    // 同一 workspace 只保留一个活动扫描：新扫描取消旧的。
+    if (workspace.activeScanId !== undefined) this.cancelScan(workspace.activeScanId)
+
+    const order = orderSessions(sessions, ownership.parents, this.now())
     const requestChildren = new Map<string, string[]>()
     for (const [id, parent] of ownership.parents) {
       if (parent === undefined || !ownership.headers.has(parent)) continue
@@ -385,7 +443,7 @@ export class ScanManager {
       edges: new Map<string, SnapshotCoTurnEdge>(),
       errors: [],
       requestChildren,
-      inputs: new Map(request.sessions.map((input) => [input.id, input])),
+      inputs: new Map(sessions.map((input) => [input.id, input])),
       done: false,
       cancelled: false,
       startedAt: this.now(),
@@ -400,7 +458,7 @@ export class ScanManager {
     this.trimScanRegistry()
     this.armIdleTimer(state)
 
-    const inputs = new Map(request.sessions.map((input) => [input.id, input]))
+    const inputs = new Map(sessions.map((input) => [input.id, input]))
     const refresh = new Set(request.refresh ?? [])
     void this.runScan(state, workspace, inputs, ownership.headers, order, refresh).catch(() => {
       if (!state.cancelled) {
@@ -409,12 +467,32 @@ export class ScanManager {
       }
     })
 
-    return { ok: true, scanId, rev: 0, total: order.length, order }
+    // 容错必须可见：把三层跳过数一起回传，客户端显示「N 条会话未能读取」。
+    const skippedSummary = {
+      request: tolerance.skipped?.length ?? 0,
+      ownership: Math.max(0, request.sessions.length - sessions.length),
+      refresh: tolerance.refreshDropped ?? 0,
+    }
+    const payload: ScanResponse = { scanId, rev: 0, total: order.length, order }
+    if (skippedSummary.request > 0 || skippedSummary.ownership > 0 || skippedSummary.refresh > 0) {
+      payload.skipped = skippedSummary
+    }
+    return { ok: true, ...payload }
   }
 
-  /** 归属校验：header.cwd === 请求 cwd，或 parentSession 在请求集合内（04 §2.4）。 */
+  /**
+   * 归属校验：判定每个会话是否属于本次扫描，并给出**权威 cwd**。
+   *
+   * 2026-11-09 改为**逐行容错**（原来是"一个不合规就整条拒绝"）：
+   * - 读不出 header → 跳过该会话（持久层单条坏不该毁掉整个工作区）；
+   * - 既不是同 cwd、也不在任一请求会话的子树下、父会话又不在请求里 → 跳过；
+   * - **全部跳过**才返回 `bad-request`（那才是真的 workspace 不匹配，必须响亮失败）。
+   *
+   * 权威 cwd 取**会话 header 里的众数**，客户端传的 cwd 只作兜底：
+   * 客户端 cwd 与会话 header cwd 是两份事实来源，以客户端那份为准时任何形态差异都会整条失败。
+   */
   private async validateOwnership(persistence: PersistenceLike, request: ScanRequest): Promise<OwnershipResult> {
-    const ids = new Set(request.sessions.map((input) => input.id))
+    const requestedIds = new Set(request.sessions.map((input) => input.id))
     const headers = new Map<string, SessionHeaderLite>()
     const query = this.services.getSessionQuery()
     if (query?.listSessions !== undefined) {
@@ -427,29 +505,51 @@ export class ScanManager {
       for (const entry of listed) {
         const candidate = entry as { header?: SessionHeaderLite } & Partial<SessionHeaderLite>
         const header = candidate.header ?? (candidate as SessionHeaderLite)
-        if (header !== undefined && typeof header.id === 'string') headers.set(header.id, header)
+        if (header === undefined || typeof header.id !== 'string') continue
+        // 只保留本次请求涉及的会话，避免把别的 workspace 的 header 带进来。
+        if (!requestedIds.has(header.id)) continue
+        headers.set(header.id, header)
       }
     }
+
+    // 1) 补读缺失的 header（读不到就是 undefined，随后按跳过处理）。
     for (const input of request.sessions) {
-      const header = headers.get(input.id) ?? (await this.readHeader(persistence, input.id))
-      if (header === undefined) {
-        return {
-          ok: false,
-          error: { code: 'threadline/bad-request', message: 'session cannot be verified in this workspace' },
-        }
-      }
-      headers.set(input.id, header)
-      if (sameWorkspaceCwd(header.cwd, request.cwd)) continue
+      if (headers.has(input.id)) continue
+      const header = await this.readHeader(persistence, input.id)
+      if (header !== undefined) headers.set(input.id, header)
+    }
+
+    // 2) 权威 cwd = 会话 header cwd 的众数（并列取先出现者，保证确定性）。
+    const authoritativeCwd = pickAuthoritativeCwd(headers) ?? normalizeCwd(request.cwd)
+
+    // 3) 逐行判定；不合规的跳过，不打断整体。
+    const kept = new Map<string, SessionHeaderLite>()
+    for (const input of request.sessions) {
+      const header = headers.get(input.id)
+      if (header === undefined) continue
       const parent = header.parentSession
-      if (parent !== undefined && ids.has(parent)) continue
+      if (parent !== undefined && requestedIds.has(parent)) {
+        kept.set(input.id, header)
+        continue
+      }
+      if (isSameOrInside(authoritativeCwd, header.cwd)) kept.set(input.id, header)
+    }
+
+    // 空工作区是**合法**状态（0 个会话也要能出图、能 reset），所以只有
+    // 「请求里明明有会话，却一个都不属于本工作区」才算真的不匹配 —— 那时必须响亮失败。
+    if (kept.size === 0 && request.sessions.length > 0) {
       return {
         ok: false,
-        error: { code: 'threadline/bad-request', message: 'session does not belong to this workspace' },
+        error: {
+          code: 'threadline/bad-request',
+          message: 'no session in the request belongs to this workspace',
+        },
       }
     }
+
     const parents = new Map<string, string | undefined>()
-    for (const [id, header] of headers) parents.set(id, header.parentSession)
-    return { ok: true, headers, parents }
+    for (const [id, header] of kept) parents.set(id, header.parentSession)
+    return { ok: true, headers: kept, parents, cwd: authoritativeCwd }
   }
 
   private async readHeader(persistence: PersistenceLike, id: string): Promise<SessionHeaderLite | undefined> {

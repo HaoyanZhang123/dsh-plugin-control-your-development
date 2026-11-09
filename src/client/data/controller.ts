@@ -20,6 +20,7 @@ import type {
   FileNode,
   ScanError,
   ScanProgress,
+  ScanSkippedSummary,
   SessionSummary,
   SnapshotCoTurnEdge,
   ThreadlineError,
@@ -67,6 +68,13 @@ export interface ControllerSnapshot {
   retained: boolean
   /** 是否仍在轮询（complete/failed/stopped 后为 false）。 */
   polling: boolean
+  /**
+   * 被**容错跳过**的会话计数（2026-11-09）。
+   *
+   * 数据不再因为一行脏就被整条丢弃，但"少读了几条"必须让用户看得见 ——
+   * 容错不等于静默遗漏（项目铁律）。
+   */
+  skipped: ScanSkippedSummary
   updatedAt: number
 }
 
@@ -165,19 +173,24 @@ export function buildScanRequest(
   generation: number,
   refresh?: readonly string[],
 ): {
-  workspaceId: string
-  cwd: string
-  generation: number
-  sessions: ReturnType<typeof toScanSessions>
-  refresh?: string[]
-} {
-  const sessions = toScanSessions(scope)
-  const ids = new Set(sessions.map((session) => session.id))
-  const request: {
+  body: {
     workspaceId: string
     cwd: string
     generation: number
-    sessions: ReturnType<typeof toScanSessions>
+    sessions: ReturnType<typeof toScanSessions>['sessions']
+    refresh?: string[]
+  }
+  /** 归一化阶段被跳过的行数（`/scan` 响应没回来之前就能知道的容错量）。 */
+  skipped: number
+} {
+  const normalized = toScanSessions(scope)
+  const sessions = normalized.sessions
+  const ids = new Set(sessions.map((session) => session.id))
+  const body: {
+    workspaceId: string
+    cwd: string
+    generation: number
+    sessions: ReturnType<typeof toScanSessions>['sessions']
     refresh?: string[]
   } = {
     workspaceId: scope.workspaceId,
@@ -187,14 +200,22 @@ export function buildScanRequest(
   }
   if (refresh !== undefined && refresh.length > 0) {
     const filtered = Array.from(new Set(refresh.filter((id) => ids.has(id))))
-    if (filtered.length > 0) request.refresh = filtered
+    if (filtered.length > 0) body.refresh = filtered
   }
-  return request
+  return { body, skipped: normalized.skipped.length }
 }
 
 /** `POST /scan` 结果。 */
 export type ScanStart =
-  | { ok: true; scanId: string; total: number; order: string[]; generation: number }
+  | {
+      ok: true
+      scanId: string
+      total: number
+      order: string[]
+      generation: number
+      /** 容错跳过的会话计数（客户端归一化 + host 协议层 + 归属层）。 */
+      skipped: ScanSkippedSummary
+    }
   | { ok: false; failure: TransportFailure }
 
 /** 调 `POST /scan` 并解析 `scanId/total/order`。 */
@@ -205,8 +226,8 @@ export async function startScan(options: {
   refresh?: readonly string[]
   signal?: AbortSignal
 }): Promise<ScanStart> {
-  const body = buildScanRequest(options.scope, options.generation, options.refresh)
-  const result = await postJson(options.fetch, 'scan', body, options.signal)
+  const built = buildScanRequest(options.scope, options.generation, options.refresh)
+  const result = await postJson(options.fetch, 'scan', built.body, options.signal)
   if (!result.ok) return { ok: false, failure: result.failure }
   const scanId = result.value.scanId
   if (typeof scanId !== 'string' || scanId === '') {
@@ -219,6 +240,25 @@ export async function startScan(options: {
     total,
     order: asStringArray(result.value.order),
     generation: options.generation,
+    skipped: parseSkipped(result.value.skipped, built.skipped),
+  }
+}
+
+/**
+ * 解析 host 回传的容错计数。
+ *
+ * 客户端自己归一化时也可能跳过行（`fallback`），两端相加才是**用户能感知到的**缺失量 ——
+ * 只报 host 那一半会低估，只报客户端那一半会漏掉归属阶段被跳过的会话。
+ */
+function parseSkipped(value: unknown, fallbackRequest: number): ScanSkippedSummary {
+  const record = value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : undefined
+  const num = (input: unknown): number =>
+    typeof input === 'number' && Number.isFinite(input) && input > 0 ? Math.floor(input) : 0
+  if (record === undefined) return { request: fallbackRequest, ownership: 0, refresh: 0 }
+  return {
+    request: Math.max(fallbackRequest, num(record.request)),
+    ownership: num(record.ownership),
+    refresh: num(record.refresh),
   }
 }
 
@@ -317,6 +357,8 @@ export function createDataController(options: DataControllerOptions): DataContro
   let rev = 0
   let status: ControllerStatus = 'idle'
   let degrade: DegradeState = degradeNone()
+  // 容错跳过计数：scan 响应回来前是客户端归一化丢掉的量，回来后与 host 上报的合并。
+  let skipped: ScanSkippedSummary = { request: 0, ownership: 0, refresh: 0 }
   let error: ThreadlineError | undefined
   let failureKind: FailureKind | undefined
   let retries = 0
@@ -360,6 +402,7 @@ export function createDataController(options: DataControllerOptions): DataContro
       currentSessionId: scope?.currentSessionId ?? '',
       retained: graph.applied,
       polling: !stopped && status !== 'complete' && status !== 'failed',
+      skipped,
       updatedAt,
     }
     if (scanId !== undefined) snapshot.scanId = scanId
@@ -603,6 +646,8 @@ export function createDataController(options: DataControllerOptions): DataContro
     rev = 0
     status = 'scanning'
     degrade = degradeNone()
+    // 容错跳过量随扫描开始一起更新：用户看到「N 条未能读取」而不是少了几条却不知道。
+    skipped = started.skipped
     emit()
     schedule(immediateFirstPoll ? 0 : intervalMs())
   }

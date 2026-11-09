@@ -12,6 +12,8 @@
  */
 
 import type { ScanSessionInput } from '../../shared/events/index.ts'
+// 边界归一化与 host 共用同一份实现（单一事实源），不在这里另写一套判断。
+import { normalizeScanSessions, type NormalizedScanSessions } from '../../shared/events/index.ts'
 
 /** `useWorkspaces` 的单个条目（缺 `id` 时由会话 id 派生稳定 key）。 */
 export interface WorkspaceItem {
@@ -556,24 +558,17 @@ export function withoutArchived(scope: WorkspaceScope): WorkspaceScope {
  * - `updatedAt` 保证有限非负、`running` 保证 boolean；
  * - 按 scope 顺序输出（host 的 `orderSessions` 会再排一次，两边口径一致）。
  */
-export function toScanSessions(scope: WorkspaceScope): ScanSessionInput[] {
-  const result: ScanSessionInput[] = []
-  const seen = new Set<string>()
-  for (const session of scope.sessions) {
-    if (seen.has(session.id) || !isSessionId(session.id)) continue
-    seen.add(session.id)
-    const input: ScanSessionInput = {
-      id: session.id,
-      updatedAt: Number.isFinite(session.updatedAt) && session.updatedAt >= 0 ? session.updatedAt : 0,
-      running: session.running === true,
-    }
-    if (session.parentId !== undefined) input.parentId = session.parentId
-    if (session.title !== undefined) input.title = session.title
-    if (session.origin !== undefined) input.origin = session.origin
-    if (session.archived) input.archived = true
-    result.push(input)
-  }
-  return result
+/**
+ * scope → `/scan` 会话数组（**边界归一化在这里收口**）。
+ *
+ * 2026-11-09：不再逐字段手写 `!== undefined`（那会把 `null` 原样发出去，害 host 整条 400）。
+ * 统一走 `shared/events/normalize.ts` 的 `normalizeScanSessions` —— 与 host 同一份实现，
+ * 客户端与 host 不会再有"一边放行一边拒绝"的裂缝。
+ */
+export function toScanSessions(scope: WorkspaceScope): NormalizedScanSessions {
+  // scope.sessions 的类型是已知形状，但**运行时**来自宿主，可能是 null/其它类型；
+  // 因此按 unknown 交给归一层，而不是相信类型声明。
+  return normalizeScanSessions(scope.sessions as unknown)
 }
 
 /** 当前会话 + 其子智能体（轮询/详情优先对象；按 scope 顺序）。 */

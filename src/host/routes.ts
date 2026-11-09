@@ -15,11 +15,18 @@
  * - 注册失败不抛崩插件（返回 false，由 index.ts 只打一条 warning）；
  * - 日志只打错误码/计数，不打路径/正文（tree 分支同守）。
  */
-import { isAbsoluteCwd, normalizeCwd } from '../shared/events/index.ts'
+import {
+  isAbsoluteCwd,
+  isSessionId,
+  normalizeCwd,
+  normalizeRefreshIds,
+  normalizeScanSessions,
+} from '../shared/events/index.ts'
 import type {
   DetailRequest,
   Ok,
   ScanRequest,
+  ScanSessionSkip,
   SnapshotRequest,
   ThreadlineErrorCode,
   ThreadlineResponse,
@@ -41,7 +48,11 @@ export const ROUTE_PATHS = {
 } as const
 
 /** 会话 id 形状（04 §2.4；不允许 `/`、`\`、`..` 等路径成分）。 */
-const SESSION_ID_RE = /^[A-Za-z0-9._:-]{1,200}$/
+/**
+ * 会话 id 的形状规则由 `shared/events/normalize.ts` 单一拥有（客户端与 host 共用同一份），
+ * 这里不再另立正则 —— 两处各写一份正是历史上"客户端放行、host 拒绝"的来源。
+ */
+
 /** scanId 形状（host 自己生成，同样不接受路径成分）。 */
 const SCAN_ID_RE = /^[A-Za-z0-9._:-]{1,200}$/
 const MAX_SESSIONS = 3000
@@ -73,12 +84,6 @@ function asFiniteNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined
 }
 
-function isSessionId(value: unknown): value is string {
-  if (typeof value !== 'string' || !SESSION_ID_RE.test(value)) return false
-  // 正则放行 '.'，但 '.'/'..' 没有业务含义，也不该被送进任何路径拼接位置。
-  return value !== '.' && value !== '..'
-}
-
 /** 请求体 → JSON（非法 JSON/非对象 → bad-request，不抛）。 */
 async function readJsonBody(request: Request): Promise<Record<string, unknown> | undefined> {
   try {
@@ -93,8 +98,28 @@ async function readJsonBody(request: Request): Promise<Record<string, unknown> |
  * 参数校验（04 §2.4–§2.6）
  * ------------------------------------------------------------------ */
 
-/** 校验 `POST /scan` 请求；不通过一律 `threadline/bad-request`。 */
-export function validateScanRequest(body: unknown): Validation<ScanRequest> {
+/**
+ * `/scan` 的校验结果。
+ *
+ * `request` 是**已知良好**的请求；`skipped` / `refreshDropped` 是「被容错处理掉的」计数依据，
+ * 必须原样带回去上报 —— 容错不等于静默（项目铁律：不许静默遗漏）。
+ */
+export interface ValidatedScanRequest {
+  request: ScanRequest
+  skipped: ScanSessionSkip[]
+  refreshDropped: number
+}
+
+/**
+ * 校验 `POST /scan` 请求。
+ *
+ * **分两层**（2026-11-09 改为该策略）：
+ * - **结构性错误**才 `bad-request`：body 不是对象、workspaceId/cwd/generation 不可用、sessions 不是数组或超上限；
+ * - **行级问题**（id 非法、时间戳坏、装饰字段是 null…）→ **跳过该行并记账**，不打断整体。
+ *
+ * 理由：一行装饰性元数据毁掉 153 个会话的扫描，是"把数据质量问题当协议错误"，用户看到的是白屏。
+ */
+export function validateScanRequest(body: unknown): Validation<ValidatedScanRequest> {
   const record = asRecord(body)
   if (record === undefined) return failure('threadline/bad-request', 'body must be an object')
 
@@ -114,57 +139,24 @@ export function validateScanRequest(body: unknown): Validation<ScanRequest> {
   const rawSessions = record.sessions
   if (!Array.isArray(rawSessions)) return failure('threadline/bad-request', 'sessions must be an array')
   if (rawSessions.length > MAX_SESSIONS) return failure('threadline/bad-request', 'too many sessions')
+  // 逐行**解析**而不是校验：脏行跳过并记账，绝不让一行装饰性数据打掉整条扫描
+  // （2026-11-09 真机事故：一个 `title: null` 让 153 个会话的工作区整条 400）。
+  const normalized = normalizeScanSessions(rawSessions)
+  const sessions = normalized.sessions
 
-  const sessions: ScanRequest['sessions'] = []
-  const seen = new Set<string>()
-  for (const entry of rawSessions) {
-    const row = asRecord(entry)
-    if (row === undefined) return failure('threadline/bad-request', 'invalid session row')
-    if (!isSessionId(row.id)) return failure('threadline/bad-request', 'invalid session id')
-    if (seen.has(row.id)) continue
-    seen.add(row.id)
-    const updatedAt = asFiniteNumber(row.updatedAt)
-    if (updatedAt === undefined || updatedAt < 0) return failure('threadline/bad-request', 'invalid updatedAt')
-    if (typeof row.running !== 'boolean') return failure('threadline/bad-request', 'invalid running flag')
-    if (row.parentId !== undefined && !isSessionId(row.parentId)) {
-      return failure('threadline/bad-request', 'invalid parentId')
-    }
-    if (row.title !== undefined && typeof row.title !== 'string') {
-      return failure('threadline/bad-request', 'invalid title')
-    }
-    if (row.origin !== undefined && typeof row.origin !== 'string') {
-      return failure('threadline/bad-request', 'invalid origin')
-    }
-    if (row.archived !== undefined && typeof row.archived !== 'boolean') {
-      return failure('threadline/bad-request', 'invalid archived flag')
-    }
-    const session: ScanRequest['sessions'][number] = {
-      id: row.id,
-      updatedAt,
-      running: row.running,
-    }
-    if (row.parentId !== undefined) session.parentId = row.parentId
-    if (row.title !== undefined) session.title = row.title
-    if (row.origin !== undefined) session.origin = row.origin
-    if (row.archived !== undefined) session.archived = row.archived
-    sessions.push(session)
+  // `refresh` 是**优化提示**（哪些会话要重读），不是数据本身：
+  // 非法或不在本次集合里的 id 一律丢弃并计数，绝不因此拒绝整条请求。
+  const refreshResult = normalizeRefreshIds(
+    record.refresh,
+    new Set(sessions.map((session) => session.id)),
+  )
+
+  const request: ScanRequest = { workspaceId, cwd, generation, sessions }
+  if (refreshResult.ids.length > 0) request.refresh = refreshResult.ids
+  return {
+    ok: true,
+    value: { request, skipped: normalized.skipped, refreshDropped: refreshResult.dropped },
   }
-
-  let refresh: string[] | undefined
-  if (record.refresh !== undefined) {
-    if (!Array.isArray(record.refresh)) return failure('threadline/bad-request', 'invalid refresh')
-    const ids = new Set(sessions.map((session) => session.id))
-    refresh = []
-    for (const entry of record.refresh) {
-      if (!isSessionId(entry)) return failure('threadline/bad-request', 'invalid refresh id')
-      if (!ids.has(entry)) return failure('threadline/bad-request', 'refresh id is not in sessions')
-      refresh.push(entry)
-    }
-  }
-
-  const value: ScanRequest = { workspaceId, cwd, generation, sessions }
-  if (refresh !== undefined) value.refresh = refresh
-  return { ok: true, value }
 }
 
 /** 校验 `POST /snapshot` 请求。 */
@@ -288,7 +280,12 @@ export function createRoutes(services: HostServices, manager?: ScanManager): Rou
         const validation = validateScanRequest(body)
         if (!validation.ok) return errorResponse(validation.code, validation.message)
         try {
-          return toResponse(await scanner.startRequest(validation.value))
+          return toResponse(
+            await scanner.startRequest(validation.value.request, {
+              skipped: validation.value.skipped,
+              refreshDropped: validation.value.refreshDropped,
+            }),
+          )
         } catch {
           return errorResponse('threadline/internal', 'scan failed')
         }

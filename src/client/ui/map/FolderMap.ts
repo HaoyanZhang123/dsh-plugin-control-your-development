@@ -23,6 +23,7 @@ import type { FileFamily, FileNode } from '../../../shared/events/index.ts'
 import { caseKey, type GraphEdge, type RelationType } from '../../../shared/relations/index.ts'
 import { createTranslator, DEFAULT_LOCALE, type Locale, type Translator } from '../../locale/index.ts'
 import { EmptyState } from '../common/index.ts'
+import { graphSkeleton } from './skeleton.ts'
 import { cameraTransform, DEFAULT_CAMERA, GRAPH_ZOOM_STEP, panCameraBy, resetCamera, zoomCameraAtCenter, type GraphCamera } from './camera.ts'
 import {
   FOLDER_LABEL_FONT_PX,
@@ -1001,11 +1002,17 @@ export function FolderMap(props: FolderMapProps): React.ReactElement {
 
   const stageContent = (): React.ReactElement => {
     if (props.loading === true) {
+      // 骨架 + 一行状态：图形给"正在长出来"的形状感，文字仍由 role="status" 播报。
       return h(
         'div',
-        { className: 'tl-graph-loading', role: 'status', [GRAPH_DATA.loading]: 'true' },
-        h('span', { className: 'tl-graph-loading-dot', 'aria-hidden': true }),
-        h('span', null, props.loadingLabel ?? t('graph.loading')),
+        { className: 'tl-graph-loading tl-graph-loading-skeleton', [GRAPH_DATA.loading]: 'true' },
+        graphSkeleton('folder'),
+        h(
+          'div',
+          { className: 'tl-graph-loading-label', role: 'status' },
+          h('span', { className: 'tl-graph-loading-dot', 'aria-hidden': true }),
+          h('span', null, props.loadingLabel ?? t('graph.loading')),
+        ),
       )
     }
     if (props.errorText !== undefined && props.errorText !== '') {

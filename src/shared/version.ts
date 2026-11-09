@@ -7,4 +7,4 @@
  * - 不做构建期注入（避免“未构建路径上 undefined”的静默失效），产物里的版本来自本常量；
  * - 改版本只改这里 + package.json，不许在别处手写第二份。
  */
-export const VERSION = '1.4.0'
+export const VERSION = '1.4.1'

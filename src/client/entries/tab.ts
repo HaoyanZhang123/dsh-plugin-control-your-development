@@ -198,7 +198,13 @@ export function graphEmptyStateOf(
 }
 
 /** 诊断条是否出现：只在 failed / degrade 非 none 时（T13b）。 */
-export function shouldShowDiag(input: { status: string; degradeKind: string }): boolean {
+export function shouldShowDiag(input: {
+  status: string
+  degradeKind: string
+  /** 被容错跳过的会话数：> 0 时也要显示，否则"少读了几条"就是静默遗漏。 */
+  skipped?: number
+}): boolean {
+  if ((input.skipped ?? 0) > 0) return true
   return input.status === 'failed' || input.degradeKind !== 'none'
 }
 
@@ -211,8 +217,10 @@ export function buildDiagItems(input: {
   sessions: number
   files: number
   references: string
+  /** 被容错跳过的会话数（协议层 + 归属层 + refresh），0 时不出这一段。 */
+  skipped?: number
 }): Array<[string, string]> {
-  return [
+  const items: Array<[string, string]> = [
     ['status', input.status],
     ['degrade', input.degradeKind],
     ['code', input.code],
@@ -221,6 +229,9 @@ export function buildDiagItems(input: {
     ['files', String(input.files)],
     ['refs', input.references],
   ]
+  // 只在真的丢了东西时追加，保持默认画面干净。
+  if ((input.skipped ?? 0) > 0) items.push(['skipped', String(input.skipped)])
+  return items
 }
 
 /** 引用层不可观测时的横幅文案（只用既有 key，不写新句子）。 */
@@ -364,6 +375,20 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
   const currentDetail = currentEntry?.detail ?? null
 
   // 「全部工作线」范围：按需预取前 8 个根会话（有界；不加载就不画假块）
+  // 预热当前会话（及其直接子智能体）的详情：扫描一开始就在后台拉起，
+  // 这样点它的**任意**轮次都能直接命中缓存，不再出现「正在读取 T5 的文件…」。
+  // 只预热会被点到的少量会话（上限 4），不做全量预载 —— 全量会把打开 tab 变成卡顿。
+  React.useEffect(() => {
+    const current = scope.currentSessionId
+    const ids: string[] = current === '' ? [] : [current]
+    for (const session of scope.sessions) {
+      if (session.parentId === current) ids.push(session.id)
+    }
+    if (ids.length === 0) return undefined
+    for (const id of ids.slice(0, 4)) void store.request(id, { cwd: scope.cwd }).catch(() => undefined)
+    return undefined
+  }, [scope, store])
+
   const [extraDetails, setExtraDetails] = React.useState<ReadonlyMap<string, SessionDetail>>(new Map())
   React.useEffect(() => {
     if (turnScope.kind !== 'all') return undefined
@@ -876,7 +901,12 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
   )
 
   /* ---------------- 诊断条（failed / degrade 时可见） ---------------- */
-  const diagVisible = shouldShowDiag({ status: data.status, degradeKind: data.degrade.kind })
+  const skippedTotal = data.skipped.request + data.skipped.ownership + data.skipped.refresh
+  const diagVisible = shouldShowDiag({
+    status: data.status,
+    degradeKind: data.degrade.kind,
+    skipped: skippedTotal,
+  })
   const diagItems: Array<[string, string]> = diagVisible
     ? buildDiagItems({
         status: data.status,
@@ -886,6 +916,7 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
         sessions: scope.sessions.length,
         files: data.graph.files.size,
         references: referenceLayer.status,
+        skipped: skippedTotal,
       })
     : []
   const referenceBanner =
