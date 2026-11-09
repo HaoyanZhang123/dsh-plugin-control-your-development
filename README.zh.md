@@ -117,7 +117,7 @@ plugin/
 
 ## 更新与发布
 
-当前发布：**面板插件 v1.4.2**（稳定）。
+当前发布：**面板插件 v1.4.3**（稳定）。
 
 - 更新记录：[CHANGELOG.md](CHANGELOG.md)
 - GitHub Releases：https://github.com/HaoyanZhang123/dsh-plugin-control-your-development/releases
