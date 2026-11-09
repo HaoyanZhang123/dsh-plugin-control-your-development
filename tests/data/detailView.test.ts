@@ -124,17 +124,21 @@ test('T37 ready 且 0 文件：是真的「这一轮没有文件操作」（不�
   assert.equal(turnView.partial, false)
 })
 
-test('T37 缓存的 detail 比会话行旧（半截数据）：0 文件不当结论，显示 loading', () => {
+test('T37 缓存的 detail 比会话行旧（半截数据）：0 文件**不出数字**，但不许一直转圈', () => {
   // 聊天页早先读到的 detail 停在 T4 刚开、还没记录文件操作；会话行已经推进了。
+  // 2026-11-10 真机反馈：这里原本判 loading，导致选中"没有文件改动"的轮次时
+  // 左图永远停在骨架 +「正在读取 T13 的文件…」，用户以为卡住了。
+  // 新策略：**有数据就出结论**（显示「这一轮没有文件操作」），但**不给数字 0**
+  // （数据可能还旧，0 不可信），仍标 partial（UI 显示「本轮仍在记录」）。
   const stale = readyEntry({ id: 's-1', updatedAt: NOW, turns: [turn(4, [])] }, NOW)
   const view = detailViewOf(stale, { updatedAt: NOW + 5_000 })
   assert.equal(view.status, 'ready', '数据本身是 ready（有旧值可用）')
   assert.equal(view.fresh, false, '但相对会话行已经旧了')
   assert.equal(view.stale, true)
   const turnView = turnDetailOf(view, 4)
-  assert.equal(turnView.status, 'loading', '旧数据的 0 文件不能当结论')
-  assert.equal(turnView.fileCount, undefined)
-  assert.equal(turnView.partial, true, '标「可能还会长」，UI 显示正在读取')
+  assert.equal(turnView.status, 'ready', '有数据就要给结论，不能一直 loading')
+  assert.equal(turnView.fileCount, undefined, '但 0 不可信时不给数字')
+  assert.equal(turnView.partial, true, '标「可能还会长」，UI 显示「本轮仍在记录」')
 
   // 旧数据里有文件：可以显示，但仍标 partial（可能少文件）
   const staleWithFiles = readyEntry({ id: 's-1', updatedAt: NOW, turns: [turn(4, ['src/a.ts'])] }, NOW)

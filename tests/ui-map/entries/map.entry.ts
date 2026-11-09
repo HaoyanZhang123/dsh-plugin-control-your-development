@@ -254,8 +254,11 @@ function App(): React.ReactElement {
   const defaultDir = ''
   const [currentPath, setCurrentPath] = React.useState<string>(params.dir ?? defaultDir)
   const [activeTurnN, setActiveTurnN] = React.useState<number | null>(
-    params.state === 'turn' ? (params.turn !== null && turnDetails.some((turn) => turn.n === params.turn) ? params.turn : turnDetails[0]?.n ?? null) : null,
+    params.state === 'turn' || params.state === 'turn-empty' ? (params.turn !== null && turnDetails.some((turn) => turn.n === params.turn) ? params.turn : turnDetails[0]?.n ?? null) : null,
   )
+  // ?state=turn-empty：复用同一个真实轮次，但把文件集置空 —— 复现「选中没有文件改动的轮次」。
+  // 这是 harness 的夹具输入，渲染的仍是真组件、真入口。
+  const emptyTurnDemo = params.state === 'turn-empty'
   const [selectedPath, setSelectedPath] = React.useState<string | null>(null)
   const [selection, setSelection] = React.useState<Selection>({ kind: 'none' })
   const [preview, setPreview] = React.useState<Selection | null>(null)
@@ -515,8 +518,14 @@ function App(): React.ReactElement {
     graphSlot: h(FileGraph, {
       mode,
       entries,
-      files: graphFiles,
-      edges,
+      files: emptyTurnDemo ? [] : graphFiles,
+      edges: emptyTurnDemo ? [] : edges,
+      ...(emptyTurnDemo
+        ? {
+            // 与 tab.ts 的接线一致：partial 时追加「本轮仍在记录」（复用既有 key）。
+            emptyTitle: t('graph.emptyTurn') + ' · ' + t('state.partialTurn'),
+          }
+        : {}),
       // R10：folder 模式的枢纽聚合边需要**全量**边集（未按当前目录过滤）。
       ...(mode === 'folder' ? { allEdges: edges } : {}),
       currentPath: mode === 'turn' ? currentPath : currentPath,

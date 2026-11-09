@@ -1035,7 +1035,14 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
           ? { errorText: t('tree.readFailed') }
           : {}),
         ...(turnEmpty
-          ? { emptyTitle: t('graph.emptyTurn') }
+          ? {
+              // 有数据就出结论：绝不显示成「正在读取」。数据可能还在长时加一句
+              // 「本轮仍在记录」（复用既有 key，不新增文案）。
+              emptyTitle:
+                turnView?.partial === true
+                  ? t('graph.emptyTurn') + ' · ' + t('state.partialTurn')
+                  : t('graph.emptyTurn'),
+            }
           : turnUnknown
             ? { emptyTitle: t('state.unknown') }
             : mode2 === 'folder' && tree.state.status === 'empty'

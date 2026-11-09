@@ -175,9 +175,17 @@ export function turnDetailOf(view: DetailView, turn: number): TurnDetailView {
     }
     return { status: 'error', turn: found, partial, ...(view.error === undefined ? {} : { error: view.error }) }
   }
-  // 0 文件：只有「最新 + 本轮已结束」才是可信的「这一轮没有文件操作」。
-  if (found.files.length === 0 && (!view.fresh || partial)) {
-    return { status: 'loading', turn: found, partial }
+  // 0 文件：**已经有数据就要出结论**，不能永远停在"正在读取"。
+  // 2026-11-10 真机反馈：选中一轮没有文件改动的轮次时，左图一直显示骨架 + 「正在读取 T13 的文件…」，
+  // 用户会以为卡住了。这里区分两件事：
+  //   - 是不是"有数据" → 有数据就 `ready`，UI 显示「这一轮没有文件操作」；
+  //   - 数字可不可信 → 只有在「数据最新 + 本轮已结束」时才给 `fileCount: 0`，
+  //     否则只给 `partial`（UI 显示「本轮仍在记录」），**不谎报 0 也不假装还在读**。
+  if (found.files.length === 0) {
+    if (view.fresh && !partial) {
+      return { status: 'ready', turn: found, fileCount: 0, partial }
+    }
+    return { status: 'ready', turn: found, partial }
   }
   return { status: 'ready', turn: found, fileCount: found.files.length, partial }
 }

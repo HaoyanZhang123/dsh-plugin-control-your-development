@@ -37,7 +37,7 @@ function turn(n: number, paths: readonly string[], overrides: Partial<TurnDetail
   }
 }
 
-test('T37 复现：scan 已就绪 + detail 半截 → 旧读法画「T4 · 0 文件」，新 helper 判 loading', async () => {
+test('T37 复现：scan 已就绪 + detail 半截 → 旧读法画「T4 · 0 文件」，新 helper 出结论但不给数字', async () => {
   const fake = createFakeFetch()
   let phase: 'mid' | 'done' = 'mid'
   fake.on('detail', (body) => {
@@ -72,14 +72,18 @@ test('T37 复现：scan 已就绪 + detail 半截 → 旧读法画「T4 · 0 文
   const rawTurn = store.peek('s-current')?.detail?.turns.find((item) => item.n === 4)
   assert.equal(rawTurn?.files.length, 0, 'UI 当时读到的原始字段就是 0')
 
-  // 4) 新口径（带会话行 updatedAt）：不把它当结论，判 loading（骨架 / 正在读取）
+  // 4) 新口径（带会话行 updatedAt）：**出结论但不给数字**。
+  //    2026-11-10 真机反馈：原判 loading 会让"没有文件改动的轮次"永远转圈，用户以为卡住。
+  //    改成 ready（UI 显示「这一轮没有文件操作」）+ partial（本轮仍在记录），
+  //    但 fileCount 保持 undefined —— 数据可能还旧，0 不可信。
   const rowUpdatedAt = NOW + 5_000
   const staleView = detailViewOf(store.peek('s-current'), { updatedAt: rowUpdatedAt })
   assert.equal(staleView.status, 'ready', '有旧值可以显示（不是全黑屏）')
   assert.equal(staleView.fresh, false, '但它比会话行旧')
   const staleTurn = turnDetailOf(staleView, 4)
-  assert.equal(staleTurn.status, 'loading')
-  assert.equal(staleTurn.fileCount, undefined, 'loading 时 fileCount 必须是 undefined，不是 0')
+  assert.equal(staleTurn.status, 'ready', '有数据就要出结论，不能永远 loading')
+  assert.equal(staleTurn.fileCount, undefined, 'fileCount 必须是 undefined，不是 0（0 不可信）')
+  assert.equal(staleTurn.partial, true, '标「本轮仍在记录」')
 
   // 5) 会话推进后由 updatedAt 触发重拉（impact/tab 的新口径）→ 真数据到了才是 ready
   phase = 'done'
