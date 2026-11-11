@@ -58,11 +58,19 @@ jobs:
           node -e "const p=require('./package.json'); if(!p.dsh||!p.dsh.bundle||!p.dsh.bundle.patch){throw new Error('missing dsh.bundle')} if((p.files||[]).length<6){throw new Error('files whitelist looks empty')} if((p.dependencies&&Object.keys(p.dependencies).length)){throw new Error('runtime dependencies are not allowed')} console.log('package ok', p.name, p.version)"
           node -e "const {execSync}=require('child_process'); const out=execSync('npm pack --dry-run --json',{encoding:'utf8'}); const files=JSON.parse(out)[0].files.map(f=>f.path); const junk=files.filter(f=>f.includes('__pycache__')||f.endsWith('.pyc')||f.endsWith('.tgz')||f.endsWith('.log')||f.startsWith('src/')||f.startsWith('tests/')); if(junk.length){throw new Error('打包内容混入不该有的项: '+junk.join(', '))} console.log('pack clean:', files.length, 'files')"
 
-      - name: 发布到 npm（预发布走 alpha tag；同版本已存在则跳过）
+      - name: 发布到 npm（dist-tag 由 publishConfig.tag 决定；同版本已存在则跳过）
         run: |
           NAME=$(node -p "require('./package.json').name")
           VERSION=$(node -p "require('./package.json').version")
-          if echo "$VERSION" | grep -q -- '-'; then DIST_TAG=alpha; else DIST_TAG=latest; fi
+          # dist-tag 的**唯一事实源**是 package.json 的 publishConfig.tag（npm 官方机制）。
+          # 历史回退规则保留：预发布版本（版本号带 `-`）→ alpha，其余 → latest。
+          # 为什么需要这个字段：1.5.4 是「未完成版」，必须显式发到 unfinished，
+          # 绝不能因为版本号里没有 `-` 就默认顶掉 latest（那会让所有人默认装到未完成版）。
+          DIST_TAG=$(node -p "(require('./package.json').publishConfig||{}).tag || ''")
+          if [ -z "$DIST_TAG" ]; then
+            if echo "$VERSION" | grep -q -- '-'; then DIST_TAG=alpha; else DIST_TAG=latest; fi
+          fi
+          echo "publishing $NAME@$VERSION with dist-tag: $DIST_TAG"
           if npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
             echo "版本 $NAME@$VERSION 已存在，跳过发布（避免重复发布失败）"
           else

@@ -191,6 +191,12 @@ export function validateDetailRequest(body: unknown): Validation<DetailRequest> 
     if (typeof record.refresh !== 'boolean') return failure('threadline/bad-request', 'invalid refresh flag')
     value.refresh = record.refresh
   }
+  /* 可选 updatedAt（1.5.3 性能）：只接受有限非负数；非法值**丢弃而不是拒绝**
+   * （行级字段不该打断整条请求，与 /scan 的容错口径一致）。 */
+  if (record.updatedAt !== undefined) {
+    const updatedAt = asFiniteNumber(record.updatedAt)
+    if (updatedAt !== undefined && updatedAt >= 0) value.updatedAt = updatedAt
+  }
   // 可选 cwd：与 scan 同一条规则（非空、绝对路径、长度上限）。不带也能工作（老客户端）。
   if (record.cwd !== undefined) {
     const cwd = asString(record.cwd)

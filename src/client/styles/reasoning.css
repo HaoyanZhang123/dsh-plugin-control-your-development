@@ -10,16 +10,41 @@
 
 /* ---------- 根与工具栏 ---------- */
 
+/*
+ * 思维链根容器（1.5.4 修：真机反馈「仅仅是覆盖了会话页，甚至会显示会话框」）。
+ *
+ * 根因不是层级/定位，而是**高度与背景**：
+ * - 旧规则没有 "block-size: 100%" → 容器按内容撑开，内容不足一屏时下面直接露出
+ *   宿主会话区（用户看到"还会显示会话框"）；
+ * - 也没有不透明底色 → 即使内容够高，半透明/无底色也会让底层透出来。
+ *
+ * 现在：撑满宿主给的区域 + 不透明背景 + 自己内部滚动（与脉络 tab 的 .threadline-shell 同口径）。
+ */
 :is(.threadline-app, .threadline-impact-root) .tl-reasoning {
   display: flex;
   flex-direction: column;
   gap: 10px;
   min-inline-size: 0;
+  /* 撑满宿主区域：宿主给 conversation.view 的是一块确定高度的区域。 */
+  flex: 1 1 auto;
+  block-size: 100%;
+  min-block-size: 0;
   padding: 12px;
+  /* 自己滚，不要把宿主的输入框卷进来（脉络 tab 也遵守同一条）。 */
   overflow: auto;
+  overscroll-behavior: contain;
+  /* 不透明底：避免任何情况下底层会话区透出来。 */
+  background: var(--tl-bg);
   color: var(--tl-fg);
   font-family: var(--tl-font);
   font-size: var(--tl-fs-meta);
+}
+
+/* 空态也要撑满（否则「没有记录」下面会露出会话区）。 */
+:is(.threadline-app, .threadline-impact-root) .tl-reasoning[data-empty='true'] {
+  flex: 1 1 auto;
+  block-size: 100%;
+  min-block-size: 0;
 }
 
 :is(.threadline-app, .threadline-impact-root) .tl-reasoning-toolbar {
@@ -131,6 +156,73 @@
 
 /* ---------- 三栏 ---------- */
 
+/*
+ * 三区布局（1.5.4：真机反馈「图在左，排行在右，详情在下」）。
+ *
+ * 旧形态是单层三列："维度导航 | 主图 | (排行 + 详情)" —— 主图被压到 1fr、
+ * 详情又被压在排行下面，于是图和详情都读不全（用户说"整体布局有问题"）。
+ *
+ * 现在两层：
+ *   上层 = 维度导航（窄列） + [主图 | 排行]（主图 flex:1、排行固定宽）
+ *   下层 = 详情整宽带（跨满，不再挤在侧栏里）
+ */
+:is(.threadline-app, .threadline-impact-root) .tl-reasoning-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-inline-size: 0;
+  min-block-size: 0;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-reasoning-top {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr) 288px;
+  gap: 10px;
+  align-items: start;
+  min-inline-size: 0;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-reasoning-figure {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+/* 详情整宽：内部沿用卡片样式，只是不再受 288px 侧栏约束。 */
+:is(.threadline-app, .threadline-impact-root) .tl-reasoning-detail {
+  min-inline-size: 0;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-reasoning-detail > .tl-card {
+  inline-size: 100%;
+}
+
+/* 窄容器（宿主侧栏展开时约 820px）：排行掉到主图下方，不再横挤三列。 */
+@container threadline (max-width: 1079.98px) {
+  :is(.threadline-app, .threadline-impact-root) .tl-reasoning-top {
+    grid-template-columns: 132px minmax(0, 1fr);
+  }
+
+  :is(.threadline-app, .threadline-impact-root) .tl-reasoning-side {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 10px;
+  }
+}
+
+@container threadline (max-width: 759.98px) {
+  :is(.threadline-app, .threadline-impact-root) .tl-reasoning-top {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  :is(.threadline-app, .threadline-impact-root) .tl-reasoning-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+}
+
+/* 兼容旧类名（1.5.3 及以前的测试/夹具仍可能引用）：已不再渲染，保留规则无副作用。 */
 :is(.threadline-app, .threadline-impact-root) .tl-reasoning-grid {
   display: grid;
   grid-template-columns: 132px minmax(0, 1fr) 288px;
@@ -240,36 +332,37 @@
 }
 
 :is(.threadline-app, .threadline-impact-root) .tl-tree-rect {
-  /* 用宿主的地层色而不是 sunken（后者在浅色主题下几乎与底色同色，格子会糊成一片）。 */
-  fill: var(--tl-surface-raised);
+  /* 1.5.3：底色由渲染层按分类色令牌给出（--tl-chart-N），这里只留兜底；
+   * 不再用三层宿主灰 —— 用户明确要"好看的不同的颜色"，灰阶看起来像没上色。 */
+  fill: var(--tl-chart-1);
   stroke: var(--tl-surface);
   stroke-width: 1.5;
   transition: fill var(--tl-dur-fast) ease, opacity var(--tl-dur-fast) ease;
 }
 
-/* 悬浮：其余变淡到 35%，被悬浮的保持并加深（用户明确要求的交互）。 */
+/* 悬浮：其余变淡到 35%，被悬浮的保持并加深（用户明确要求的交互）。
+   1.5.3：被悬浮/选中的格子**不换色**（换上分类色后，"加深"会把颜色盖掉），
+   改为只提透明度 + 加粗描边，颜色语义保持不变。 */
 :is(.threadline-app, .threadline-impact-root) .tl-treemap:has(.tl-tree-cell:hover) .tl-tree-cell:not(:hover):not([data-selected='true']) {
   opacity: 0.35;
 }
 
 :is(.threadline-app, .threadline-impact-root) .tl-tree-cell:hover .tl-tree-rect {
-  fill: var(--tl-active);
+  opacity: 1;
   stroke: var(--tl-border-strong);
   stroke-width: 2;
 }
 
-/* 点击选中：保持加深 + 强调描边，再点取消。 */
+/* 点击选中：保持原分类色 + 强调描边，再点取消。
+ * 1.5.3：不再改成 --tl-active（那会把分类色盖成灰），只用描边表达选中。 */
 :is(.threadline-app, .threadline-impact-root) .tl-tree-cell[data-selected='true'] .tl-tree-rect {
-  fill: var(--tl-active);
+  opacity: 1;
   stroke: var(--tl-accent);
-  stroke-width: 2;
+  stroke-width: 2.5;
 }
 
-/* 不同分组给不同底色（靠 data-tone）：默认色太接近白底，这里用宿主的三个层级色
- * 拉开明度差，保证一眼能看出这是"格子"而不是空白。 */
-:is(.threadline-app, .threadline-impact-root) .tl-tree-cell[data-tone='1'] .tl-tree-rect { fill: var(--tl-surface-sunken); }
-:is(.threadline-app, .threadline-impact-root) .tl-tree-cell[data-tone='2'] .tl-tree-rect { fill: var(--tl-hover); }
-:is(.threadline-app, .threadline-impact-root) .tl-tree-cell[data-tone='3'] .tl-tree-rect { fill: var(--tl-active); }
+/* 1.5.3：分类色由渲染层按 --tl-chart-N 内联给出（data-tone 的三色灰阶已删除，
+ * 那套规则会以同特异性覆盖掉分类色 —— 用户看到的就是"没上色"）。 */
 
 /* 描边用中灰，让相邻格子的分界明确（只靠底色差在浅色主题下不够）。 */
 :is(.threadline-app, .threadline-impact-root) .tl-tree-cell .tl-tree-rect {
@@ -277,6 +370,13 @@
   stroke-width: 1.5;
 }
 
+/*
+ * 格子文字（1.5.4 第三版配色口径）。
+ *
+ * 底色现在是**统一浅色粉彩**，因此文字统一用深色前景（--tl-fg），不再反白：
+ * 反白在浅底上等于隐形。也不用描边兜底 —— 浅底 + 深字本身对比就够，
+ * 描边反而让文字发胖（第二版截图里"先检查"就是糊的）。
+ */
 :is(.threadline-app, .threadline-impact-root) .tl-tree-name {
   fill: var(--tl-fg);
   font-family: var(--tl-font);
@@ -291,63 +391,82 @@
   pointer-events: none;
 }
 
-/* ---------- 图标云（不写字） ---------- */
+/* ---------- 词云（1.5.4 重做：文字即图形，不再是色块） ---------- */
 
-:is(.threadline-app, .threadline-impact-root) .tl-icon-cloud {
+:is(.threadline-app, .threadline-impact-root) .tl-word-cloud {
   position: relative;
-  block-size: 420px;
-  margin: 8px;
+  block-size: 460px;
+  margin: 8px 0;
   overflow: hidden;
   border-radius: var(--tl-radius-md);
+  /* 极浅的地层色做底，让"词"浮在面上；不用纯白（纯白在浅色主题下与卡片分不开）。 */
   background: var(--tl-surface-sunken);
 }
 
-/* 少量分组时居中聚拢（否则全散在四周，中间空一大块）。 */
-:is(.threadline-app, .threadline-impact-root) .tl-icon-cloud[data-count='1'] .tl-cloud-tile,
-:is(.threadline-app, .threadline-impact-root) .tl-icon-cloud[data-count='2'] .tl-cloud-tile,
-:is(.threadline-app, .threadline-impact-root) .tl-icon-cloud[data-count='3'] .tl-cloud-tile {
-  transform: translate(-50%, -50%) scale(1.35);
-}
-
-:is(.threadline-app, .threadline-impact-root) .tl-cloud-tile {
+/*
+ * 词本身：透明底 + **深色同色相**文字 + 字号表权重。
+ *
+ * 为什么不用 --tl-chart-N：那是"浅色粉彩"，用在矩形树图（大块底色）上是对的，
+ * 但词云的文字就是图形本身，浅色文字压在浅底上等于隐形（截图实测整片读不出）。
+ * 所以词云用 --tl-chart-ink-N（同色相的深色版）。
+ */
+:is(.threadline-app, .threadline-impact-root) .tl-cloud-word {
   position: absolute;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: var(--tl-radius-md);
-  background: var(--tl-surface);
-  color: var(--tl-accent);
+  display: inline-block;
+  max-inline-size: 46%;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: var(--tl-radius-xs);
+  background: transparent;
+  color: var(--tl-chart-ink-1);
+  font-family: var(--tl-font);
+  font-weight: 500;
+  line-height: 1.15;
+  white-space: normal;
+  text-align: center;
+  overflow-wrap: anywhere;
   cursor: pointer;
   transform: translate(-50%, -50%);
-  transition: transform var(--tl-dur-fast) ease, border-color var(--tl-dur-fast) ease, box-shadow var(--tl-dur-fast) ease;
+  transition:
+    color var(--tl-dur-fast) ease,
+    background var(--tl-dur-fast) ease,
+    transform var(--tl-dur-fast) ease;
 }
 
-:is(.threadline-app, .threadline-impact-root) .tl-cloud-tile[data-lang='zh'] {
-  color: var(--tl-success);
+/* 每个词按序取不同分类色（确定性：同一 index 同一色）。 */
+:is(.threadline-app, .threadline-impact-root) .tl-cloud-word[data-tone='1'] { color: var(--tl-chart-ink-1); }
+:is(.threadline-app, .threadline-impact-root) .tl-cloud-word[data-tone='2'] { color: var(--tl-chart-ink-2); }
+:is(.threadline-app, .threadline-impact-root) .tl-cloud-word[data-tone='3'] { color: var(--tl-chart-ink-3); }
+:is(.threadline-app, .threadline-impact-root) .tl-cloud-word[data-tone='4'] { color: var(--tl-chart-ink-4); }
+:is(.threadline-app, .threadline-impact-root) .tl-cloud-word[data-tone='5'] { color: var(--tl-chart-ink-5); }
+:is(.threadline-app, .threadline-impact-root) .tl-cloud-word[data-tone='6'] { color: var(--tl-chart-ink-6); }
+:is(.threadline-app, .threadline-impact-root) .tl-cloud-word[data-tone='7'] { color: var(--tl-chart-ink-7); }
+:is(.threadline-app, .threadline-impact-root) .tl-cloud-word[data-tone='8'] { color: var(--tl-chart-ink-8); }
+
+/* 大词加粗（权重第一档），小词不加粗 —— 密度差异是词云的主要信息。 */
+:is(.threadline-app, .threadline-impact-root) .tl-cloud-word[data-weight='1'],
+:is(.threadline-app, .threadline-impact-root) .tl-cloud-word[data-weight='0.9'],
+:is(.threadline-app, .threadline-impact-root) .tl-cloud-word[data-weight='0.8'] {
+  font-weight: 700;
 }
 
-:is(.threadline-app, .threadline-impact-root) .tl-cloud-tile[data-lang='mixed'] {
-  color: var(--tl-warn);
+:is(.threadline-app, .threadline-impact-root) .tl-cloud-word:hover {
+  background: var(--tl-hover);
+  transform: translate(-50%, -50%) scale(1.04);
 }
 
-:is(.threadline-app, .threadline-impact-root) .tl-cloud-tile:hover {
-  transform: translate(-50%, -50%) scale(1.06);
-  border-color: var(--tl-border-strong);
-  box-shadow: var(--tl-shadow-2);
+:is(.threadline-app, .threadline-impact-root) .tl-cloud-word[data-selected='true'] {
+  background: var(--tl-active);
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
 }
 
-:is(.threadline-app, .threadline-impact-root) .tl-cloud-tile[data-selected='true'] {
-  border-color: var(--tl-accent);
-  box-shadow: inset 0 0 0 1px var(--tl-accent);
-}
-
-:is(.threadline-app, .threadline-impact-root) .tl-cloud-tile:focus {
+:is(.threadline-app, .threadline-impact-root) .tl-cloud-word:focus {
   outline: none;
 }
 
-:is(.threadline-app, .threadline-impact-root) .tl-cloud-tile:focus-visible {
+:is(.threadline-app, .threadline-impact-root) .tl-cloud-word:focus-visible {
   outline: 2px solid var(--tl-accent);
   outline-offset: 2px;
 }
@@ -589,15 +708,40 @@
 
 :is(.threadline-app, .threadline-impact-root) .tl-reasoning-empty {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 6px;
+  /* 空态也要撑满（1.5.4）：否则「没有记录」下面会露出宿主会话区。 */
+  flex: 1 1 auto;
   min-block-size: 320px;
+  padding: 16px;
+  text-align: center;
   color: var(--tl-fg-secondary);
   font-size: var(--tl-fs-body);
 }
 
 :is(.threadline-app, .threadline-impact-root) .tl-reasoning-empty-title {
   margin: 0;
+}
+
+/* 读失败时补充一行「没有记录」的实情：主行说故障，副行说事实，不把两者混成一句。 */
+:is(.threadline-app, .threadline-impact-root) .tl-reasoning-empty-detail {
+  margin: 0;
+  color: var(--tl-fg-tertiary);
+  font-size: var(--tl-fs-meta);
+}
+
+/* 部分会话读失败时的常驻提示（有数据但覆盖不全，必须让用户看见）。 */
+:is(.threadline-app, .threadline-impact-root) .tl-reasoning-notice {
+  margin: 0 0 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--tl-warn);
+  border-radius: var(--tl-radius-sm);
+  background: var(--tl-surface-raised);
+  color: var(--tl-fg-secondary);
+  font-size: var(--tl-fs-meta);
+  line-height: var(--tl-lh-body);
 }
 
 /* ---------- 响应式（容器查询；与 base.css 同一断点纪律） ---------- */

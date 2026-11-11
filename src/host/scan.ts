@@ -1175,6 +1175,25 @@ export class ScanManager {
       )
     }
 
+    /**
+     * **缓存命中检查（1.5.3 性能）**：上面那条只在「该会话在本次 scan 里」时才走到；
+     * 而 `/detail` 更常见的入口是**冷读**（下面 `coldDetail`）——它以前每次都
+     * `handle.read(0)` 全量重读日志。实测单会话 10.9MB 要 249ms（解压 80 + 解析 142 + 归约 24），
+     * 89% 是"日志没变也照读"的浪费。
+     *
+     * 这里用客户端上报的 `updatedAt` 作为有效性判据（与 scan 的 digest 同口径）：
+     * - 有 `updatedAt` 且与缓存一致、且不是 refresh → 直接返回缓存，**不读日志**；
+     * - 没有 `updatedAt` → 无法判断是否过期，**不伪造命中**，照旧读。
+     */
+    if (request.updatedAt !== undefined && request.refresh !== true) {
+      const cached = this.detailCache.get(request.sessionId)
+      if (cached !== undefined && cached.updatedAt === request.updatedAt) {
+        this.detailCache.delete(request.sessionId)
+        this.detailCache.set(request.sessionId, cached)
+        return { ok: true, session: cached.detail }
+      }
+    }
+
     if (request.cwd === undefined) {
       return {
         ok: false,
@@ -1187,7 +1206,7 @@ export class ScanManager {
         },
       }
     }
-    return this.coldDetail(persistence, request.sessionId, request.cwd)
+    return this.coldDetail(persistence, request.sessionId, request.cwd, request.updatedAt)
   }
 
   /**
@@ -1205,6 +1224,7 @@ export class ScanManager {
     persistence: PersistenceLike,
     sessionId: string,
     cwd: string,
+    updatedAt?: number,
   ): Promise<ThreadlineResponse<DetailResponse>> {
     const target = normalizeCwd(cwd)
     if (target === '') {
@@ -1248,7 +1268,12 @@ export class ScanManager {
       subagents: 0,
       errors: 0,
     }
-    const response = await this.readDetail(persistence, sessionId, context, [], false)
+    /* 1.5.3：把客户端上报的 updatedAt 带进 context，让 readDetail 能写进缓存；
+     * 没有 updatedAt 时保持 0（cacheDetail 会以 0 记录，等价于"不命中"）。 */
+    if (updatedAt !== undefined && Number.isFinite(updatedAt) && updatedAt >= 0) {
+      context.updatedAt = updatedAt
+    }
+    const response = await this.readDetail(persistence, sessionId, context, [], updatedAt !== undefined)
     if (response.ok === true && viaParent) {
       // 子会话：cwd 与请求 cwd 不同，扫描上下文不可得 → 如实标 partial。
       response.session.partial = true

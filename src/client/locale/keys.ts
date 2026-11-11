@@ -175,6 +175,8 @@ export type MessageKey =
   | "reasoning.langUnknown"
   | "reasoning.loading"
   | "reasoning.none"
+  | "reasoning.partial"
+  | "reasoning.collapsed"
   | "map.clusterCount"
   | "map.clusterMeta"
   | "map.clusterCurrent"
@@ -474,4 +476,6 @@ export const MESSAGE_KEYS: readonly MessageKey[] = [
   "reasoning.langUnknown",
   "reasoning.loading",
   "reasoning.none",
+  "reasoning.partial",
+  "reasoning.collapsed",
 ]

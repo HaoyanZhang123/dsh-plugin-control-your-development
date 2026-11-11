@@ -19,6 +19,105 @@ const h = React.createElement
 export const TREEMAP_WIDTH = 900
 export const TREEMAP_HEIGHT = 380
 
+/**
+ * 矩形树图的合并口径（1.5.4：真机反馈「显示前 50 吧」）。
+ *
+ * 1.5.3 用了 Top 10，但真机「句式开头」一维有 **23106 组**，Top 10 会把大量有意义的
+ * 中等分组吞进「其他」，用户看到的板块太少。现在放宽到 50：
+ * - `TREEMAP_MIN_SHARE`：占比低于阈值的并入「其他」（避免 1–2px 细条）；
+ * - `TREEMAP_TOP_N`：再取前 50 组，其余并入同一个「其他」。
+ * 两者叠加 = 先按阈值合并，再按名次截断，剩下的仍然合成一格（不丢量，只丢细节）。
+ */
+export const TREEMAP_MIN_SHARE = 0.001
+export const TREEMAP_TOP_N = 50
+
+/** 「其他」聚合组的哨兵 key（渲染层用 locale 的 reasoning.other 显示，不裸奔到 UI）。 */
+export const TREEMAP_OTHER_KEY = '\u0000other'
+
+/**
+ * 矩形树图的配色（1.5.4：真机反馈「色块太丑，饱和度太高」）。
+ *
+ * 只引用令牌（项目硬约束：样式里不写颜色字面量）；令牌本身已经是低饱和分类色
+ * （见 `tokens.css` 的 `--tl-chart-*`：把它们往中性面里混过一遍）。
+ * 顺序固定 → 同输入同配色（截图可复现）。颜色只承担"区分分组"，不承担状态。
+ */
+export const TREEMAP_COLORS: readonly string[] = [
+  'var(--tl-chart-1)',
+  'var(--tl-chart-2)',
+  'var(--tl-chart-3)',
+  'var(--tl-chart-4)',
+  'var(--tl-chart-5)',
+  'var(--tl-chart-6)',
+  'var(--tl-chart-7)',
+  'var(--tl-chart-8)',
+]
+
+/** 一个聚合结果：`groups` 是**渲染用**的最终分组，`hiddenCount` 是被合并掉的组数。 */
+export interface CollapsedGroups {
+  groups: ReasoningGroup[]
+  hiddenCount: number
+}
+
+/**
+ * 把「太多太细」的分组合并成可读的一屏（纯函数，确定，便于测试）。
+ *
+ * 规则（与用户确认的口径一致）：
+ * 1. 总字符数为 0 → 原样返回（调用方已有空态，不该走到这）；
+ * 2. 先按 `chars` 降序，占比 < `TREEMAP_MIN_SHARE` 的全部并入「其他」；
+ * 3. 剩下的再取前 `TREEMAP_TOP_N`，其余并入同一个「其他」；
+ * 4. 没有任何组被合并 → 不产生空的「其他」。
+ */
+export function collapseTreemapGroups(groups: readonly ReasoningGroup[]): CollapsedGroups {
+  const positive = groups.filter((group) => group.chars > 0)
+  if (positive.length === 0) return { groups: [], hiddenCount: 0 }
+  const total = positive.reduce((sum, group) => sum + group.chars, 0)
+  if (total <= 0) return { groups: [...groups], hiddenCount: 0 }
+
+  const sorted = positive.slice().sort((left, right) => right.chars - left.chars || (left.key < right.key ? -1 : 1))
+  const kept: ReasoningGroup[] = []
+  const merged: ReasoningGroup[] = []
+  for (const group of sorted) {
+    const share = group.chars / total
+    if (share < TREEMAP_MIN_SHARE && merged.length + kept.length > 0) {
+      merged.push(group)
+      continue
+    }
+    if (kept.length >= TREEMAP_TOP_N) {
+      merged.push(group)
+      continue
+    }
+    kept.push(group)
+  }
+
+  if (merged.length === 0) return { groups: kept, hiddenCount: 0 }
+
+  /* 「其他」的字段：字符数/句数/token 求和；主句式与语言取占比最大者（与聚合口径一致，不编造）。 */
+  const other: ReasoningGroup = {
+    ...merged[0],
+    key: TREEMAP_OTHER_KEY,
+    chars: merged.reduce((sum, group) => sum + group.chars, 0),
+    sentences: merged.reduce((sum, group) => sum + group.sentences, 0),
+    tokens: merged.reduce((sum, group) => sum + group.tokens, 0),
+    totalTokens: merged.reduce((sum, group) => sum + group.totalTokens, 0),
+    knownChars: merged.reduce((sum, group) => sum + group.knownChars, 0),
+  }
+  return { groups: [...kept, other], hiddenCount: merged.length }
+}
+
+/**
+ * 词云的显示符号（1.5.3 修「显示星号」）。
+ *
+ * 真因：旧实现只有 `FORM_GLYPH`（plan/question/imperative/warning/statement 五个 key），
+ * 而 `group.key` 在「句式开头 / 语言 / 模型 / Preset」这些维度下是**任意字符串**
+ * （如 "I need"、"中文"、"DeepSeek V4"），查不到就落到 `◈` —— 用户看到的就是"星号"。
+ *
+ * 正确口径：符号只属于 form 维度；其它维度**显示 key 本身**（那是可读文字）。
+ */
+export function cloudGlyphOf(key: string, dimension: ReasoningDimension): string {
+  if (dimension === 'form') return FORM_GLYPH[key] ?? key
+  return key
+}
+
 /** 句式的图标符号（图标云用；不写文字）。 */
 const FORM_GLYPH: Readonly<Record<string, string>> = {
   plan: '◈',
@@ -139,8 +238,22 @@ export function Treemap(props: TreemapProps): React.ReactElement {
           height: slice.rect.h,
           rx: 6,
           ry: 6,
+          /* 1.5.3：按组序号取分类色（用户要求"好看的不同的颜色"）。
+           * 用**内联 style** 而不是 SVG 的 fill 属性 —— 后者是表现属性，
+           * 优先级低于任何 CSS 规则，会被 stylesheet 里的兜底色覆盖
+           * （实测：写 fill 属性时 5 个格子全是同一种蓝）。
+           * 「其他」固定用最后一个色位，与具体分组区分开。 */
+          style: {
+            fill: slice.group.key === TREEMAP_OTHER_KEY ? TREEMAP_COLORS[TREEMAP_COLORS.length - 1] : TREEMAP_COLORS[index % TREEMAP_COLORS.length],
+          },
         }),
-        showName ? h('text', { className: 'tl-tree-name', x: slice.rect.x + 10, y: slice.rect.y + 22 }, slice.group.key) : null,
+        showName
+          ? h(
+              'text',
+              { className: 'tl-tree-name', x: slice.rect.x + 10, y: slice.rect.y + 22 },
+              slice.group.key === TREEMAP_OTHER_KEY ? props.t('reasoning.other') : slice.group.key,
+            )
+          : null,
         showValue
           ? h(
               'text',
@@ -154,59 +267,105 @@ export function Treemap(props: TreemapProps): React.ReactElement {
   )
 }
 
-/** 图标云：方块大小 ∝ 字符数，符号 = 句式类型，颜色 = 语言；**不显示文字**。 */
-export interface IconCloudProps {
+/**
+ * 词云（1.5.4 重做）。
+ *
+ * 真机反馈两条：「非常丑」「我要的是词云而且要对应的文字显示不是图标」。
+ *
+ * 旧实现是**方块**（一个圆角按钮里放一个符号或一行字），本质是"气泡图"不是词云：
+ * - 视觉上是等大色块，权重差别只体现在方块尺寸，看不出"词"；
+ * - 颜色承担"语言"语义，于是同一语言的词全同色，整屏一片。
+ *
+ * 现在：**文字本身就是图形**——
+ * - 字号 ∝ 字符数（对数压缩，避免头尾差 10 倍时小词不可读）；
+ * - 不画方块底色，只给文字上低饱和分类色（观感是词云，不是色块矩阵）；
+ * - 位置按**螺旋排布**确定性生成（同数据同画面，可截图复现），大词居中、小词外扩；
+ * - 全部显示原词（不截断、不换符号），悬停/选中用下划线与加粗表达。
+ */
+export interface WordCloudProps {
   groups: readonly ReasoningGroup[]
   t: Translator
+  /** 维度决定文字口径：form 显示可读标签，其它维度显示 key 本身。 */
+  dimension: ReasoningDimension
   selectedKey: string | null
   onSelect: (key: string) => void
 }
 
-/** 固定槽位（确定性；不随机布点，保证同数据同画面）。
- * 每组按数量取**居中**的一圈，避免少数分组时散在四角、中间空一大块。 */
-const CLOUD_SLOTS: ReadonlyArray<[number, number]> = [
-  [50, 50], [30, 40], [70, 40], [30, 68], [70, 68], [50, 26], [50, 76], [16, 26],
-  [84, 26], [16, 74], [84, 74], [40, 20], [60, 20], [40, 82], [60, 82], [50, 12],
-  [50, 88], [22, 52],
-]
+/** 词云最多显示多少个词（用户要求「显示前 50」）；超出提示已合并。 */
+export const CLOUD_MAX_WORDS = 50
 
-export function IconCloud(props: IconCloudProps): React.ReactElement {
-  const sorted = props.groups.slice().sort((left, right) => right.chars - left.chars).slice(0, CLOUD_SLOTS.length)
+/**
+ * 螺旋布点的确定性位置（百分比坐标，围绕中心外扩）。
+ *
+ * 用固定步长的阿基米德螺旋而不是随机/力导向：同输入同画面、截图可比对，
+ * 也不需要在渲染后测量文字宽度（那会让首帧跳动）。
+ */
+function cloudSlot(index: number): { left: number; top: number } {
+  if (index === 0) return { left: 50, top: 50 }
+  const golden = 2.399963229728653 /* 黄金角，让相邻点自然错开 */
+  const angle = index * golden
+  const radius = Math.min(46, 7 + 6.2 * Math.sqrt(index))
+  return {
+    left: 50 + Math.cos(angle) * radius * 1.55,
+    top: 50 + Math.sin(angle) * radius,
+  }
+}
+
+export function WordCloud(props: WordCloudProps): React.ReactElement {
+  const sorted = props.groups
+    .filter((group) => group.chars > 0 && group.key !== TREEMAP_OTHER_KEY)
+    .slice()
+    .sort((left, right) => right.chars - left.chars || (left.key < right.key ? -1 : 1))
+    .slice(0, CLOUD_MAX_WORDS)
   const max = sorted.length > 0 ? sorted[0].chars : 1
   const min = sorted.length > 0 ? sorted[sorted.length - 1].chars : 1
+  /* 对数压缩：最大词与最小词可能差两个数量级，线性映射会让小词全变 9px 不可读。 */
+  const weightOf = (chars: number): number => {
+    if (max === min) return 0.7
+    const lo = Math.log(Math.max(1, min))
+    const hi = Math.log(Math.max(2, max))
+    return hi === lo ? 0.7 : (Math.log(Math.max(1, chars)) - lo) / (hi - lo)
+  }
   return h(
     'div',
-    { className: 'tl-icon-cloud', role: 'group', 'aria-label': props.t('reasoning.cloud'), 'data-view': 'cloud', 'data-count': String(sorted.length) },
+    {
+      className: 'tl-word-cloud',
+      role: 'group',
+      'aria-label': props.t('reasoning.cloud'),
+      'data-view': 'cloud',
+      'data-count': String(sorted.length),
+    },
     ...sorted.map((group, index) => {
-      const slot = CLOUD_SLOTS[index]
-      const ratio = max === min ? 1 : (group.chars - min) / (max - min)
-      /* 少量分组时整体放大（否则 3 个方块只占中间一小块）。 */
-      const base = sorted.length <= 4 ? 76 : 40
-      const span = sorted.length <= 4 ? 44 : 52
-      const box = Math.round(base + ratio * span)
+      const slot = cloudSlot(index)
+      const weight = weightOf(group.chars)
+      /* 10–40px：足够看出主次，又不至于大词撑爆容器。 */
+      const fontSize = Math.round(10 + weight * 30)
       const selected = props.selectedKey !== null && props.selectedKey === group.key
+      const text = cloudGlyphOf(group.key, props.dimension)
+      const share = Math.round((group.chars / Math.max(1, sorted.reduce((sum, item) => sum + item.chars, 0))) * 1000) / 10
       return h(
         'button',
         {
           key: group.key,
           type: 'button',
-          className: 'tl-cloud-tile',
+          className: 'tl-cloud-word',
           'data-group-key': group.key,
           'data-lang': group.lang,
+          'data-glyph': 'text',
+          'data-tone': String((index % 8) + 1),
+          'data-weight': String(Math.round(weight * 10) / 10),
           'data-selected': selected ? 'true' : 'false',
           'aria-pressed': selected ? 'true' : 'false',
-          'aria-label': group.key + ' · ' + String(group.chars) + ' ' + props.t('reasoning.charsUnit'),
-          title: group.key + ' · ' + String(group.chars) + ' ' + props.t('reasoning.charsUnit'),
+          'aria-label': text + ' · ' + String(group.chars) + ' ' + props.t('reasoning.charsUnit') + ' · ' + String(share) + '%',
+          title: text + ' · ' + String(group.chars) + ' ' + props.t('reasoning.charsUnit') + ' · ' + String(share) + '%',
           style: {
-            left: slot[0] + '%',
-            top: slot[1] + '%',
-            width: box + 'px',
-            height: box + 'px',
-            fontSize: Math.round(box * 0.4) + 'px',
+            left: slot.left + '%',
+            top: slot.top + '%',
+            fontSize: fontSize + 'px',
           },
           onClick: () => props.onSelect(group.key),
         },
-        h('span', { 'aria-hidden': true }, FORM_GLYPH[group.key] ?? (group.key === '' ? '·' : '◈')),
+        text,
       )
     }),
   )

@@ -362,6 +362,21 @@ export function folderRadiusFromSize(size: number | undefined): number {
 }
 
 /**
+ * 文件节点悬停时的**自身**强调数值（1.5.1）。
+ *
+ * 为什么要有它：D-35 起 hover 不再压暗其它节点（用户明确否掉「整图忽明忽暗」），
+ * 于是"哪里被指着"只剩被悬浮节点自己的变化。原来的 0.12 光晕 + 1.1→1.8px 描边
+ * 在真机上弱到看不出来（用户反馈「文件节点 hover 改坏了」）。
+ *
+ * 口径（唯一事实源，渲染层与断言都读这里，CSS 不重复写数字）：
+ * - `fillOpacity`：填充提亮到接近实心，色相仍是族色 → 不丢"这是什么类型"；
+ * - `haloOpacity`：外圈光晕加强，半径不变（不参与碰撞/布局，不推挤邻居）；
+ * - `strokeWidth`：描边加粗（与被选中态 1.5 拉开，两者可区分）。
+ * 刻意**不放大半径**：力导向里节点挨得近，放大反而压住邻居标签。
+ */
+export const FOLDER_HOVER = { fillOpacity: 0.98, haloOpacity: 0.24, strokeWidth: 2 } as const
+
+/**
  * 「显示全部��档的半径缩放（03 §4.2.3：半径按 1/√n 缩一档）�? * n �?40 �?= 1（不缩）；n 越大越小，但不低�?`FOLDER_ALL_RADIUS_FLOOR`�? */
 export function allModeRadiusScale(nodeCount: number): number {
   if (!Number.isFinite(nodeCount) || nodeCount <= GRAPH_LIMITS.folder) return 1

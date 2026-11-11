@@ -121,9 +121,30 @@ plugin/
   tests/          node --test suites and browser harness
 ```
 
+## Project status
+
+> ⚠️ **This is an unfinished release (v1.5.4) and still being iterated on. More polish is coming.**
+>
+> It is not a stub — it works — but it is **usable rather than finished**:
+>
+> - **The Reasoning tab is the focus of this release.** It is functionally complete
+>   (treemap / word cloud / list, five filter dimensions, Top-50 aggregation), but its
+>   **visuals and interaction are still being adjusted** — palette, density and type scale will change.
+>   Known and not fully solved: word-cloud labels can overlap when there are many groups.
+> - **"Standalone page" is a visual claim, not an architectural one.** A DSH UI plugin can only
+>   register into an existing slot (this one uses `conversation.view`); there is no public API for
+>   opening an independent window or route. The Reasoning tab now fills the area, has an opaque
+>   background and scrolls internally, but it is **still rendered inside the conversation container**.
+> - **Performance** only gained an "unchanged log is not re-read" cache. The first open still pays a
+>   full scan; going further needs incremental log reading, which conflicts with this project's
+>   "permanently read-only" rule — not decided yet.
+>
+> So: **install it, but treat the Reasoning tab as a preview.** The Threadline side
+> (timeline / relation graph) is stable. For concrete problems, please file an issue with the scenario.
+
 ## Releases
 
-Current release: **panel plugin v1.5.0** (stable).
+Current release: **panel plugin v1.5.4** (unfinished, actively being polished).
 
 - Changelog: [CHANGELOG.md](CHANGELOG.md)
 - GitHub Releases: https://github.com/HaoyanZhang123/dsh-plugin-control-your-development/releases

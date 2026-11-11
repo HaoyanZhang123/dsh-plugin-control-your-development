@@ -516,11 +516,32 @@
 
 /* 尾列（族色点 / 本轮标记 / ops）固定在最后一轨，内部靠 end 对齐。 */
 :is(.threadline-app, .threadline-impact-root) .tl-tree-row-tail {
-  display: flex;
+  display: grid;
+  /* 1.5.3：第 5 条轨道内部再分两个**固定**子槽 —— 色点 14px + 操作 26px。
+     旧实现是 flex 右对齐，缺 ops 的行色点会被推到最右（实测两类行差 22px）。 */
+  grid-template-columns: 14px 26px;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: end;
   gap: 4px;
   min-inline-size: 0;
+  overflow: hidden;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-tail-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 14px;
+  min-inline-size: 14px;
+  gap: 2px;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-tail-ops {
+  display: inline-flex;
+  align-items: center;
+  justify-content: end;
+  inline-size: 26px;
+  min-inline-size: 26px;
   overflow: hidden;
 }
 

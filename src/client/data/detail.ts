@@ -224,6 +224,12 @@ export function createDetailStore(options: DetailStoreOptions): DetailStore {
       if (abort === undefined) abort = new AbortController()
       const body: Record<string, unknown> = { sessionId, generation: requestGeneration }
       if (requested?.refresh === true) body.refresh = true
+      /* 1.5.3（性能）：把会话行的 updatedAt 一起发过去。host 用它判断"日志有没有变"——
+       * 未变就直接返回缓存，不再全量读日志（实测单会话 10.9MB 要 249ms，89% 花在重复解压/解析）。
+       * 只在调用方明确给了数字时才带；没给就不带（host 会照旧读，不伪造命中）。 */
+      if (typeof requested?.updatedAt === 'number' && Number.isFinite(requested.updatedAt) && requested.updatedAt >= 0) {
+        body.updatedAt = requested.updatedAt
+      }
       // T13e：cwd 只来自调用方（options）或已显式设置的默认值；不做任何推断。
       const cwd = normalizeCwd(requested?.cwd) || defaultCwd
       if (cwd !== '') body.cwd = cwd

@@ -63,15 +63,63 @@ export function filterSamples(input: ReasoningInput): ReasoningSample[] {
     if (filter.range === 'session' && input.currentSessionId !== undefined && sample.sessionId !== input.currentSessionId) return false
     if (filter.range === 'session' && input.currentSessionId === undefined) return false
     if (filter.range === 'active' && input.sessions?.[sample.sessionId]?.archived === true) return false
-    if (filter.model !== 'all') {
-      const model = sample.model ?? ''
-      if (filter.model === 'other') {
-        if (model === 'DeepSeek V4' || model === 'Kimi K3' || model === '') return false
-      } else if (model !== filter.model) return false
-    }
+    /*
+     * 1.5.4 修的真机缺陷：旧实现把模型名**写死**成 'DeepSeek V4' / 'Kimi K3'，
+     * 而真实 `sample.model` 是 `deepseek/deepseek-v4.1-flash` / `k3` / `k3-256k`
+     * （实测 2521 条真实样本的分布就是这样）→ 选任何一项都会把样本全滤掉，
+     * 只剩「全部」和「其他」还能出数据，用户看到的就是「只显示全部和其他」。
+     *
+     * 现在 `filter.model` 是**从真实样本里枚举出来的原值**（见 `modelOptionsOf`），
+     * 这里只做精确匹配 + `all` 通配，不再猜别名。
+     */
+    if (filter.model !== 'all' && (sample.model ?? '') !== filter.model) return false
     if (filter.preset !== 'all' && (sample.preset ?? '') !== filter.preset) return false
+    /* 语言是**逐句**判定的（`ReasoningSentence.lang`），样本级没有 lang；
+     * 因此语言筛选不在这里做，由 `sentencesByLang` 在句级承担。 */
     return true
   })
+}
+
+/**
+ * 从样本里枚举出**真实存在的**模型值（按字符数降序），供筛选器直接使用。
+ *
+ * 为什么要枚举而不是写死：模型名是宿主任意字符串（`deepseek/deepseek-v4.1-flash`、
+ * `k3-256k`……），写死必然与真机脱节——这正是 1.5.3「只显示全部和其他」的根因。
+ */
+export function modelOptionsOf(samples: readonly ReasoningSample[]): Array<{ value: string; chars: number; count: number }> {
+  const byModel = new Map<string, { chars: number; count: number }>()
+  for (const sample of samples) {
+    const model = sample.model ?? ''
+    if (model === '') continue
+    const previous = byModel.get(model)
+    const chars = typeof sample.text === 'string' ? sample.text.length : 0
+    if (previous === undefined) byModel.set(model, { chars, count: 1 })
+    else {
+      previous.chars += chars
+      previous.count += 1
+    }
+  }
+  return [...byModel.entries()]
+    .map(([value, stats]) => ({ value, chars: stats.chars, count: stats.count }))
+    .sort((left, right) => right.chars - left.chars || (left.value < right.value ? -1 : 1))
+}
+
+/** 同理：从**句子**里枚举真实存在的语言值（语言是逐句判定的，样本级没有该字段）。 */
+export function langOptionsOf(sentences: readonly ReasoningSentence[]): Array<{ value: string; chars: number; count: number }> {
+  const byLang = new Map<string, { chars: number; count: number }>()
+  for (const sentence of sentences) {
+    const lang = sentence.lang
+    if (lang === undefined || lang === null) continue
+    const previous = byLang.get(lang)
+    if (previous === undefined) byLang.set(lang, { chars: sentence.chars, count: 1 })
+    else {
+      previous.chars += sentence.chars
+      previous.count += 1
+    }
+  }
+  return [...byLang.entries()]
+    .map(([value, stats]) => ({ value, chars: stats.chars, count: stats.count }))
+    .sort((left, right) => right.chars - left.chars || (left.value < right.value ? -1 : 1))
 }
 
 export interface ReasoningDerived {

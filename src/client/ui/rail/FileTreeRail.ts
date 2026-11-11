@@ -280,7 +280,7 @@ function RailRowView(props: RowProps): React.ReactElement {
   )
   const name = h('span', { className: 'tl-tree-name', title: row.path === '' ? '/' : row.path }, row.name)
   const type = h('span', { className: 'tl-tree-type' }, typeLabel(t, row))
-  const sizeText = row.sizeText === null ? null : h('span', { className: 'tl-tree-size' }, row.sizeText)
+  const sizeText = h('span', { className: 'tl-tree-size' }, row.sizeText === null ? '' : row.sizeText)
   // 未触碰：ops 徽标**整个不渲染**（不显示假 0）。
   const opsBadge =
     row.ops === null
@@ -304,6 +304,23 @@ function RailRowView(props: RowProps): React.ReactElement {
     'aria-hidden': true,
   })
   const currentBadge = row.currentTurn ? h('span', { className: 'tl-tree-current', 'aria-hidden': true }, '\u25CF') : null
+
+  /**
+   * 行尾（第 5 条 grid 轨道「操作」）内部再分**两个固定子槽**：
+   * 左子槽 = 色彩点（跨行恒定位置），右子槽 = 操作徽标（右对齐）。
+   *
+   * 1.5.3 真机反馈「操作列看起来没对齐」的根因：旧实现是一个 flex 右对齐行里
+   * 塞 `[familyDot, currentBadge, opsBadge]`。目录行没有 opsBadge → 色点被推到最右；
+   * 文件行有 opsBadge → 色点被挤到左边 —— 实测同一个色点在两类行之间跳 22px。
+   *
+   * 现在两个子槽**恒定渲染**（没有徽标时右槽留空），色点与徽标各自落在固定 x。
+   */
+  const tailCell = h(
+    'span',
+    { className: 'tl-tree-row-tail' },
+    h('span', { className: 'tl-tree-tail-dot', 'aria-hidden': true }, familyDot, currentBadge),
+    h('span', { className: 'tl-tree-tail-ops' }, opsBadge),
+  )
 
   const common = {
     type: 'button' as const,
@@ -340,7 +357,8 @@ function RailRowView(props: RowProps): React.ReactElement {
       name,
       type,
       sizeText,
-      h('span', { className: 'tl-tree-row-tail' }, familyDot, currentBadge, opsBadge),
+      /* 1.5.3：行尾内部再分两个固定子槽（色点 / 操作），不再靠 flex 自动推。 */
+      tailCell,
     )
   }
   return h(

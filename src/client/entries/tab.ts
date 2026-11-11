@@ -115,6 +115,8 @@ export interface TabOwnerProps {
   locale?: Locale
   now?: number
   openPath?: (path: string) => void
+  /** 装配层注入：把当前会话 id 回写出去（双击打开文件要拼资源地址用）。 */
+  onSessionId?: (sessionId: string | undefined) => void
   remote?: unknown
   referenceLayer?: ReferenceLayer
   testId?: string
@@ -277,6 +279,15 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
         : ''
   const scope = useWorkspaceScope({ workspaces: workspacesSnapshot, sessions: sessionsSnapshot, sessionId })
   const scannable = isScannableScope(scope)
+  /**
+   * 把当前会话 id 回写给装配层（1.5.2）：「双击打开文件」要拼
+   * `dsh-resource://file/session/<sessionId>/…`，而那个动作在 apply() 期就建好了。
+   * 只写一个只读槽，不触发渲染、不改数据。
+   */
+  React.useEffect(() => {
+    if (props.onSessionId === undefined) return
+    props.onSessionId(sessionId === '' ? undefined : sessionId)
+  }, [props.onSessionId, sessionId])
   const data = useThreadlineData({ scope: scannable ? scope : null, fetch: fetchImpl })
   // 右栏目录树（M4）：首选 remote.workspaceFiles.list，不可用则 host 只读 fallback（B1 已批准）。
   // cwd 必须传：已安装 API 对空串 path 抛 gateway/bad-request，根层要用 cwd 绝对路径。
@@ -1065,6 +1076,11 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
         selectedFolderPath: selectedFolder,
         hoveredPath: hoverPath,
         onSelectFile: selectFile,
+        /* 1.5.2 真机缺陷：这里**漏传了 onSelectFolder**。
+         * FolderMap 的单击走 `props.onSelectFolder?.(hub.path)`；不传就是 `undefined`，
+         * 于是点文件夹什么都不发生（只把文件选中清掉），`selectedFolder` 永远是 null，
+         * `[data-selected='true']` 一次都不会出现 —— 用户看到的就是「单击文件夹没反应」。 */
+        onSelectFolder: selectFolder,
         onOpenFile: props.openPath,
         onEnterFolder: mode2 === 'folder' ? onNavigate : undefined,
         onExitTurn: exitTurn,
@@ -1239,7 +1255,19 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
  */
 export function registerTab(
   ctx: ClientScopeLike,
-  options?: { locale?: Locale; openPath?: (path: string) => void; getRemote?: () => unknown },
+  options?: {
+    locale?: Locale
+    openPath?: (path: string) => void
+    getRemote?: () => unknown
+    /**
+     * 把 tab 当前会话 id 回写给装配层（1.5.2）。
+     *
+     * 为什么需要：`openPath` 在 `apply()` 期就要建好，但「双击打开文件」需要的
+     * `dsh-resource://file/session/<sessionId>/…` 地址只在 tab 渲染时才知道 sessionId。
+     * 用这个回调把 id 放进装配层的一个只读槽，避免把 openPath 做成每次渲染重建的闭包。
+     */
+    setSessionId?: (sessionId: string | undefined) => void
+  },
 ): boolean {
   return registerSlot(
     ctx,
@@ -1253,6 +1281,7 @@ export function registerTab(
         ...(options?.locale === undefined ? {} : { locale: options.locale }),
         ...(options?.openPath === undefined ? {} : { openPath: options.openPath }),
         ...(remote === undefined ? {} : { remote }),
+        ...(options?.setSessionId === undefined ? {} : { onSessionId: options.setSessionId }),
       })
     },
     'threadline: conversation view',

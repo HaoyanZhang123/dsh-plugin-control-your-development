@@ -176,6 +176,8 @@ export const zh: Record<MessageKey, string> = {
   "reasoning.langUnknown": "未知",
   "reasoning.loading": "正在读取思维链记录…",
   "reasoning.none": "这个范围内没有可读取的思维链记录",
+  "reasoning.partial": "部分会话读取失败，统计只覆盖读到的记录",
+  "reasoning.collapsed": "另有 {n} 组已合并",
   "map.clusterCount": "{count} 文件",
   "map.clusterMeta": "{ops} 次操作 · 最近 {time}",
   "map.clusterCurrent": "本轮 {n}",

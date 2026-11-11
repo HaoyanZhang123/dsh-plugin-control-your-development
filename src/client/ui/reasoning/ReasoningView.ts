@@ -28,12 +28,14 @@ import {
   DEFAULT_FILTER,
   deriveReasoning,
   dimensionLabelKey,
+  langOptionsOf,
+  modelOptionsOf,
   sentencesByPrefix,
   type ReasoningFilter,
   type ReasoningRecord,
   type ReasoningSessionMeta,
 } from './model.ts'
-import { GroupList, IconCloud, RankRow, SentenceList, Treemap } from './viz.ts'
+import { GroupList, RankRow, SentenceList, Treemap, WordCloud, collapseTreemapGroups } from './viz.ts'
 
 const h = React.createElement
 
@@ -62,6 +64,11 @@ export interface ReasoningViewProps {
   initialSelect?: string
   locale?: Locale
   privacy?: boolean
+  /**
+   * 可选：简短提示（如「部分会话读取失败」）。
+   * 只在**真有缺损**时由入口传入；不给就不渲染 `data-partial` 区域（不伪造"完整"也不假装"无损"）。
+   */
+  notice?: string
   testId?: string
 }
 
@@ -93,6 +100,15 @@ export function ReasoningView(props: ReasoningViewProps): React.ReactElement {
       }),
     [props.samples, props.sessions, props.currentSessionId, filter, dimension],
   )
+
+  /**
+   * 图形视图用的合并结果（1.5.3）。
+   *
+   * 真机「句式开头」一维有 **23106 组**，每组一个 rect → 画布被切成几千个 1–2px 细条，
+   * 既不可读也拖慢渲染。这里按「<1% 并入其他」+「只留 Top 10」聚合；列表视图不合并
+   * （它本来就能滚完全部，合并反而丢信息）。
+   */
+  const collapsed = React.useMemo(() => collapseTreemapGroups(derived.groups), [derived.groups])
 
   /** 初始选中：`first` = 排第一的句式（首帧就生效，SSR 安全）；其它值当作具体分组键。 */
   const effectiveSelectedKey: string | null =
@@ -132,48 +148,108 @@ export function ReasoningView(props: ReasoningViewProps): React.ReactElement {
     setSelectedKey((previous) => (previous === key ? null : key))
   }
 
+  /**
+   * 筛选器选项必须**来自真实样本**（1.5.4 修的真机缺陷）。
+   *
+   * 旧实现在工具栏里把模型写死成 `DeepSeek V4` / `Kimi K3`，而真机 `sample.model`
+   * 是 `deepseek/deepseek-v4.1-flash` / `k3` / `k3-256k`——选任何一项都会把样本全滤掉，
+   * 用户看到的就是「只显示全部和其他」。现在从样本枚举，下拉里就是真实存在的模型。
+   */
+  const modelOptions = React.useMemo(() => modelOptionsOf(props.samples), [props.samples])
+
+  /** 语言是**逐句**判定的，所以从句子枚举（不是从样本）。 */
+  const langOptions = React.useMemo(() => langOptionsOf(derived.sentences), [derived.sentences])
+
   return h(
     'section',
-    { className: 'tl-reasoning', 'data-testid': props.testId ?? 'reasoning-view', 'data-view': view, 'data-locale': locale },
-    reasoningToolbar(t, filter, setFilter, view, setView),
+    {
+      className: 'tl-reasoning',
+      'data-testid': props.testId ?? 'reasoning-view',
+      'data-view': view,
+      'data-locale': locale,
+      ...(props.notice === undefined ? {} : { 'data-partial': 'true' }),
+    },
+    props.notice === undefined
+      ? null
+      : h('p', { className: 'tl-reasoning-notice', role: 'status', 'data-testid': 'reasoning-notice' }, props.notice),
+    reasoningToolbar(t, filter, setFilter, view, setView, modelOptions, langOptions),
     kpiStrip(t, derived.totals),
+    /*
+     * 布局（1.5.4：真机反馈「图在左，排行在右，详情在下」）。
+     *
+     * 旧形态是三段横排：维度导航 | 主图 | (排行 + 详情) 挤在一条侧栏里，
+     * 于是主图被压窄、详情被压在排行下面，两栏都读不全。
+     * 现在是：上层 = 维度导航 + [主图 | 排行]，下层 = 详情整宽带。
+     */
     h(
       'div',
-      { className: 'tl-reasoning-grid' },
-      dimensionNav(t, dimension, changeDimension),
+      { className: 'tl-reasoning-body' },
       h(
-        'section',
-        { className: 'tl-reasoning-main', 'data-testid': 'reasoning-main' },
+        'div',
+        { className: 'tl-reasoning-top' },
+        dimensionNav(t, dimension, changeDimension),
         h(
           'div',
-          { className: 'tl-reasoning-main-head' },
-          h('span', { className: 'tl-reasoning-main-title' }, t(VIEWS.find((item) => item.key === view)?.labelKey as never)),
-          h('span', { className: 'tl-badge' }, String(derived.groups.length) + ' ' + t('reasoning.groupsUnit')),
+          { className: 'tl-reasoning-figure' },
+          h(
+            'section',
+            { className: 'tl-reasoning-main', 'data-testid': 'reasoning-main' },
+            h(
+              'div',
+              { className: 'tl-reasoning-main-head' },
+              h('span', { className: 'tl-reasoning-main-title' }, t(VIEWS.find((item) => item.key === view)?.labelKey as never)),
+              h('span', { className: 'tl-badge' }, String(derived.groups.length) + ' ' + t('reasoning.groupsUnit')),
+              /* 合并提示必须可见 —— 看到的是 Top50 + 其他，必须知道"还有多少没画"。 */
+              view === 'list' || collapsed.hiddenCount === 0
+                ? null
+                : h(
+                    'span',
+                    { className: 'tl-badge tl-reasoning-collapsed', 'data-testid': 'reasoning-collapsed' },
+                    t('reasoning.collapsed', { n: String(collapsed.hiddenCount) }),
+                  ),
+            ),
+            view === 'treemap'
+              ? h(Treemap, {
+                  groups: collapsed.groups,
+                  t,
+                  dimension,
+                  selectedKey: effectiveSelectedKey,
+                  onSelect: selectGroup,
+                })
+              : view === 'cloud'
+                ? h(WordCloud, {
+                    groups: collapsed.groups,
+                    t,
+                    dimension,
+                    selectedKey: effectiveSelectedKey,
+                    onSelect: selectGroup,
+                  })
+                : h(GroupList, {
+                    groups: derived.groups,
+                    t,
+                    sortKey,
+                    sortDir,
+                    onSort: (key) => {
+                      if (sortKey === key) setSortDir((previous) => (previous === 1 ? -1 : 1))
+                      else {
+                        setSortKey(key)
+                        setSortDir(key === 'key' ? 1 : -1)
+                      }
+                    },
+                    selectedKey: effectiveSelectedKey,
+                    onSelect: selectGroup,
+                  }),
+          ),
         ),
-        view === 'treemap'
-          ? h(Treemap, { groups: derived.groups, t, dimension, selectedKey: effectiveSelectedKey, onSelect: selectGroup })
-          : view === 'cloud'
-            ? h(IconCloud, { groups: derived.groups, t, selectedKey: effectiveSelectedKey, onSelect: selectGroup })
-            : h(GroupList, {
-                groups: derived.groups,
-                t,
-                sortKey,
-                sortDir,
-                onSort: (key) => {
-                  if (sortKey === key) setSortDir((previous) => (previous === 1 ? -1 : 1))
-                  else {
-                    setSortKey(key)
-                    setSortDir(key === 'key' ? 1 : -1)
-                  }
-                },
-                selectedKey: effectiveSelectedKey,
-                onSelect: selectGroup,
-              }),
+        h(
+          'aside',
+          { className: 'tl-reasoning-side', 'data-testid': 'reasoning-side' },
+          rankCard(t, derived.prefixGroups, effectiveSelectedKey, dimension, selectPrefix),
+        ),
       ),
       h(
-        'aside',
-        { className: 'tl-reasoning-side' },
-        rankCard(t, derived.prefixGroups, effectiveSelectedKey, dimension, selectPrefix),
+        'div',
+        { className: 'tl-reasoning-detail', 'data-testid': 'reasoning-detail' },
         detailCard(t, selectedGroup, selectedSentences, props.privacy === true),
       ),
     ),
@@ -214,8 +290,51 @@ function reasoningToolbar(
   setFilter: (updater: (previous: ReasoningFilter) => ReasoningFilter) => void,
   view: ReasoningViewKind,
   setView: (next: ReasoningViewKind) => void,
+  modelOptions: ReadonlyArray<{ value: string; chars: number }>,
+  langOptions: ReadonlyArray<{ value: string; chars: number }>,
 ): React.ReactElement {
   const patch = (part: Partial<ReasoningFilter>): void => setFilter((previous) => ({ ...previous, ...part }))
+  /*
+   * 下拉选项必须来自**真实数据**（1.5.4 修的真机缺陷）。
+   *
+   * 旧实现把模型写死成 `DeepSeek V4` / `Kimi K3`，真机样本里根本没这两个字符串
+   * （实际是 `deepseek/deepseek-v4.1-flash` / `k3` / `k3-256k`），所以选什么都把数据滤空，
+   * 只剩「全部」和「其他」可用。现在枚举真实值，并在标签里带上字符量便于判断主次。
+   */
+  const modelSelect = h(
+    'label',
+    { className: 'tl-field' },
+    h('span', null, t('reasoning.model' as never)),
+    h(
+      'select',
+      {
+        value: filter.model,
+        'data-testid': 'reasoning-model',
+        onChange: (event: React.ChangeEvent<HTMLSelectElement>) => patch({ model: event.currentTarget.value }),
+      },
+      h('option', { key: 'all', value: 'all' }, t('reasoning.all' as never)),
+      ...modelOptions.map((option) =>
+        h('option', { key: option.value, value: option.value }, modelLabel(option.value) + ' · ' + compactChars(option.chars)),
+      ),
+    ),
+  )
+  const langSelect = h(
+    'label',
+    { className: 'tl-field' },
+    h('span', null, t('reasoning.lang' as never)),
+    h(
+      'select',
+      {
+        value: filter.lang,
+        'data-testid': 'reasoning-lang',
+        onChange: (event: React.ChangeEvent<HTMLSelectElement>) => patch({ lang: event.currentTarget.value }),
+      },
+      h('option', { key: 'all', value: 'all' }, t('reasoning.all' as never)),
+      ...langOptions.map((option) =>
+        h('option', { key: option.value, value: option.value }, option.value + ' · ' + compactChars(option.chars)),
+      ),
+    ),
+  )
   return h(
     'div',
     { className: 'tl-reasoning-toolbar' },
@@ -234,19 +353,8 @@ function reasoningToolbar(
         (value) => patch({ range: value as ReasoningFilter['range'] }),
         'reasoning-range',
       ),
-      selectField(
-        t,
-        'reasoning.model',
-        filter.model,
-        [
-          { value: 'all', labelKey: 'reasoning.all' },
-          { value: 'DeepSeek V4', labelKey: 'reasoning.all' },
-          { value: 'Kimi K3', labelKey: 'reasoning.all' },
-          { value: 'other', labelKey: 'reasoning.other' },
-        ],
-        (value) => patch({ model: value }),
-        'reasoning-model',
-      ),
+      modelSelect,
+      langSelect,
       selectField(
         t,
         'reasoning.record',
@@ -278,6 +386,24 @@ function reasoningToolbar(
       ),
     ),
   )
+}
+
+/**
+ * 模型名的可读标签：真机值是 `provider/model` 形态（如 `deepseek/deepseek-v4.1-flash`）。
+ * 只去掉冗余的重复前缀，不发明"友好名"——否则又是"显示与数据不一致"。
+ */
+function modelLabel(value: string): string {
+  const slash = value.indexOf('/')
+  if (slash <= 0 || slash >= value.length - 1) return value
+  const tail = value.slice(slash + 1)
+  return tail.startsWith('deepseek-') || tail === value.slice(0, slash) ? tail : value
+}
+
+/** 字符量的紧凑表示（12.3k / 4.5M），只用于下拉标签，不参与计算。 */
+function compactChars(chars: number): string {
+  if (chars >= 1_000_000) return Math.round(chars / 100_000) / 10 + 'M'
+  if (chars >= 1_000) return Math.round(chars / 100) / 10 + 'k'
+  return String(chars)
 }
 
 /* ------------------------------------------------------------------ *

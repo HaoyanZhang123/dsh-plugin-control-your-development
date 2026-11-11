@@ -59,6 +59,46 @@
   --tl-status-add: var(--dsw-alias-state-success-primary, #808080);
   --tl-status-del: var(--dsw-alias-state-error-primary, #808080);
 
+  /*
+   * 图表分类色（1.5.4：真机反馈「色块太丑，饱和度太高」）。
+   *
+   * 演进（两次都是真机反馈）：
+   * - 1.5.3 第一版直接借用 "--dsw-alias-state-*"（business/success/warn/error/idle）：
+   *   那是**语义状态色**，饱和度天然很高（要抢注意力），"红=错误、绿=成功"还会被误读 → 用户说"丑"；
+   * - 第二版降到 48–62% 混色：还是太艳，而且深蓝/深绿底上的深色文字糊成一片；
+   * - 现在（第三版）：**统一浅色粉彩**——每个分类只混入 26–34% 的色相，其余是中性面。
+   *
+   * 关键收益：底色一律偏亮 → 格子里的文字可以**统一用深色前景**，
+   * 不再需要在渲染层判断"这块深不深、字该不该反白"（那正是上一版出问题的原因）。
+   * 仍然只引用令牌，fallback 一律中性灰（A40-1：不许写彩色字面量）。
+   * 顺序固定 → 同输入同配色（截图可复现）。
+   */
+  --tl-chart-1: color-mix(in oklab, var(--dsw-alias-state-business-primary, #808080) 32%, var(--tl-surface-raised));
+  --tl-chart-2: color-mix(in oklab, var(--dsw-alias-state-idle-primary, #808080) 32%, var(--tl-surface-raised));
+  --tl-chart-3: color-mix(in oklab, var(--dsw-alias-state-success-primary, #808080) 30%, var(--tl-surface-raised));
+  --tl-chart-4: color-mix(in oklab, var(--dsw-alias-state-warn-primary, #808080) 30%, var(--tl-surface-raised));
+  --tl-chart-5: color-mix(in oklab, var(--dsw-alias-link, #808080) 30%, var(--tl-surface-raised));
+  --tl-chart-6: color-mix(in oklab, var(--dsw-alias-state-warn-label, #808080) 30%, var(--tl-surface-raised));
+  --tl-chart-7: color-mix(in oklab, var(--dsw-alias-state-error-primary, #808080) 26%, var(--tl-surface-raised));
+  --tl-chart-8: color-mix(in oklab, var(--dsw-alias-label-tertiary, #808080) 34%, var(--tl-surface-raised));
+
+  /*
+   * 词云用的**深色同色相**（1.5.4）。
+   *
+   * 为什么需要第二组：矩形树图是"浅底 + 深字"（底色大块、文字压在上面），
+   * 而词云是"文字本身当图形"——直接复用 --tl-chart-N 会得到浅粉彩文字，
+   * 压在浅底上等于隐形（截图实测：整片词云几乎读不出来）。
+   * 所以词云用同一色相的深色版："--tl-chart-N" 反混中性深色面。
+   */
+  --tl-chart-ink-1: color-mix(in oklab, var(--dsw-alias-state-business-primary, #808080) 78%, var(--tl-fg));
+  --tl-chart-ink-2: color-mix(in oklab, var(--dsw-alias-state-idle-primary, #808080) 78%, var(--tl-fg));
+  --tl-chart-ink-3: color-mix(in oklab, var(--dsw-alias-state-success-primary, #808080) 76%, var(--tl-fg));
+  --tl-chart-ink-4: color-mix(in oklab, var(--dsw-alias-state-warn-primary, #808080) 76%, var(--tl-fg));
+  --tl-chart-ink-5: color-mix(in oklab, var(--dsw-alias-link, #808080) 76%, var(--tl-fg));
+  --tl-chart-ink-6: color-mix(in oklab, var(--dsw-alias-state-warn-label, #808080) 76%, var(--tl-fg));
+  --tl-chart-ink-7: color-mix(in oklab, var(--dsw-alias-state-error-primary, #808080) 72%, var(--tl-fg));
+  --tl-chart-ink-8: color-mix(in oklab, var(--dsw-alias-label-tertiary, #808080) 80%, var(--tl-fg));
+
   /* —— 交互态 —— */
   --tl-hover: var(--dsw-alias-interactive-bg-hover, #80808014);
   --tl-active: var(--dsw-alias-interactive-bg-active, #80808024);
@@ -93,6 +133,11 @@
   --tl-dur-fast: 120ms;
   --tl-dur-base: 180ms;
   --tl-dur-slow: 240ms;
+  /*
+   * 布局过渡时长（1.5.3）：节点/标签/边在"选中触发重排"时的位移时长。
+   * 比交互高亮（120ms）长一档 —— 这是"重排"不是"高亮"，太短会像瞬移。
+   */
+  --tl-dur-layout: 280ms;
   --tl-ease: ease-out;
 
   /* —— 骨架（区域高度，8px 网格；Now/轮次带取规范给定值） —— */
@@ -112,6 +157,7 @@
     --tl-dur-fast: 0ms;
     --tl-dur-base: 0ms;
     --tl-dur-slow: 0ms;
+    --tl-dur-layout: 0ms;
   }
 
   :is(.threadline-app, .threadline-impact-root) *,

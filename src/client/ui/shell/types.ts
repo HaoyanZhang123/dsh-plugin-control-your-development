@@ -43,8 +43,15 @@ export const SHELL_METRICS = {
   mapMinHeight: 520,
 } as const
 
-/** 容器查询断点（03 §14）。base.css 的 @container 必须与这里一一对应。 */
+/**
+ * 容器查询断点（03 §14）。base.css 的 @container 必须与这里一一对应。
+ *
+ * `split`（1.5.1 新增）= 脉络 tab 双栏 ↔ 单列的分界：**小于它才降成单列**。
+ * 原值是 1080，但宿主左侧栏展开时 tab 区域只有 ~820px，于是最常见的窗口形态下
+ * 双栏被降成单列（用户看到的是「只有收起侧栏，卡片才在右边」）。760 让那个形态仍是双栏。
+ */
 export const BREAKPOINTS = {
+  split: 760,
   wide: 1100,
   medium: 900,
   narrow: 600,

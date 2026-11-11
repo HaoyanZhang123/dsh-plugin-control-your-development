@@ -38,15 +38,52 @@ export const inject = ['slots']
 /** 客户端上下文（结构类型；不 import 宿主包）。 */
 export type ClientContext = ClientContextLike
 
-/** 只读"打开文件"动作：从宿主服务里取（取不到就不提供按钮动作，绝不自己开窗）。 */
-function resolveOpenPath(ctx: ClientContext): ((path: string) => void) | undefined {
-  const openResource = optionalMethod<(resource: { path: string }) => unknown>(ctx, 'sidebarRight', 'openResource')
+/**
+ * 「双击打开文件」的动作接线（1.5.2 修的真机缺陷）。
+ *
+ * **旧实现为什么打不开**：它调用 `openResource({ path })` —— 一个对象。
+ * 而 DSH 的 `sidebarRight` 服务签名是 `openResource(address, options?)`，
+ * 第一个参数必须是 `dsh-resource://file/session/<sessionId>/<相对路径>` 这种**地址字符串**
+ * （见 dsh-client-ui-sidebar-right 的 controller 实现与 dsh-client-ui-sidebar-files 的
+ * `sessionFileAddress()`）。传对象 → 地址解析失败 → 右栏什么都不发生，也不报错。
+ *
+ * **新实现**：先按宿主的规则拼地址，再调 `openResource(address, { paneId? })`。
+ * - sessionId 来自 tab 的 ownerProps（宿主给的是当前会话）；
+ * - path 用工作区相对路径（反斜杠归一、去掉前导 `./`），与宿主 `sessionFileAddress` 同口径；
+ * - 拿不到 sessionId 时**不伪造**：退回旧的最优努力路径（workspaceFiles.openPath），
+ *   两个都没有就返回 undefined（按钮/双击不做任何事，而不是假装打开）。
+ */
+function resourceAddress(sessionId: string, path: string): string {
+  const normalized = path.replace(/\\/g, '/').replace(/^(?:\.\/)+/, '')
+  const encodeSegment = (segment: string): string => encodeURIComponent(segment).replace(/%3A/gi, ':')
+  const encoded = normalized.split('/').map(encodeSegment).join('/')
+  return 'dsh-resource://file/session/' + encodeSegment(sessionId) + '/' + encoded
+}
+
+function resolveOpenPath(
+  ctx: ClientContext,
+  getSessionId?: () => string | undefined,
+): ((path: string) => void) | undefined {
+  const openResource = optionalMethod<(address: string, options?: unknown) => unknown>(ctx, 'sidebarRight', 'openResource')
   if (openResource !== undefined) {
     return (path) => {
-      try {
-        openResource({ path })
-      } catch {
-        // 宿主 API 抛错不影响我们（按钮动作是尽力而为）
+      const sessionId = getSessionId?.()
+      if (typeof sessionId === 'string' && sessionId !== '') {
+        try {
+          openResource(resourceAddress(sessionId, path))
+          return
+        } catch {
+          // 落到下面的兜底：不假装成功，但也不崩。
+        }
+      }
+      /* 没有 sessionId 时退到旧的最优努力（部分宿主版本支持裸路径）。 */
+      const direct = optionalMethod<(path: string) => unknown>(ctx, 'workspaceFiles', 'openPath')
+      if (direct !== undefined) {
+        try {
+          direct(path)
+        } catch {
+          // 按钮动作是尽力而为
+        }
       }
     }
   }
@@ -127,10 +164,20 @@ export function apply(ctx: ClientContext): void {
     }
   }
 
-  const openPath = resolveOpenPath(ctx)
+  /**
+   * 当前会话 id 的**只读快照槽**：`resolveOpenPath` 在 apply() 期就要建好，
+   * 而 sessionId 只有 tab 真正渲染时才知道（ownerProps.sessionId）。
+   * 用一个小对象在两处之间传递，避免把 openPath 做成"每次渲染重建"的闭包
+   * （那会让下游 memo 每次失效）。
+   */
+  const sessionRef: { current?: string } = {}
+  const openPath = resolveOpenPath(ctx, () => sessionRef.current)
   const tab = registerTab(ctx, {
     ...(openPath === undefined ? {} : { openPath }),
     getRemote: () => (remoteFacade.workspaceFiles === undefined ? undefined : remoteFacade),
+    setSessionId: (id: string | undefined) => {
+      sessionRef.current = typeof id === 'string' && id !== '' ? id : undefined
+    },
   })
   const impact = registerImpact(ctx)
   const command = registerCommand(ctx)

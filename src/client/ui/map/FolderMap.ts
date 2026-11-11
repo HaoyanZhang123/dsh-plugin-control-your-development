@@ -26,6 +26,7 @@ import { EmptyState } from '../common/index.ts'
 import { graphSkeleton } from './skeleton.ts'
 import { cameraTransform, DEFAULT_CAMERA, GRAPH_ZOOM_STEP, panCameraBy, resetCamera, zoomCameraAtCenter, type GraphCamera } from './camera.ts'
 import {
+  FOLDER_HOVER,
   FOLDER_LABEL_FONT_PX,
   layoutFolderGeometry,
   applyDragOffsets,
@@ -53,6 +54,7 @@ import {
   type GraphDensity,
 } from './theme.ts'
 import { ZoomGroup } from './zoomGroup.ts'
+import { readEdgeFrames, syncEdges } from './edgeSync.ts'
 import type { EvidenceModel } from './evidence.ts'
 
 const h = React.createElement
@@ -188,6 +190,16 @@ export function FolderMap(props: FolderMapProps): React.ReactElement {
   const [showAllExpanded, setShowAllExpanded] = React.useState(false)
   const dragRef = React.useRef<DragState | null>(null)
   /**
+   * 关系线端点的上一帧快照（1.5.4：真机反馈「节点在动，线早就在那等着了」）。
+   *
+   * 为什么线必须单独处理：`<line>` 的端点属性**不能被 CSS transition 动画**
+   * （实测：写 `transition: x1 …` 后改属性，70ms 就已经是终点值，`getComputedStyle` 也读不到 x1）。
+   * 所以线只能在提交 DOM 之后用 rAF 逐帧插值，和节点共用同一时长/缓动 —— 见 `edgeSync.ts`。
+   */
+  const edgeFramesRef = React.useRef<ReadonlyMap<string, { key: string; x1: number; y1: number; x2: number; y2: number }>>(new Map())
+  /** 布局过渡时长（读 CSS 令牌 `--tl-dur-layout`；读不到就用 280ms）。 */
+  const layoutDurationRef = React.useRef<number>(280)
+  /**
    * 本次交互是否经历过 pointer 阶段（真实鼠标 = 是；程序化 `.click()` / AT = 否）。
    * `beginDrag` 置 true，`handleTap` 消费后置回 false。
    */
@@ -208,11 +220,20 @@ export function FolderMap(props: FolderMapProps): React.ReactElement {
       setSize({ width: Math.round(rect.width), height: Math.round(rect.height) })
     }
     measure()
+    /* 读一次布局过渡时长（CSS 令牌是唯一事实源，这里不写死毫秒数）。 */
+    const raw = getComputedStyle(element).getPropertyValue('--tl-dur-layout').trim()
+    const parsed = raw.endsWith('ms') ? Number.parseFloat(raw) : raw.endsWith('s') ? Number.parseFloat(raw) * 1000 : NaN
+    if (Number.isFinite(parsed)) layoutDurationRef.current = parsed
     if (typeof ResizeObserver === 'undefined') return undefined
     const observer = new ResizeObserver(measure)
     observer.observe(element)
     return () => observer.disconnect()
   }, [])
+
+  /**
+   * 提交 DOM 之后：把线从**上一帧的端点**插值到**新端点**（1.5.4）。
+   * 声明位置在 geometry/nodes/labels 之后（依赖它们），见下方同名 useLayoutEffect。
+   */
 
   // 换目录：拖动偏移只在原目录内有效；档位/全部状态也回默认（每个目录独立看）。
   const folderKey = props.currentPath
@@ -341,6 +362,33 @@ export function FolderMap(props: FolderMapProps): React.ReactElement {
     () => layoutFolderLabels({ ...geometry, nodes }, { selectedKey, hoveredKey, hiddenKeys }),
     [geometry, nodes, selectedKey, hoveredKey, hiddenKeys],
   )
+
+  /**
+   * 让关系线和节点**同步**移动（1.5.4 真机反馈「节点在动，线早就在位置上等着了」）。
+   *
+   * 为什么不能只靠 CSS：`<line>` 的 `x1/y1/x2/y2` 是表现属性，Chrome 不对它们做过渡
+   * （实测：写 transition 后 70ms 已是终点值；`getComputedStyle` 读不到 x1）。
+   * 用 `<g transform>` 也能动，但那只能表达平移 —— 端点各自移动时线会"缩"，必须逐帧改属性。
+   *
+   * 时机：`useLayoutEffect` 里 DOM 已是新坐标，而用户眼睛还停在旧位置；
+   * 因此先读旧快照、把线钉回旧值，再用 rAF 推到新值（时长/缓动与节点 transition 一致）。
+   */
+  React.useLayoutEffect(() => {
+    const stage = stageRef.current
+    if (stage === null) return undefined
+    const previous = edgeFramesRef.current
+    const reduce =
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const cancel = syncEdges(stage, previous, {
+      durationMs: reduce ? 0 : layoutDurationRef.current,
+      disabled: dragRef.current !== null,
+    })
+    /* 动画结束后把"最终端点"存成下一帧的起点（读 DOM 真值，不做估算）。 */
+    edgeFramesRef.current = readEdgeFrames(stage)
+    return cancel
+  }, [geometry, nodes, labels, props.edges, props.allEdges, props.files, showAllExpanded])
 
   const nodeByKey = React.useMemo(() => {
     const map = new Map<string, FolderLayoutNode>()
@@ -771,7 +819,12 @@ export function FolderMap(props: FolderMapProps): React.ReactElement {
         'data-size-unknown': sizeUnknown ? 'true' : 'false',
         'data-size': typeof node.size === 'number' ? node.size : undefined,
         'aria-hidden': isFuture ? 'true' : undefined,
-        style: isFuture ? { pointerEvents: 'none' } : undefined,
+        /* 入场动画的错峰序号（1.5.4）：CSS 只给前 30 个排延迟，再多就看不出差别。
+         * 用自定义属性而不是 nth-child，避免"节点顺序变了延迟就乱"的耦合。 */
+        style: {
+          ...(isFuture ? { pointerEvents: 'none' as const } : {}),
+          '--tl-enter-i': String(Math.min(30, node.index)),
+        } as React.CSSProperties,
         role: 'button',
         tabIndex: isSelected || (selectedKey === null && node.index === 0) ? 0 : -1,
         'aria-label': ariaLabel,
@@ -804,7 +857,8 @@ export function FolderMap(props: FolderMapProps): React.ReactElement {
       h('title', null, node.touched && file !== undefined ? node.path + ' · ' + formatTime(file.lastAt) : node.path),
       // r + 8 透明命中圆（扩大命中区；画在图形之前，不抢后续点击判定）。
       h('circle', { className: 'tl-ofile-hit', cx: node.x, cy: node.y, r: node.r + 8, fill: 'transparent' }),
-      h('circle', { className: 'tl-ofile-halo', cx: node.x, cy: node.y, r: node.r + 5, fill, fillOpacity: isHovered ? 0.12 : 0 }),
+      // 悬停光晕：D-35 起不再压暗其它节点，观感只能靠被悬浮者自身 → 光晕数值取 FOLDER_HOVER。
+      h('circle', { className: 'tl-ofile-halo', cx: node.x, cy: node.y, r: node.r + 5, fill, fillOpacity: isHovered ? FOLDER_HOVER.haloOpacity : 0 }),
       h('circle', {
         className: 'tl-ofile-core',
         cx: node.x,
@@ -813,7 +867,17 @@ export function FolderMap(props: FolderMapProps): React.ReactElement {
         fill,
         // 中性节点：低透明 + 无族色强调（不是"0 次操作"，只是没有会话数据）。
         // 大小未知：空心（填充透明）+ 虚线描边，与「未知」语义一致。
-        fillOpacity: sizeUnknown ? 0 : isSelected ? 1 : node.touched ? 0.82 : 0.34,
+        // 悬停：把填充提到接近实心（色相仍是族色，不丢类型），否则小半径/空心节点上
+        // 只剩 1.1→1.8px 描边，用户看到的等于"没有反馈"（1.5.1 真机反馈）。
+        fillOpacity: isHovered && !sizeUnknown
+          ? FOLDER_HOVER.fillOpacity
+          : sizeUnknown
+            ? 0
+            : isSelected
+              ? 1
+              : node.touched
+                ? 0.82
+                : 0.34,
         stroke: isSelected || isHovered ? fill : sizeUnknown ? 'var(--tl-fg-tertiary)' : 'var(--tl-bg)',
         strokeWidth: isSelected ? 1.5 : 1.1,
         ...(sizeUnknown ? { strokeDasharray: '2 2' } : {}),
@@ -1062,6 +1126,30 @@ export function FolderMap(props: FolderMapProps): React.ReactElement {
       'svg',
       {
         className: 'tl-graph-svg',
+        /*
+         * 入场动画（1.5.4 真机需求「每一次加载出来的时候都有动画，比如点不同轮次、
+         * 初次加载、点击进文件夹等」）。
+         *
+         * 做法：用 **key** 强制重挂载，让进场动画每次都能重新播一遍。
+         * - 换轮次（now）、换目录（currentPath）、切「显示全部」、密度档位变化
+         *   —— 这些都是"换了一张图"，都该重新入场；
+         * - 拖动/选中/悬浮**不在 key 里**：那些是同一张图内的状态变化，
+         *   重新入场会闪，而且会打断布局过渡。
+         *
+         * 动画本身在 CSS（`threadline-graph-enter`）：节点按序号做极小的延迟错峰，
+         * 线随后淡入，整体 260ms 内完成；reduced-motion 下整段不播。
+         */
+        key:
+          'g:' +
+          String(props.now ?? 0) +
+          '\u0000' +
+          props.currentPath +
+          '\u0000' +
+          (showAllExpanded ? 'all' : 'fold') +
+          '\u0000' +
+          density +
+          '\u0000' +
+          String(geometry.nodes.length),
         viewBox: '0 0 ' + String(geometry.width) + ' ' + String(geometry.height),
         preserveAspectRatio: 'xMidYMid meet',
         role: 'group',

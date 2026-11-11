@@ -314,8 +314,7 @@
 
 /* 视图层：缩放只改 transform（不改布局坐标）；reduced-motion 下无过渡。 */
 :is(.threadline-app, .threadline-impact-root) .tl-graph-zoom-layer {
-  transition: transform var(--tl-dur-base) ease;
-}
+  transition: transform var(--tl-dur-base) ease;}
 
 /* ---------- 文件夹枢纽（当前目录的直接子文件夹；圆角方卡，不再是"一条带"） ---------- */
 
@@ -344,26 +343,52 @@
   transition: fill var(--tl-dur-fast) ease, stroke var(--tl-dur-fast) ease;
 }
 
-:is(.threadline-app, .threadline-impact-root) .tl-foldhub:hover .tl-foldhub-card,
-:is(.threadline-app, .threadline-impact-root) .tl-foldhub[data-hovered='true'] .tl-foldhub-card {
-  fill: var(--tl-hover);
-  stroke: var(--tl-accent);
-}
-
 /*
  * 有真实跨目录关系的枢纽：描边用强调色（能看出它连到当前目录的谁）；
  * 没有关系的枢纽（data-hub-linked=false）保持中性弱描边 —— 它在**外围环**上、不画线，
  * 视觉上就能读出"这个文件夹和当前目录没有来往"，不伪造关系。
+ *
+ * 1.5.2（真机反馈「文件夹 hover 没反应、.dsh/.github 永远像选中」）三段修正：
+ * 1. **并列特异性顺序**：原来 hover 规则写在 linked 规则之前、两者特异性相同（都是
+ *    0,4,0），后写的 linked 覆盖了 hover 的描边 → 有关系（linked=true）的枢纽 hover 时
+ *    stroke-width 恒为 1.4px，用户看不到任何变化。现在 hover/选中放在 linked **之后**。
+ * 2. **关系不再用"强调色实线"**（那和选中态撞车，用户以为它被选中了）：
+ *    有关系 = 强调色**虚线** + 1.4px；无关系 = 中性**点线**。两者靠线型区分，不靠颜色。
+ * 3. **选中 = 底色 + 粗实线**（新规则，之前完全没有 data-selected 样式，规则数为 0）：
+ *    选中是"用户点的那个"，必须比"它和谁有关系"更强。
  */
 :is(.threadline-app, .threadline-impact-root) .tl-foldhub[data-hub-linked='true'] .tl-foldhub-card {
   stroke: var(--tl-accent);
   stroke-width: 1.4;
+  stroke-dasharray: 6 3;
 }
 
 :is(.threadline-app, .threadline-impact-root) .tl-foldhub[data-hub-linked='false'] .tl-foldhub-card {
   fill: transparent;
   stroke: var(--tl-border-weak);
   stroke-dasharray: 3 3;
+}
+
+/* ---- 悬停：放在 linked 之后，才能覆盖它的描边（同特异性时"后写者胜"） ---- */
+:is(.threadline-app, .threadline-impact-root) .tl-foldhub:hover .tl-foldhub-card,
+:is(.threadline-app, .threadline-impact-root) .tl-foldhub[data-hovered='true'] .tl-foldhub-card {
+  fill: var(--tl-hover);
+  stroke: var(--tl-accent);
+  stroke-width: 2;
+  stroke-dasharray: none;
+}
+
+/* ---- 选中：底色 + 最粗的实线（比 hover 更"沉"，比关系更"实"） ---- */
+:is(.threadline-app, .threadline-impact-root) .tl-foldhub[data-selected='true'] .tl-foldhub-card {
+  fill: var(--tl-active);
+  stroke: var(--tl-accent);
+  stroke-width: 2.2;
+  stroke-dasharray: none;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-foldhub[data-selected='true'] .tl-foldhub-label {
+  fill: var(--tl-fg);
+  font-weight: 700;
 }
 
 :is(.threadline-app, .threadline-impact-root) .tl-foldhub-icon {
@@ -565,13 +590,137 @@
   pointer-events: none;
 }
 
-:is(.threadline-app, .threadline-impact-root) .tl-ofile-core {
-  transition: fill-opacity var(--tl-dur-fast) ease, stroke var(--tl-dur-fast) ease;
+/*
+ * 布局过渡（1.5.3 真机反馈「选中后整图布局瞬间跳过去，没有过程」）。
+ *
+ * 为什么能只靠 CSS 解决：节点的**几何**是 SVG 的 "cx/cy/r" 属性，Chrome 支持对它们
+ * 做 CSS transition（实测：改 "cx" 后 60ms 处于中间值、360ms 到位）。因此不必改布局算法，
+ * 只要给承载几何的元素加过渡，坐标一变就会"滑"过去。
+ *
+ * 口径：
+ * - 只过渡**位置/尺寸**（cx/cy/r/x/y/width/height），颜色态的过渡仍由各自的短时长规则管；
+ * - 时长用 "--tl-dur-layout"（240ms，比交互态 120ms 长一档：这是"重排"不是"高亮"）；
+ * - "data-reduced-motion='true'" 与 prefers-reduced-motion 下**全部取消**（不瞬移、也不滑）；
+ * - 拖动时**不要**过渡：拖动是逐帧跟随，加过渡会拖出黏滞感（由 "[data-dragging='true']" 排除）。
+ */
+.threadline-app .tl-ofile:not([data-dragging='true']),
+.threadline-app .tl-foldhub:not([data-dragging='true']),
+.threadline-app .tl-fnode {
+  transition: transform var(--tl-dur-layout) var(--tl-ease);
 }
 
-/* 悬停只提亮描边，不放大（力导向图里节点挨得近，放大反而压住邻居标签）。 */
+/* 圆形节点：位置与半径都走过渡（半径在"显示全部/收起全部"时也会变）。 */
+.threadline-app .tl-ofile .tl-ofile-core,
+.threadline-app .tl-ofile .tl-ofile-halo,
+.threadline-app .tl-ofile .tl-ofile-hit,
+.threadline-app .tl-fnode .tl-fnode-core {
+  transition:
+    cx var(--tl-dur-layout) var(--tl-ease),
+    cy var(--tl-dur-layout) var(--tl-ease),
+    r var(--tl-dur-layout) var(--tl-ease),
+    fill-opacity var(--tl-dur-fast) var(--tl-ease),
+    stroke var(--tl-dur-fast) var(--tl-ease),
+    stroke-width var(--tl-dur-fast) var(--tl-ease);
+}
+
+/* 枢纽卡片：矩形的位置与尺寸。 */
+.threadline-app .tl-foldhub .tl-foldhub-card {
+  transition:
+    x var(--tl-dur-layout) var(--tl-ease),
+    y var(--tl-dur-layout) var(--tl-ease),
+    width var(--tl-dur-layout) var(--tl-ease),
+    height var(--tl-dur-layout) var(--tl-ease),
+    fill var(--tl-dur-fast) var(--tl-ease),
+    stroke var(--tl-dur-fast) var(--tl-ease),
+    stroke-width var(--tl-dur-fast) var(--tl-ease);
+}
+
+/* 标签：位置与透明度。 */
+.threadline-app .tl-ofile-label,
+.threadline-app .tl-fnode-label,
+.threadline-app .tl-foldhub-label {
+  transition:
+    x var(--tl-dur-layout) var(--tl-ease),
+    y var(--tl-dur-layout) var(--tl-ease),
+    opacity var(--tl-dur-base) var(--tl-ease),
+    fill var(--tl-dur-fast) var(--tl-ease);
+}
+
+/* 边：端点位移走过渡，视觉上跟着节点一起滑。 */
+.threadline-app .tl-graph-edge,
+.threadline-app .tl-hub-edge,
+.threadline-app .tl-hub-pair {
+  transition:
+    opacity var(--tl-dur-fast) var(--tl-ease),
+    stroke var(--tl-dur-fast) var(--tl-ease);
+}
+
+.threadline-app .tl-graph-zoom-layer {
+  transition: transform var(--tl-dur-base) var(--tl-ease);
+}
+
+/* reduced-motion：取消全部布局过渡（瞬移，不做动画）。 */
+@media (prefers-reduced-motion: reduce) {
+  .threadline-app .tl-ofile,
+  .threadline-app .tl-foldhub,
+  .threadline-app .tl-fnode,
+  .threadline-app .tl-ofile-core,
+  .threadline-app .tl-ofile-halo,
+  .threadline-app .tl-ofile-hit,
+  .threadline-app .tl-fnode-core,
+  .threadline-app .tl-foldhub-card,
+  .threadline-app .tl-ofile-label,
+  .threadline-app .tl-fnode-label,
+  .threadline-app .tl-foldhub-label,
+  .threadline-app .tl-graph-edge,
+  .threadline-app .tl-hub-edge,
+  .threadline-app .tl-hub-pair,
+  .threadline-app .tl-graph-zoom-layer {
+    transition: none;
+  }
+}
+
+.threadline-app[data-reduced-motion='true'] .tl-ofile,
+.threadline-app[data-reduced-motion='true'] .tl-foldhub,
+.threadline-app[data-reduced-motion='true'] .tl-fnode,
+.threadline-app[data-reduced-motion='true'] .tl-ofile-core,
+.threadline-app[data-reduced-motion='true'] .tl-ofile-halo,
+.threadline-app[data-reduced-motion='true'] .tl-ofile-hit,
+.threadline-app[data-reduced-motion='true'] .tl-fnode-core,
+.threadline-app[data-reduced-motion='true'] .tl-foldhub-card,
+.threadline-app[data-reduced-motion='true'] .tl-ofile-label,
+.threadline-app[data-reduced-motion='true'] .tl-fnode-label,
+.threadline-app[data-reduced-motion='true'] .tl-foldhub-label,
+.threadline-app[data-reduced-motion='true'] .tl-graph-edge,
+.threadline-app[data-reduced-motion='true'] .tl-hub-edge,
+.threadline-app[data-reduced-motion='true'] .tl-hub-pair,
+.threadline-app[data-reduced-motion='true'] .tl-graph-zoom-layer {
+  transition: none;
+}
+
+/* 悬停只提亮描边，不放大（力导向图里节点挨得近，放大反而压住邻居标签）。
+   描边宽度取 folderLayout 的 FOLDER_HOVER.strokeWidth（唯一事实源，这里不另写数字）。
+   注：".tl-ofile-core" 的过渡已在"布局过渡"段统一声明（含 cx/cy/r 与颜色），
+   这里**不再重复写 transition**——同特异性后写者胜，重复会把布局过渡覆盖掉。 */
 :is(.threadline-app, .threadline-impact-root) .tl-ofile[data-hovered='true'] .tl-ofile-core {
-  stroke-width: 1.8;
+  stroke-width: 2;
+}
+
+/*
+ * 悬停的**自身**强化（1.5.1，真机反馈「文件节点 hover 改坏了」）。
+ *
+ * 事实：自 D-35 起，hover 不再压暗其它节点（用户明确否掉），于是「对比」这个信号
+ * 只剩被 hover 节点自己的描边 1.1→1.8px 与外圈光晕 0→0.12。在空心/小半径节点上
+ * 几乎看不出来 —— 反馈没消失，但**弱到不可见**就是坏掉了。
+ *
+ * 这里只加强被 hover 的那个节点自己（不动别人、不改变色相语义）：
+ * 标签提到前景色并加粗，让它成为视线落点。
+ * 填充/光晕的**数值**由 FolderMap 内联给出（那是同一条事实源的唯一处），CSS 不重复写。
+ * 选中态优先级更高（见下一条），两者不会打架。
+ */
+:is(.threadline-app, .threadline-impact-root) .tl-ofile[data-hovered='true'] .tl-ofile-label {
+  fill: var(--tl-fg);
+  font-weight: 600;
 }
 
 :is(.threadline-app, .threadline-impact-root) .tl-ofile[data-selected='true'] .tl-ofile-core {
@@ -580,7 +729,7 @@
 
 :is(.threadline-app, .threadline-impact-root) .tl-ofile-halo {
   pointer-events: none;
-  transition: fill-opacity var(--tl-dur-fast) ease;
+  /* 过渡已在"布局过渡"段统一声明（含 cx/cy/r 与 fill-opacity），这里不重复写。 */
 }
 
 /* 文件名标签：整词或隐藏（绝不截断成 「relati…」），描边保证压在连线上仍可读。 */
@@ -734,6 +883,69 @@
 @keyframes threadline-graph-pulse {
   0%, 100% { opacity: 0.35; }
   50% { opacity: 1; }
+}
+
+/* ---------- 入场动画（1.5.4） ---------- */
+
+/*
+ * 真机需求：「每一次加载出来的时候都有动画，点不同轮次、初次加载、点击进文件夹等」。
+ *
+ * 实现口径：
+ * - "<svg>" 的 "key" 含轮次/目录/档位，换图即重挂载 → 动画每次重播（见 FolderMap）；
+ * - 节点按序号错峰（最多 30 档、每档 12ms），观感是"从中心长出来"而不是整体弹一下；
+ * - 线在节点之后淡入，避免"线先到位等节点"的旧观感；
+ * - 只动 "opacity" 与极小 "translateY"（GPU 友好，不影响布局坐标与点击命中）；
+ * - reduced-motion 下整段不播（下方统一 transition:none 的规则之外，再显式关掉 animation）。
+ */
+@keyframes threadline-graph-node-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes threadline-graph-edge-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-svg .tl-ofile,
+:is(.threadline-app, .threadline-impact-root) .tl-graph-svg .tl-fnode,
+:is(.threadline-app, .threadline-impact-root) .tl-graph-svg .tl-foldhub {
+  animation: threadline-graph-node-in var(--tl-dur-slow) var(--tl-ease) both;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph-svg .tl-graph-edge {
+  animation: threadline-graph-edge-in var(--tl-dur-slow) var(--tl-ease) both;
+  animation-delay: 60ms;
+}
+
+/*
+ * 错峰：只给前 30 个节点排延迟（再多就看不出来，反而显得慢）。
+ * 用 "--tl-enter-i" 由渲染层写入序号，避免在 CSS 里写 30 条 nth-child。
+ */
+:is(.threadline-app, .threadline-impact-root) .tl-graph-svg .tl-ofile[style*='--tl-enter-i'],
+:is(.threadline-app, .threadline-impact-root) .tl-graph-svg .tl-fnode[style*='--tl-enter-i'] {
+  animation-delay: calc(var(--tl-enter-i, 0) * 12ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :is(.threadline-app, .threadline-impact-root) .tl-graph-svg .tl-ofile,
+  :is(.threadline-app, .threadline-impact-root) .tl-graph-svg .tl-fnode,
+  :is(.threadline-app, .threadline-impact-root) .tl-graph-svg .tl-foldhub,
+  :is(.threadline-app, .threadline-impact-root) .tl-graph-svg .tl-graph-edge {
+    animation: none;
+  }
 }
 
 /* ---------- 画布内的空/错误态 ---------- */

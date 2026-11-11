@@ -176,6 +176,8 @@ export const en: Record<MessageKey, string> = {
   "reasoning.langUnknown": "Unknown",
   "reasoning.loading": "Reading reasoning records…",
   "reasoning.none": "No reasoning records are readable in this scope",
+  "reasoning.partial": "Some sessions could not be read; the summary covers only what was read",
+  "reasoning.collapsed": "{n} more groups merged",
   "map.clusterCount": "{count} files",
   "map.clusterMeta": "{ops} operations · last {time}",
   "map.clusterCurrent": "This turn {n}",
