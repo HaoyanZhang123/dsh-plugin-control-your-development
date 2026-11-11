@@ -608,6 +608,28 @@ test('tree.css 与模型常量一致：列表行高 30px；无内部横向滚动
   assert.match(nameBlock[1], /min-inline-size:\s*0/)
 })
 
+test('右栏卡片悬停有轻微上浮（D-35 需求 4），且 reduced-motion 下取消位移', () => {
+  /* 用户明确要求：hover 不能只是"蓝框 + 深色"，要有整块轻微上浮的交互感。
+   * 这条断言防止它被后续重构悄悄删掉（本轮就发现过一次"只改了背景色"）。 */
+  assert.match(
+    TREE_CSS_CODE,
+    /\.tl-tree-card:hover\s*\{[^}]*transform:\s*translateY\(-2px\)/,
+    '卡片 hover 必须上浮（translateY(-2px)）',
+  )
+  assert.match(TREE_CSS_CODE, /\.tl-tree-card:hover\s*\{[^}]*box-shadow:\s*var\(--tl-shadow-2\)/, '上浮必须配合阴影加深')
+  assert.match(TREE_CSS_CODE, /\[data-reduced-motion='true'\][\s\S]*?\.tl-tree-card:hover[\s\S]*?transform:\s*none/, 'reduced-motion 下必须取消位移')  // 键盘焦点要有同等反馈，不能只是鼠标专属
+  assert.match(TREE_CSS_CODE, /\.tl-tree-card:focus-visible\s*\{[^}]*transform:\s*translateY\(-2px\)/, '键盘焦点也应有上浮')
+})
+
+test('轮次块悬停也上浮，且 transition 只声明一次（旧写法后者覆盖前者）', () => {
+  const turnsCss = readFileSync(join(PLUGIN_ROOT, 'src', 'client', 'styles', 'turns.css'), 'utf8')
+  assert.match(turnsCss, /\.threadline-turn-block:hover\s*\{[^}]*transform:\s*translateY\(-2px\)/, '轮次块 hover 必须上浮')
+  /* 同一选择器上出现两条 transition 时，后一条会整体覆盖前一条 —— 这正是旧 bug。 */
+  const blocks = turnsCss.match(/\.threadline-turn-block\s*\{[^}]*\}/g) ?? []
+  const withTransition = blocks.filter((block) => block.includes('transition'))
+  assert.equal(withTransition.length, 1, 'transition 只能在一个块里声明（否则相互覆盖）')
+})
+
 test('tree.css：类名与组件一致（组件用到的每个 tl-tree-* 类都有样式）', () => {
   const source = readFileSync(join(PLUGIN_ROOT, 'src', 'client', 'ui', 'rail', 'FileTreeRail.ts'), 'utf8')
   const used = new Set<string>()

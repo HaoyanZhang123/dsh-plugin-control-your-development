@@ -328,26 +328,20 @@ test('folder 模式：加载态不显示空态/假 0；读取失败显示显式�
  * 证据浮层
  * ================================================================== */
 
-test('folder 模式：选中文件显示图内证据浮层（region，不是 dialog）；无记录时说「会话中没有操作记录」', () => {
+test('folder 模式：图内不再渲染证据浮层（D-35 移到时间线）', () => {
   const files = makeFiles({ count: 5, dirs: ['src'] })
   const entries = folderEntries([], files, 'src')
   const html = renderFolder({ files, entries, currentPath: 'src', selectedPath: files[0].path, edges: [] })
-  assert.ok(html.includes('data-graph-evidence="file"'))
-  assert.ok(html.includes('关系证据'))
-  assert.ok(html.includes(files[0].path))
-  assert.ok(html.includes('role="region"'))
+  assert.equal(html.includes('tl-graph-evidence'), false, '图内不得再有证据浮层（渲染点在时间线）')
   assert.equal(html.includes('role="dialog"'), false)
-  assert.ok(html.includes('会话中没有操作记录'), '没有关系证据时如实说「没有操作记录」')
   assert.equal(html.includes('data-region="inspector"'), false)
 })
 
-test('folder 模式：中性节点被选中时，证据浮层说明「本会话未触碰」而不是「操作 0」', () => {
+test('folder 模式：中性节点选中时图内不伪造「操作 0」', () => {
   const files = makeFiles({ count: 4, dirs: ['src'] })
   const entries = folderEntries([], files, 'src')
   const neutral = files[3]
   const html = renderFolder({ files: files.slice(0, 2), entries, currentPath: 'src', selectedPath: neutral.path })
-  assert.ok(html.includes('data-evidencetouched="false"') || html.includes('data-evidence-touched="false"'))
-  assert.ok(html.includes('会话中没有操作记录'))
   assert.equal(html.includes('操作 0'), false)
 })
 

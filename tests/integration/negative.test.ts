@@ -486,7 +486,10 @@ test('N-17 归档会话：标记归档、可筛选、不混入活跃', () => {
   assert.equal(filtered.sessions.some((session) => session.id === 's-archived'), false)
   assert.equal(toScanSessions(scope).sessions.some((session) => session.id === 's-archived'), true) // 扫描含归档（带标记）
   const options = buildScopeOptions(withoutArchived(scope).sessions as never, t)
-  assert.equal(options.some((option) => option.label.includes('归档')), false)
+  /* 口径（D-35）：归档不再作为具体会话列出，只归入「全部会话（含归档）」这一个汇总项。
+   * 因此判据是「没有指向归档会话的 session: 选项」，而不是「标签里不含归档二字」。 */
+  assert.equal(options.some((option) => option.value === 'session:s-archived'), false)
+  assert.equal(options.some((option) => option.value === 'all'), true, '必须保留含归档的汇总范围')
 })
 
 test('N-18 切换工作区：取消旧扫描、清空旧图，不串数据', async () => {

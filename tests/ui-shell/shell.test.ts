@@ -102,12 +102,47 @@ test('时间轴 / 轮次带槽高度与折叠状态由 data 属性暴露', () =>
   assert.match(expanded, /aria-label="收起"/)
 })
 
-test('切到 en：产品名与范围 chip 跟着 locale 走', () => {
+test('关系证据渲染在时间线槽内（D-35：不再是图内浮层）', () => {
+  const withoutEvidence = renderShell()
+  assert.match(withoutEvidence, /data-region="timeline" data-testid="timeline" data-has-evidence="false"/, '无证据时标 false')
+
+  const withEvidence = renderToStaticMarkup(
+    React.createElement(ThreadlineShell, {
+      workspaceName: 'ws',
+      timelineSlot: React.createElement('div', { 'data-testid': 'timeline-body' }, 'timeline'),
+      timelineEvidenceSlot: React.createElement('div', { 'data-testid': 'evidence-slot' }, 'evidence'),
+    }),
+  )
+  // 证据必须是 timeline 的子节点（覆盖同一块区域），而不是挂在图上。
+  const timelineIndex = withEvidence.indexOf('data-region="timeline"')
+  const evidenceIndex = withEvidence.indexOf('data-testid="evidence-slot"')
+  assert.ok(timelineIndex >= 0 && evidenceIndex > timelineIndex, '证据槽必须出现在 timeline 之后（作为覆盖层）')
+  assert.match(withEvidence, /data-has-evidence="true"/)
+  assert.equal(withEvidence.includes('data-graph-stage'), false, '空 shell 不应出现图舞台')
+})
+
+test('切到 en：范围 chip 跟着 locale 走；header 不再单列产品名/工作区（D-35 需求 11）', () => {
   const html = renderShell({ locale: 'en' })
-  assert.match(html, />Threadline</)
   assert.match(html, />Today</)
   assert.match(html, />7 days</)
   assert.match(html, /data-locale="en"/)
+  /* 用户明确要求删掉 tab 下方那行「脉络 + 工作区名」：视觉上不得再出现品牌行。 */
+  assert.equal(html.includes('threadline-brand'), false, 'header 不得再渲染品牌行')
+  assert.equal(html.includes('threadline-workspace'), false, '工作区名不得再单独占一行')
+  assert.match(html, /data-header-brand="none"/, '要显式标记品牌行已删除（便于验收断言）')
+  /* 但读屏仍要知道当前工作区：用 aria-label 承载，信息不丢（夹具默认工作区名是「开发」）。 */
+  assert.match(html, /aria-label="[^"]*开发[^"]*"/, 'aria-label 里必须仍带工作区名')
+})
+
+test('header 只有范围 chip / 覆盖率 / 右侧动作，没有多余的一行', () => {
+  const html = renderShell({})
+  const headerMatch = /<header[^>]*>([\s\S]*?)<\/header>/.exec(html)
+  assert.ok(headerMatch !== null, '必须有 header')
+  const inner = headerMatch[1]
+  /* 只剩两个子结构：范围组 + 右侧动作组。 */
+  const childDivs = inner.match(/class="threadline-(range|header-end|header-start)"/g) ?? []
+  assert.equal(childDivs.some((item) => item.includes('header-start')), false, 'header-start（品牌行容器）已删除')
+  assert.ok(childDivs.some((item) => item.includes('threadline-range')), '范围 chip 必须保留')
 })
 
 test('所有可点元素都是 button（没有 div 假装按钮）', () => {

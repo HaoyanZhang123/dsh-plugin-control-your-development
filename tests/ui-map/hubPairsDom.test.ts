@@ -187,7 +187,7 @@ test('视觉分层：枢纽间线带权重线宽 + 0.35 透明度；文件边不
   }
 })
 
-test('视觉分层：枢纽间线**没有点击处理器**（点击枢纽仍是进入目录，语义不变）', () => {
+test('视觉分层：枢纽间线**没有点击处理器**；枢纽仍是可聚焦按钮（单击选中、双击进入）', () => {
   const html = renderRoot()
   // SSR 不输出事件处理器；这里断言它**不在任何 role=button 的组里**（线本身不可点）。
   for (const element of hubPairElements(html)) {
@@ -195,8 +195,9 @@ test('视觉分层：枢纽间线**没有点击处理器**（点击枢纽仍是�
     assert.equal(attrOf(element, 'tabindex'), undefined, '线不得可聚焦（键盘 Tab 不该停在线上）')
     assert.equal(attrOf(element, 'onclick'), undefined, '线不得带点击处理器')
   }
-  // 枢纽仍然是 role=button（点击入口不变）。
-  assert.ok(/data-folder-hub="a"[^>]*role="button"|role="button"[^>]*data-folder-hub="a"/.test(html), '枢纽必须仍是按钮（点击进目录）')
+  // 枢纽仍然是 role=button（可选中、可键盘操作），但语义已改为「单击选中 / 双击进入」。
+  assert.ok(/data-folder-hub="a"[^>]*role="button"|role="button"[^>]*data-folder-hub="a"/.test(html), '枢纽必须仍是按钮')
+  assert.ok(/data-folder-hub="a"[^>]*aria-pressed=/.test(html) || /aria-pressed=[^>]*data-folder-hub="a"/.test(html), '枢纽必须暴露选中态（aria-pressed）')
 })
 
 /* ================================================================== *

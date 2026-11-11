@@ -182,7 +182,6 @@ export const SPEC_KEYS: readonly string[] = [
   "graph.relationsSummary",
   "graph.relationsTrimmed",
   "graph.hubEmpty",
-  // —— §16 扩展段（2026-11-05，T31 脉络 2.0：文件关系图 / 轮次状态 / 目录 rail；Lead 同步表格）——
   "graph.title",
   "rail.title",
   "turnStatus.read",
@@ -195,6 +194,70 @@ export const SPEC_KEYS: readonly string[] = [
   "turnStatus.markWriteAdd",
   "turnStatus.markWriteDel",
   "turnStatus.markFirstSeen",
+  // —— §16 扩展段（2026-11-11，D-35：右栏列表表头 / 会话范围分组；Lead 同步表格）——
+  "tree.name",
+  "tree.kind",
+  "tree.size",
+  "turns.scopeGroupView",
+  "turns.scopeGroupSessions",
+  // —— §16 扩展段（2026-11-11，D-35 思维链视图；Lead 同步表格）——
+  "reasoning.tab",
+  "reasoning.treemap",
+  "reasoning.cloud",
+  "reasoning.list",
+  "reasoning.charsUnit",
+  "reasoning.group",
+  "reasoning.chars",
+  "reasoning.tokens",
+  "reasoning.ratio",
+  "reasoning.lang",
+  "reasoning.form",
+  "reasoning.noPrefix",
+  "reasoning.sentences",
+  "reasoning.range",
+  "reasoning.model",
+  "reasoning.record",
+  "reasoning.views",
+  "reasoning.summary",
+  "reasoning.coverage",
+  "reasoning.tokenRatio",
+  "reasoning.charRatio",
+  "reasoning.charRatioHint",
+  "reasoning.dimensions",
+  "reasoning.rank",
+  "reasoning.detail",
+  "reasoning.selectHint",
+  "reasoning.empty",
+  "reasoning.noSentences",
+  "reasoning.sentencesUnit",
+  "reasoning.blocksUnit",
+  "reasoning.groupsUnit",
+  "reasoning.blocks",
+  "reasoning.rangeWorkspace",
+  "reasoning.rangeActive",
+  "reasoning.rangeSession",
+  "reasoning.all",
+  "reasoning.other",
+  "reasoning.recordCommitted",
+  "reasoning.recordAll",
+  "reasoning.dimPrefix",
+  "reasoning.dimForm",
+  "reasoning.dimLang",
+  "reasoning.dimModel",
+  "reasoning.dimPreset",
+  "reasoning.formPlan",
+  "reasoning.formQuestion",
+  "reasoning.formImperative",
+  "reasoning.formWarning",
+  "reasoning.formStatement",
+  "reasoning.langZh",
+  "reasoning.langEn",
+  "reasoning.langJa",
+  "reasoning.langKo",
+  "reasoning.langMixed",
+  "reasoning.langUnknown",
+  "reasoning.loading",
+  "reasoning.none",
 ]
 
 /** §16 未列、但实现必需的接口文案（已在 zh.ts/en.ts 头部注明）。 */
@@ -223,7 +286,8 @@ test('03 §16 的 161 个 key 在 zh/en 里都存在', () => {
     assert.ok(Object.prototype.hasOwnProperty.call(en, key), 'en 缺 key：' + key)
   }
   // 162 → 161：2026-11-08 删掉 `timeline.now`（「回到最新」按钮已删，文案无归属）。
-  assert.equal(SPEC_KEYS.length, 161)
+  // 161 → 166：2026-11-11 D-35 新增右栏表头 3 条 + 会话范围分组 2 条。
+  assert.equal(SPEC_KEYS.length, 223)
   assert.equal(new Set(SPEC_KEYS).size, SPEC_KEYS.length, 'key 清单本身有重复')
 })
 

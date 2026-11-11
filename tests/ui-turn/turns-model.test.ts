@@ -199,15 +199,18 @@ test('块模型：宽度/标记模式/partial/状态文案一致', () => {
 
 /* ---------------- 会话选择器与分组 ---------------- */
 
-test('选择器选项：当前会话 → 全部工作线 → 具体会话（最近活动排序、归档置后）', () => {
+test('选择器选项：当前会话 / 全部会话（含归档） / 具体未归档会话', () => {
   const options = buildScopeOptions(buildSummaries(), t)
+  /* 用户口径（2026-11-11）：只列「当前会话」「全部会话（含归档）」与未归档的具体会话；
+   * 归档会话不再逐条列出，统一归入「全部会话（含归档）」。 */
   assert.deepEqual(
     options.map((option) => option.label),
-    ['当前会话', '全部工作线', '修复读模型指纹', '旧读模型试验 · 归档'],
+    ['当前会话', '全部会话（含归档）', '修复读模型指纹'],
   )
-  assert.deepEqual(options.map((option) => option.value), ['current', 'all', 'session:sess-alpha', 'session:sess-beta'])
-  assert.equal(options[3].archived, true)
-  // 归档即使 updatedAt 更旧也必须排在活跃之后（这里是天然顺序，另用反例确认判据）
+  assert.deepEqual(options.map((option) => option.value), ['current', 'all', 'session:sess-alpha'])
+  assert.equal(options[1].archived, true, '「全部会话」覆盖归档，因此标 archived')
+  assert.deepEqual(options.map((option) => option.group), ['view', 'view', 'sessions'])
+  // 归档会话不出现在具体列表里（即使 updatedAt 更新也不列）
   const reversed = buildScopeOptions(
     [
       { ...buildSummaries()[1], updatedAt: Date.now() },
@@ -215,7 +218,7 @@ test('选择器选项：当前会话 → 全部工作线 → 具体会话（最�
     ],
     t,
   )
-  assert.equal(reversed[2].value, 'session:sess-alpha', '活跃会话必须排在归档之前')
+  assert.equal(reversed.some((option) => option.value === 'session:sess-beta'), false, '归档会话只归入全部会话')
 })
 
 test('scope 键 round-trip（不认识的键退回当前会话，不抛错）', () => {
