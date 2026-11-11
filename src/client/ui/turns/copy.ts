@@ -19,6 +19,8 @@ export const TURN_COPY: {
   scopeCurrent: LabelKey
   scopeAll: LabelKey
   scopeLabel: LabelKey
+  scopeGroupView: LabelKey
+  scopeGroupSessions: LabelKey
   statusCompleted: LabelKey
   statusAborted: LabelKey
   statusRunning: LabelKey
@@ -37,6 +39,8 @@ export const TURN_COPY: {
   scopeCurrent: 'turns.currentSession',
   scopeAll: 'turns.allWorklines',
   scopeLabel: 'inspector.session',
+  scopeGroupView: 'turns.scopeGroupView',
+  scopeGroupSessions: 'turns.scopeGroupSessions',
   statusCompleted: 'turns.completed',
   statusAborted: 'session.aborted',
   statusRunning: 'session.running',

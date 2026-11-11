@@ -11,7 +11,7 @@
  * R10（2026-11-08）删除：文件夹带与文件网格的分隔线 「.tl-foldhub-rule」（网格布局已整体废除）；
  * 新增：关系密度组（.tl-graph-density*）、「显示 N/M」chip（.tl-graph-showall）、
  * 图头关系计数（.tl-graph-relations）、枢纽聚合边（.tl-hub-edge）、
- * 枢纽有/无跨目录关系的两种描边（[data-hub-linked]）、焦点 dim（[data-dimmed]）。
+ * 枢纽有/无跨目录关系的两种描边（[data-hub-linked]）；**焦点 dim 已按用户要求移除**（D-35）。
  */
 
 :is(.threadline-app, .threadline-impact-root) .tl-graph {
@@ -458,15 +458,11 @@
   stroke: var(--tl-fg-secondary);
 }
 
-/* 无关的枢纽间连线压暗（data-hub-pair-dimmed；数值由内联 opacity 给，这里只兜底）。 */
-:is(.threadline-app, .threadline-impact-root) .tl-hub-pair[data-hub-pair-dimmed='true'] {
-  opacity: 0.1;
-}
-
-/* 悬停枢纽时其余枢纽 dim 0.4（03 §4.2.2「其余枢纽 dim 0.4」）。 */
-:is(.threadline-app, .threadline-impact-root) .tl-foldhub[data-dimmed='true'] {
-  opacity: 0.4;
-}
+/*
+ * 不压暗其余元素（D-35）：这里**刻意没有任何 dim 规则**。
+ * 旧实现有 [data-dimmed='true'] { opacity: 0.4 }，用户否掉了它；
+ * 现在"不压暗"由"没有规则"保证，而不是由一条 opacity: 1 去抵消 —— 后者会被误读成"仍有 dim 行为"。
+ */
 
 :is(.threadline-app, .threadline-impact-root) .tl-edge-badge {
   fill: var(--tl-fg-tertiary);
@@ -569,11 +565,6 @@
   pointer-events: none;
 }
 
-/* hover 焦点下：无关节点 dim 0.5（03 §4.2.5；只改透明度，不改坐标/大小）。 */
-:is(.threadline-app, .threadline-impact-root) .tl-ofile[data-dimmed='true'] {
-  opacity: 0.5;
-}
-
 :is(.threadline-app, .threadline-impact-root) .tl-ofile-core {
   transition: fill-opacity var(--tl-dur-fast) ease, stroke var(--tl-dur-fast) ease;
 }
@@ -609,38 +600,44 @@
   font-weight: 600;
 }
 
-/* ---------- 图内证据浮层（非模态 region；不是旧检查器/弹窗） ---------- */
+/* ---------- 关系证据（覆盖在时间线卡片上；非模态 region） ---------- */
 
-:is(.threadline-app, .threadline-impact-root) .tl-graph-evidence {
+/*
+ * D-35：证据从"图内右下角浮层"改为**完整覆盖下方时间线卡片**。
+ * 这样它不压节点、不产生第二个浮动层，卡片高度也保持不变（不会因 hover 抖）。
+ */
+:is(.threadline-app, .threadline-impact-root) .tl-evidence-slot {
   position: absolute;
-  inset-block-end: 10px;
-  inset-inline-end: 10px;
-  inline-size: min(340px, calc(100% - 20px));
-  max-block-size: 72%;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-inline-size: 0;
+  padding: 8px 10px;
   overflow: auto;
-  padding: 10px 12px;
-  border: 1px solid var(--tl-border);
-  border-radius: var(--tl-radius-md);
-  background: var(--tl-surface-raised);
-  box-shadow: var(--tl-shadow-2);
-  transition: opacity var(--tl-dur-base) ease, transform var(--tl-dur-base) ease;
+  border-radius: inherit;
+  background: var(--tl-surface);
+  box-shadow: inset 0 0 0 1px var(--tl-border);
 }
 
-:is(.threadline-app, .threadline-impact-root) .tl-graph-evidence-head {
+:is(.threadline-app, .threadline-impact-root) .tl-evidence-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
 }
 
-:is(.threadline-app, .threadline-impact-root) .tl-graph-evidence-title {
+:is(.threadline-app, .threadline-impact-root) .tl-evidence-title {
   color: var(--tl-fg);
-  font-size: var(--tl-fs-body);
+  font-size: var(--tl-fs-meta);
+  line-height: var(--tl-lh-tight);
 }
 
-:is(.threadline-app, .threadline-impact-root) .tl-graph-evidence-close {
+:is(.threadline-app, .threadline-impact-root) .tl-evidence-close {
   inline-size: 22px;
   block-size: 22px;
+  flex: 0 0 auto;
   padding: 0;
   border: 0;
   border-radius: var(--tl-radius-sm);
@@ -650,49 +647,68 @@
   cursor: pointer;
 }
 
-:is(.threadline-app, .threadline-impact-root) .tl-graph-evidence-close:hover {
+:is(.threadline-app, .threadline-impact-root) .tl-evidence-close:hover {
   background: var(--tl-hover);
   color: var(--tl-fg);
 }
 
-:is(.threadline-app, .threadline-impact-root) .tl-graph-evidence-path {
-  margin-block-start: 4px;
+:is(.threadline-app, .threadline-impact-root) .tl-evidence-subject {
+  min-inline-size: 0;
+  overflow: hidden;
   color: var(--tl-fg);
-  font-family: var(--tl-mono);
-  font-size: var(--tl-fs-caption);
-  overflow-wrap: anywhere;
+  font-size: var(--tl-fs-meta-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-:is(.threadline-app, .threadline-impact-root) .tl-graph-evidence-meta {
+:is(.threadline-app, .threadline-impact-root) .tl-evidence-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-block-start: 6px;
-  color: var(--tl-fg-caption);
-  font-size: var(--tl-fs-caption);
+  gap: 4px;
 }
 
-:is(.threadline-app, .threadline-impact-root) .tl-graph-evidence-group {
-  margin-block-start: 8px;
-}
-
-:is(.threadline-app, .threadline-impact-root) .tl-graph-evidence-type {
+:is(.threadline-app, .threadline-impact-root) .tl-evidence-chip {
+  display: inline-flex;
+  align-items: center;
+  block-size: 18px;
+  padding: 0 6px;
+  border: 1px solid var(--tl-border);
+  border-radius: var(--tl-radius-pill);
   color: var(--tl-fg-secondary);
-  font-size: var(--tl-fs-caption);
+  font-size: var(--tl-fs-meta-sm);
+  white-space: nowrap;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-evidence-groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  min-inline-size: 0;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-evidence-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 6px;
+  min-inline-size: 0;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-evidence-group-label {
+  color: var(--tl-fg-secondary);
+  font-size: var(--tl-fs-meta-sm);
   font-weight: 600;
 }
 
-:is(.threadline-app, .threadline-impact-root) .tl-graph-evidence-text {
-  margin: 2px 0 0 8px;
-  color: var(--tl-fg-caption);
-  font-size: var(--tl-fs-caption);
-  overflow-wrap: anywhere;
+:is(.threadline-app, .threadline-impact-root) .tl-evidence-text {
+  color: var(--tl-fg-tertiary);
+  font-size: var(--tl-fs-meta-sm);
 }
 
-:is(.threadline-app, .threadline-impact-root) .tl-graph-evidence-empty {
-  margin: 6px 0 0;
-  color: var(--tl-fg-caption);
-  font-size: var(--tl-fs-caption);
+:is(.threadline-app, .threadline-impact-root) .tl-evidence-empty {
+  margin: 0;
+  color: var(--tl-fg-tertiary);
+  font-size: var(--tl-fs-meta-sm);
 }
 
 /* ---------- 加载态 ---------- */

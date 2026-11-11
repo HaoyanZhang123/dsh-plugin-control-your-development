@@ -253,16 +253,48 @@
   text-align: start;
   cursor: pointer;
   appearance: none;
+  /* 只在卡片上做"轻微上浮"（D-35）：transform 不进布局流，不会把同行卡片挤动。 */
+  transition:
+    transform var(--tl-dur-fast) var(--tl-ease),
+    box-shadow var(--tl-dur-fast) var(--tl-ease),
+    border-color var(--tl-dur-fast) var(--tl-ease),
+    background var(--tl-dur-fast) var(--tl-ease);
 }
 
 :is(.threadline-app, .threadline-impact-root) .tl-tree-card:hover {
+  transform: translateY(-2px);
   border-color: var(--tl-border-strong);
   background: var(--tl-surface-raised);
+  box-shadow: var(--tl-shadow-2);
 }
 
+/* 键盘焦点与鼠标悬浮同等的"被选中感"（不靠颜色单独承载）。 */
+:is(.threadline-app, .threadline-impact-root) .tl-tree-card:focus-visible {
+  transform: translateY(-2px);
+  box-shadow: var(--tl-shadow-2);
+}
+
+/* 与左图联动的高亮：比 hover 略强一点，但同样不上浮太多（避免整片卡片跳动）。 */
 :is(.threadline-app, .threadline-impact-root) .tl-tree-card[data-hover='true'] {
+  transform: translateY(-2px);
   border-color: var(--tl-accent);
   background: var(--tl-hover);
+  box-shadow: var(--tl-shadow-2);
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-card[data-selected='true'] {
+  border-color: var(--tl-accent);
+  box-shadow: inset 0 0 0 1px var(--tl-accent);
+}
+
+/* reduced-motion：宿主令牌层已把 --tl-dur-* 归零（过渡时长自动为 0），
+ * 但 transform 仍会瞬移到位 —— 这里把位移也取消。
+ * 用属性选择器而不是 @media：tree.css 的纪律是"响应式只用容器查询"。
+ * 前缀仍是插件根（选择器一律 .threadline-app 开头），保证卸载即干净。 */
+:is(.threadline-app, .threadline-impact-root)[data-reduced-motion='true'] .tl-tree-card:hover,
+:is(.threadline-app, .threadline-impact-root)[data-reduced-motion='true'] .tl-tree-card:focus-visible,
+:is(.threadline-app, .threadline-impact-root)[data-reduced-motion='true'] .tl-tree-card[data-hover='true'] {
+  transform: none;
 }
 
 :is(.threadline-app, .threadline-impact-root) .tl-tree-card[data-selected='true'] {
@@ -364,19 +396,28 @@
 
 /* ---------------- 列表模式（表格语义；固定行高 = 虚拟化单位） ---------------- */
 
+/*
+ * 列对齐契约：表头与数据行**共用同一组 grid 轨道**。
+ *
+ * 旧实现表头是 4 个 span、数据行是 5 个 flex 子项（行首多一个 14px 图标、尾部 ops
+ * 用 max-width 自由收缩），于是名称列起点天然错位、数字列也随内容漂移。
+ * 现在两侧都用 --tl-tree-cols 这一条变量定义，窄栏只改这条变量，不会再各写一套。
+ */
 :is(.threadline-app, .threadline-impact-root) .tl-tree-body[role='table'] {
+  --tl-tree-cols: 16px minmax(0, 1fr) 56px 64px 44px;
   display: block;
   min-inline-size: 0;
   /* 页面单滚动：这里不开内层滚动条；虚拟化靠窗口切片（见 model.ts）。 */
 }
 
 :is(.threadline-app, .threadline-impact-root) .tl-tree-thead {
-  display: flex;
+  display: grid;
+  grid-template-columns: var(--tl-tree-cols);
   align-items: center;
   gap: 8px;
-  min-inline-size: 0;
   padding: 0 8px;
-  block-size: 22px;
+  min-inline-size: 0;
+  block-size: 24px;
   border-block-end: 1px solid var(--tl-border);
   color: var(--tl-fg-tertiary);
   font-size: var(--tl-fs-meta-sm);
@@ -384,29 +425,21 @@
 }
 
 :is(.threadline-app, .threadline-impact-root) .tl-tree-th {
-  flex: 0 0 auto;
   min-inline-size: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-:is(.threadline-app, .threadline-impact-root) .tl-tree-th[data-col='name'] {
-  flex: 1 1 auto;
-}
-
-:is(.threadline-app, .threadline-impact-root) .tl-tree-th[data-col='type'] {
-  inline-size: 56px;
-}
-
-:is(.threadline-app, .threadline-impact-root) .tl-tree-th[data-col='size'] {
-  inline-size: 64px;
-  text-align: end;
-}
-
+:is(.threadline-app, .threadline-impact-root) .tl-tree-th[data-col='type'],
+:is(.threadline-app, .threadline-impact-root) .tl-tree-th[data-col='size'],
 :is(.threadline-app, .threadline-impact-root) .tl-tree-th[data-col='ops'] {
-  inline-size: 44px;
   text-align: end;
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-tree-th[data-col='icon'] {
+  /* 图标列只有宽度，没有可见表头文字（读屏用 columnheader 的隐藏名）。 */
+  min-inline-size: 0;
 }
 
 :is(.threadline-app, .threadline-impact-root) .tl-tree-list {
@@ -416,14 +449,16 @@
 
 /* 行高必须等于 RAIL_LIST_ROW_HEIGHT（30px）：虚拟化按固定行高算窗口。 */
 :is(.threadline-app, .threadline-impact-root) .tl-tree-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: var(--tl-tree-cols);
   align-items: center;
   gap: 8px;
+  padding: 0 8px;
+  min-inline-size: 0;
   inline-size: 100%;
   block-size: 30px;
   min-block-size: 30px;
   margin: 0;
-  padding: 0 8px;
   border: 0;
   border-radius: var(--tl-radius-sm);
   background: transparent;
@@ -456,24 +491,21 @@
 }
 
 :is(.threadline-app, .threadline-impact-root) .tl-tree-row .tl-tree-name {
-  flex: 1 1 auto;
+  min-inline-size: 0;
   font-size: var(--tl-fs-meta);
   font-weight: 500;
 }
 
 :is(.threadline-app, .threadline-impact-root) .tl-tree-row .tl-tree-type {
-  flex: 0 0 auto;
-  inline-size: 56px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-align: end;
   color: var(--tl-fg-tertiary);
   font-size: var(--tl-fs-meta-sm);
 }
 
 :is(.threadline-app, .threadline-impact-root) .tl-tree-row .tl-tree-size {
-  flex: 0 0 auto;
-  inline-size: 64px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -482,12 +514,13 @@
   text-align: end;
 }
 
+/* 尾列（族色点 / 本轮标记 / ops）固定在最后一轨，内部靠 end 对齐。 */
 :is(.threadline-app, .threadline-impact-root) .tl-tree-row-tail {
   display: flex;
-  flex: 0 0 auto;
   align-items: center;
-  gap: 6px;
-  max-inline-size: 44px;
+  justify-content: flex-end;
+  gap: 4px;
+  min-inline-size: 0;
   overflow: hidden;
 }
 
@@ -504,8 +537,12 @@
   }
 }
 
-/* 窄栏列表：隐藏类型/大小列，只留名称 + ops（不产生横向滚动）。 */
-@container threadline (max-width: 599.98px) {
+/* 窄栏列表：隐藏类型/大小列，只留名称 + ops（同一套轨道变量，两侧同步收窄）。 */
+@container threadline (max-width: 720px) {
+  :is(.threadline-app, .threadline-impact-root) .tl-tree-body[role='table'] {
+    --tl-tree-cols: 16px minmax(0, 1fr) 40px;
+  }
+
   :is(.threadline-app, .threadline-impact-root) .tl-tree-th[data-col='type'],
   :is(.threadline-app, .threadline-impact-root) .tl-tree-th[data-col='size'],
   :is(.threadline-app, .threadline-impact-root) .tl-tree-row .tl-tree-type,

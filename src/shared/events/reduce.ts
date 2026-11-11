@@ -10,6 +10,8 @@
  * - **单一路径**：scan 与 detail 复用同一 `reduceSession`，测试也只测这一份。
  */
 import { countLines, LIMITS, truncateText } from './limits.ts'
+import { splitAssistantContent, samplesFromAssistantMessage } from './reasoning.ts'
+import type { ReasoningSample } from '../reasoning/index.ts'
 import { baseName, dirName, familyOf, looksLikeFile, resolveWorkspacePath } from './paths.ts'
 import type {
   CommandRecord,
@@ -125,6 +127,12 @@ interface ReduceState {
   unassignedFiles: Map<string, FileTouch>
   unassignedCommands: CommandRecord[]
   touchSeq: number
+  /** 思维链样本（按事件顺序；聚合在 shared/reasoning 里做，这里只收集）。 */
+  reasoning: ReasoningSample[]
+  /** 是否因上限丢了思维链样本（丢了必须能说，不静默）。 */
+  reasoningTruncated: boolean
+  /** 当前 preset（来自 header.agentPreset 或 agent-preset/selected 事件）。 */
+  preset?: string
 }
 
 const DEFAULT_LIMITS: ReduceLimits = {
@@ -555,6 +563,9 @@ export function reduceSession(
     unassignedFiles: new Map<string, FileTouch>(),
     unassignedCommands: [],
     touchSeq: 0,
+    reasoning: [],
+    reasoningTruncated: false,
+    ...(header.agentPreset === undefined || header.agentPreset === '' ? {} : { preset: header.agentPreset }),
   }
 
   for (const child of options.children ?? []) {
@@ -597,6 +608,12 @@ export function reduceSession(
         const model = asString(data.model)
         if (provider !== undefined) state.provider = provider
         if (model !== undefined) state.model = model
+        break
+      }
+      /* preset 变更：只记最后一次，供思维链按 preset 归组（没有就是未知，不猜）。 */
+      case 'agent-preset/selected': {
+        const preset = asString(data.agentPreset) ?? asString(data.preset)
+        if (preset !== undefined && preset !== '') state.preset = preset
         break
       }
       case 'turn/start': {
@@ -651,9 +668,32 @@ export function reduceSession(
         const id = asString(message?.id)
         const n = asNumber(data.turn)
         const turn = turnOf(state, n ?? state.currentTurn)
-        const text = textFromContent(message?.content)
+        /* 正文摘要只取**非 reasoning** 的文本块：旧实现用 textFromContent 会把思维链
+         * 混进"助手回复"，导致字符占比把思维链算两遍（D-35 修）。 */
+        const split = splitAssistantContent(message?.content)
+        const text = split.answer === '' ? undefined : split.answer
         if (text !== undefined) {
           if (turn !== undefined) turn.assistantText = truncateText(text, LIMITS.summary)
+        }
+        /* 思维链样本：按事件顺序累积；聚合在 client/shared/reasoning 里做。 */
+        if (split.reasoning.length > 0 && state.reasoning.length < LIMITS.maxReasoningSamples) {
+          const samples = samplesFromAssistantMessage({
+            data,
+            sessionId: state.header.id,
+            turn: n ?? state.currentTurn,
+            ...(state.model === undefined ? {} : { model: state.model }),
+            ...(state.preset === undefined ? {} : { preset: state.preset }),
+            at,
+          })
+          for (const sample of samples) {
+            if (state.reasoning.length >= LIMITS.maxReasoningSamples) {
+              state.reasoningTruncated = true
+              break
+            }
+            state.reasoning.push(sample)
+          }
+        } else if (split.reasoning.length > 0) {
+          state.reasoningTruncated = true
         }
         const interrupted = data.interrupted === true
         if (id !== undefined) {
@@ -987,6 +1027,11 @@ export function reduceSession(
       commands: state.unassignedCommands,
     }
   }
+  /* 思维链样本随详情返回（host 只读归约产物；client 负责聚合与展示）。
+   * 没有 reasoning 时不带该字段 —— 让消费方能区分"没有"与"空数组"。 */
+  if (state.reasoning.length > 0) detail.reasoning = state.reasoning
+  if (state.reasoningTruncated) detail.reasoningTruncated = true
+  if (state.preset !== undefined) detail.preset = state.preset
 
   return {
     detail,

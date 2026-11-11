@@ -22,6 +22,7 @@ import { registerCommand } from './entries/command.ts'
 import { info, optionalMethod, warn, type ClientContextLike } from './entries/context.ts'
 import { registerImpact } from './entries/impact.ts'
 import { registerTab } from './entries/tab.ts'
+import { registerReasoningTab } from './entries/reasoning.ts'
 import { disposeDetailStore } from './state/detailStore.ts'
 import { disposeAllWarmups } from './data/index.ts'
 import { clearFocus } from './state/viewFocus.ts'
@@ -133,6 +134,10 @@ export function apply(ctx: ClientContext): void {
   })
   const impact = registerImpact(ctx)
   const command = registerCommand(ctx)
+  /* 思维链 tab（D-35，用户明确要求）：与脉络并列的第二个 conversation.view。
+   * 它复用同一个只读数据层；不新增路由、不写存储。
+   * locale 用默认值（与 tab 一致走 DEFAULT_LOCALE），因此这里不传 options。 */
+  const reasoning = registerReasoningTab(ctx)
 
   if (!tab && !impact && !command) {
     warn(ctx, '三个入口都没注册成功（slots 不可用？）— tab / 影响 N / 命令入口将不可见')

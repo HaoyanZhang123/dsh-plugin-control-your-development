@@ -66,6 +66,10 @@ export interface FileTreeRailProps {
   onRefresh: () => void
   /** 选中文件（单击；文件是终端，不进入）。 */
   onSelectFile: (path: string) => void
+  /** 选中文件夹（单击；**不进入**，进入由 onEnterFolder 负责）。 */
+  onSelectFolder?: (path: string) => void
+  /** 双击文件夹 → 进入该目录（与左图双击语义一致）。 */
+  onEnterFolder?: (path: string) => void
   /** 双击打开文件（可选；不可用时只选中）。 */
   onOpenFile?: (path: string) => void
   /** 清掉文件选中（Escape / 点空白）。 */
@@ -263,6 +267,7 @@ interface RowProps {
   onActivate: (row: RailRow) => void
   onHover?: (path: string | null) => void
   onOpen?: (path: string) => void
+  onEnter?: (path: string) => void
 }
 
 function RailRowView(props: RowProps): React.ReactElement {
@@ -316,12 +321,11 @@ function RailRowView(props: RowProps): React.ReactElement {
     tabIndex: props.tabIndex,
     title: label,
     onClick: () => props.onActivate(row),
-    onDoubleClick:
-      row.kind === 'file' && props.onOpen !== undefined
-        ? () => {
-            props.onOpen?.(row.path)
-          }
-        : undefined,
+    /* 双击：文件夹 = 进入目录；文件 = 请求宿主打开。两者与左图同一语义。 */
+    onDoubleClick: () => {
+      if (row.kind === 'directory') props.onEnter?.(row.path)
+      else props.onOpen?.(row.path)
+    },
     onMouseEnter: () => props.onHover?.(row.path),
     onMouseLeave: () => props.onHover?.(null),
     onFocus: () => props.onHover?.(row.path),
@@ -515,14 +519,12 @@ export function FileTreeRail(props: FileTreeRailProps): React.ReactElement {
 
   const activate = React.useCallback(
     (row: RailRow): void => {
-      if (row.kind === 'directory') {
-        props.onNavigate(row.path)
-        return
-      }
-      // 文件 / other：文件是终端（不进入），点击只选中。
+      /* 单击统一 = 选中（文件与文件夹同一语义）。
+       * 进入目录交给双击 / Enter 决定的 onEnterFolder，不再"点一下目录就跳走"。 */
       props.onSelectFile(row.path)
+      props.onSelectFolder?.(row.path)
     },
-    [props.onNavigate, props.onSelectFile],
+    [props.onSelectFile, props.onSelectFolder],
   )
 
   const onKeyDown = React.useCallback(
@@ -537,7 +539,10 @@ export function FileTreeRail(props: FileTreeRailProps): React.ReactElement {
       event.preventDefault()
       if (action.activate) {
         const row = rows[rovingIndex]
-        if (row !== undefined) activate(row)
+        if (row === undefined) return
+        /* 键盘：Enter/Space 选中；Shift+Enter 进入目录（与左图一致的等价路径）。 */
+        if (event.shiftKey && row.kind === 'directory') props.onEnterFolder?.(row.path)
+        else activate(row)
         return
       }
       if (action.nextIndex === rovingIndex) return
@@ -617,11 +622,15 @@ export function FileTreeRail(props: FileTreeRailProps): React.ReactElement {
           },
           viewMode === 'list'
             ? [
-                h('div', { key: 'thead', className: 'tl-tree-thead', role: 'row', 'aria-hidden': true },
-                  h('span', { className: 'tl-tree-th', 'data-col': 'name' }, t('tree.folder')),
-                  h('span', { className: 'tl-tree-th', 'data-col': 'type' }, t('fileFamily.other')),
-                  h('span', { className: 'tl-tree-th', 'data-col': 'size' }, 'B'),
-                  h('span', { className: 'tl-tree-th', 'data-col': 'ops' }, t('inspector.ops')),
+                h(
+                  'div',
+                  { key: 'thead', className: 'tl-tree-thead', role: 'row' },
+                  // 图标列与名称列必须与数据行的 grid 轨道一一对应，否则首列起点天然错位。
+                  h('span', { key: 'icon', className: 'tl-tree-th', 'data-col': 'icon', role: 'columnheader', 'aria-label': t('tree.kind') }),
+                  h('span', { key: 'name', className: 'tl-tree-th', 'data-col': 'name', role: 'columnheader' }, t('tree.name')),
+                  h('span', { key: 'type', className: 'tl-tree-th', 'data-col': 'type', role: 'columnheader' }, t('tree.kind')),
+                  h('span', { key: 'size', className: 'tl-tree-th', 'data-col': 'size', role: 'columnheader' }, t('tree.size')),
+                  h('span', { key: 'ops', className: 'tl-tree-th', 'data-col': 'ops', role: 'columnheader' }, t('inspector.ops')),
                 ),
                 viewWindow.topPad > 0
                   ? h('div', { key: 'pad-top', className: 'tl-tree-pad', style: { blockSize: viewWindow.topPad + 'px' }, 'aria-hidden': true })
@@ -643,6 +652,7 @@ export function FileTreeRail(props: FileTreeRailProps): React.ReactElement {
                       onActivate: activate,
                       ...(props.onHoverFile === undefined ? {} : { onHover: props.onHoverFile }),
                       ...(props.onOpenFile === undefined ? {} : { onOpen: props.onOpenFile }),
+                      ...(props.onEnterFolder === undefined ? {} : { onEnter: props.onEnterFolder }),
                     })
                   }),
                 ),
@@ -664,6 +674,7 @@ export function FileTreeRail(props: FileTreeRailProps): React.ReactElement {
                   onActivate: activate,
                   ...(props.onHoverFile === undefined ? {} : { onHover: props.onHoverFile }),
                   ...(props.onOpenFile === undefined ? {} : { onOpen: props.onOpenFile }),
+                  ...(props.onEnterFolder === undefined ? {} : { onEnter: props.onEnterFolder }),
                 })
               }),
         )

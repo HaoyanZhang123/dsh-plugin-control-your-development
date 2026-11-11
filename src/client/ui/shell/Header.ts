@@ -1,8 +1,16 @@
 /*
- * shell/Header.ts —— 顶部 header（56px）：产品名 / 工作区名 / 范围 chip / 覆盖率胶囊位。
+ * shell/Header.ts —— 顶部 header：范围 chip / 覆盖率胶囊位 / 右侧动作。
  *
- * 03 §3.1 的 header 只有这四类内容；不放一级导航、不放 KPI、不放任何运行控制。
- * 窄容器下范围 chip 折行（base.css 的容器查询负责），这里只管结构。
+ * D-35（用户反馈）：**删除**左侧「脉络 + 工作区名」那一行 —— 它单独占一行、又和下面卡片里的
+ * 标题重复，看起来"很丑"。工作区名不再在 header 里出现，而是融进下方卡片（右栏面包屑的根段
+ * 与左图卡片标题旁的小字），信息不丢、但不再占独立一行。
+ *
+ * 因此现在 header 只剩两类内容：
+ * 1. 时间范围 chip（它与图/卡片共用同一窗口，必须常驻可点）；
+ * 2. 覆盖率胶囊与右侧只读动作。
+ *
+ * 保留 `workspaceName` prop 是为了**可访问名**（aria-label）—— 读屏仍能知道当前工作区，
+ * 只是视觉上不再单列一行。
  */
 import * as React from 'react'
 import { Chip } from '../common/index.ts'
@@ -11,7 +19,7 @@ import { RANGE_KEYS, SHELL_REGIONS, type RangeKey } from './types.ts'
 
 export interface HeaderProps {
   t: Translator
-  /** 工作区名（来自宿主；不把空名字替换成假名字）。 */
+  /** 工作区名：只用于读屏（aria-label），不再视觉渲染成独立一行。 */
   workspaceName: string
   range: RangeKey
   onRangeChange?: (range: RangeKey) => void
@@ -31,23 +39,20 @@ export function Header(props: HeaderProps): React.ReactElement {
       testId: 'range-' + key,
     }),
   )
+  /* 读屏可访问名里带工作区；空名字时退回产品名（不伪造工作区）。 */
+  const accessibleLabel =
+    props.workspaceName === ''
+      ? props.t('tab.title')
+      : props.t('tab.title') + ' · ' + props.workspaceName
   return React.createElement(
     'header',
     {
       className: 'threadline-header',
       'data-region': SHELL_REGIONS.header,
-      'aria-label': props.t('tab.title'),
+      'aria-label': accessibleLabel,
+      /* 视觉上不再渲染品牌行；标记出来便于样式与验收断言。 */
+      'data-header-brand': 'none',
     },
-    React.createElement(
-      'div',
-      { className: 'threadline-header-start' },
-      React.createElement('span', { className: 'threadline-brand' }, props.t('app.name')),
-      React.createElement(
-        'span',
-        { className: 'threadline-workspace', title: props.workspaceName },
-        props.workspaceName,
-      ),
-    ),
     React.createElement(
       'div',
       { className: 'threadline-range', role: 'group', 'aria-label': props.t('tab.label') },

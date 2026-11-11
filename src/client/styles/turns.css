@@ -80,24 +80,30 @@
   color: var(--tl-fg);
   cursor: pointer;
   text-align: start;
-  transition: background-color var(--tl-dur-fast) var(--tl-ease), border-color var(--tl-dur-fast) var(--tl-ease);
+  /* 合并成**一条** transition（旧写法在同一选择器上又写了一遍，后者会整体覆盖前者，
+   * 导致 background 的 120ms 与 box-shadow 的过渡互相打架）。
+   * D-35：轮次块也做轻微上浮，和右栏卡片保持同一种"可点"手感。 */
+  transition:
+    transform var(--tl-dur-fast) var(--tl-ease),
+    background-color var(--tl-dur-fast) var(--tl-ease),
+    border-color var(--tl-dur-fast) var(--tl-ease),
+    box-shadow var(--tl-dur-fast) var(--tl-ease);
 }
 
 .threadline-app .threadline-turn-block:hover {
+  transform: translateY(-2px);
   background: var(--tl-hover);
+  box-shadow: var(--tl-shadow-1);
 }
 
 .threadline-app .threadline-turn-block[data-preview='true'] {
+  transform: translateY(-2px);
   background: var(--tl-hover);
 }
 
 .threadline-app .threadline-turn-block[data-related='true'] {
   background: var(--tl-hover);
   box-shadow: inset 0 0 0 1px var(--tl-accent);
-}
-
-.threadline-app .threadline-turn-block {
-  transition: background-color 120ms ease, box-shadow 120ms ease;
 }
 
 .threadline-app .threadline-turn-block[data-selected='true'] {
@@ -338,4 +344,11 @@
   .threadline-app .threadline-turn-scope-select {
     max-inline-size: 140px;
   }
+}
+
+/* reduced-motion：取消轮次块的上浮位移（令牌层只把时长归零，transform 仍会瞬移到位）。
+ * 用插件根上的 data 标记，保持"响应式只用容器查询"的纪律。 */
+.threadline-app[data-reduced-motion='true'] .threadline-turn-block:hover,
+.threadline-app[data-reduced-motion='true'] .threadline-turn-block[data-preview='true'] {
+  transform: none;
 }

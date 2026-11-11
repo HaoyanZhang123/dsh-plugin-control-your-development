@@ -22,6 +22,11 @@ import {
 } from './hubLinks.ts'
 import { aggregateEdgePairs } from './pairs.ts'
 
+/** 路径身份键（小写；与 FolderMap 的 caseKey 同口径，这里自带一份避免 UI 反向依赖）。 */
+function caseKeyOf(path: string): string {
+  return path.toLowerCase()
+}
+
 /** 当前目录条目的类型（�?tree 契约丢�致：directory / file / other）��?*/
 export type MapKind = 'directory' | 'file' | 'other'
 
@@ -53,11 +58,13 @@ export interface FolderLayoutNode {
   ops: number
   /** 是否有会话数据（false = 中��：不显�?ops、不给族色强调）�?*/
   touched: boolean
-  /** 优先级序号（0 起；touched/ops 降序 �?名字升序，用�?tabIndex 与标签优先级）��?*/
+  /** 文件字节数；缺省 = 大小未知（渲染成空心虚线节点，**不按 0 B 处理**）。 */
+  size?: number
+  /** 优先级序号（0 起；touched/ops 降序 → 名字升序，用于 tabIndex 与标签优先级）。 */
   index: number
 }
 
-/** 布局里的文件夹枢纽（圆角方卡；坐�?= 卡片中心，力导向结果）��?*/
+/** 布局里的文件夹枢纽（圆角方卡；坐标 = 卡片中心，力导向结果）。 */
 export interface FolderLayoutHub {
   path: string
   name: string
@@ -225,8 +232,62 @@ export interface FolderGeometry {
   fillY: number
 }
 
-/** 标签字号（屏�?px；与 map.css �?.tl-ofile-label 保持丢�致）�?*/
+/** 标签字号（屏显 px；与 map.css 的 .tl-ofile-label 保持一致）。 */
 export const FOLDER_LABEL_FONT_PX = 11
+
+/**
+ * 在**已算好的几何**上叠加拖动偏移（纯函数）。
+ *
+ * 为什么要有它（性能根因，D-35）：
+ * `layoutFolderGeometry` 会跑固定轮数的力导向 + 重叠消除，代价是 O(N²)×轮数。
+ * 旧实现把 `dragOffsets` 放进它的依赖里 → **每一次 pointermove 都重跑整场模拟**，
+ * 复杂目录里拖动直接掉帧/卡死。
+ *
+ * 拖动在语义上只是"把某个节点平移"，不影响其它任何节点位置，
+ * 因此正确做法是：几何只算一次，拖动时只对目标节点做坐标平移。
+ * 这样每帧代价从 O(N²×轮数) 降到 O(N)。
+ */
+export function applyDragOffsets(geometry: FolderGeometry, offsets: Readonly<Record<string, NodeDragOffset>>): FolderGeometry {
+  const keys = Object.keys(offsets)
+  if (keys.length === 0) return geometry
+  const nodes = geometry.nodes.map((node) => {
+    const offset = offsets[caseKeyOf(node.path)]
+    if (offset === undefined) return node
+    if (offset.dx === 0 && offset.dy === 0) return node
+    return { ...node, x: round2(node.x + offset.dx), y: round2(node.y + offset.dy) }
+  })
+  const hubs = geometry.hubs.map((hub) => {
+    const offset = offsets[caseKeyOf(hub.path)]
+    if (offset === undefined) return hub
+    if (offset.dx === 0 && offset.dy === 0) return hub
+    return { ...hub, x: round2(hub.x + offset.dx), y: round2(hub.y + offset.dy) }
+  })
+  const hubEdges = geometry.hubEdges.map((edge) => {
+    const hubOffset = offsets[caseKeyOf(edge.hubPath)]
+    const fileOffset = offsets[caseKeyOf(edge.filePath)]
+    if (hubOffset === undefined && fileOffset === undefined) return edge
+    return {
+      ...edge,
+      x1: round2(edge.x1 + (hubOffset?.dx ?? 0)),
+      y1: round2(edge.y1 + (hubOffset?.dy ?? 0)),
+      x2: round2(edge.x2 + (fileOffset?.dx ?? 0)),
+      y2: round2(edge.y2 + (fileOffset?.dy ?? 0)),
+    }
+  })
+  const hubPairs = geometry.hubPairs.map((pair) => {
+    const aOffset = offsets[caseKeyOf(pair.aPath)]
+    const bOffset = offsets[caseKeyOf(pair.bPath)]
+    if (aOffset === undefined && bOffset === undefined) return pair
+    return {
+      ...pair,
+      x1: round2(pair.x1 + (aOffset?.dx ?? 0)),
+      y1: round2(pair.y1 + (aOffset?.dy ?? 0)),
+      x2: round2(pair.x2 + (bOffset?.dx ?? 0)),
+      y2: round2(pair.y2 + (bOffset?.dy ?? 0)),
+    }
+  })
+  return { ...geometry, nodes, hubs, hubEdges, hubPairs }
+}
 /** 标签行高（px）��?*/
 export const FOLDER_LABEL_HEIGHT = 13
 /** 标签与节点圆之间的间隙��?*/
@@ -278,6 +339,26 @@ export function folderNodeRadius(ops: number, touched: boolean): number {
   if (!touched) return 5
   const safe = Number.isFinite(ops) && ops > 0 ? ops : 0
   return Math.round((5.4 + Math.min(4.6, Math.sqrt(safe) * 0.42)) * 100) / 100
+}
+
+/**
+ * 文件大小 → 节点半径（节点大小表达**文件体积**，不再表达操作次数）。
+ *
+ * 采用「面积随大小的对数增长」：直接按字节线性映射会让一个 2 MB 图片吞掉整张画布、
+ * 而几个 KB 的小文件挤成一个点；取对数后同量级文件仍有可见差异，又能落在 4.5–14px 的
+ * 可读区间内（最小值保证小文件可点，最大值避免大文件压住邻居与标签）。
+ *
+ * `undefined`（大小未知）返回中性半径，由调用方画成空心虚线节点，**不按 0 B 处理**。
+ */
+export const FOLDER_SIZE_RADIUS = { min: 4.5, max: 14, base: 3.2, factor: 0.42 } as const
+
+export function folderRadiusFromSize(size: number | undefined): number {
+  if (typeof size !== 'number' || !Number.isFinite(size) || size < 0) {
+    return FOLDER_SIZE_RADIUS.min
+  }
+  const raw = FOLDER_SIZE_RADIUS.base + Math.log2(size + 1) * FOLDER_SIZE_RADIUS.factor
+  const clamped = Math.min(FOLDER_SIZE_RADIUS.max, Math.max(FOLDER_SIZE_RADIUS.min, raw))
+  return Math.round(clamped * 100) / 100
 }
 
 /**
@@ -363,6 +444,8 @@ interface CandidateFile {
   ops: number
   touched: boolean
   family: FileFamily
+  /** 文件字节数；`undefined` = 大小未知（不按 0 处理）。 */
+  size?: number
 }
 
 /**
@@ -388,6 +471,8 @@ export function collectFolderNodes(
       kind: entry.kind === 'other' ? 'other' : 'file',
       ops: 0,
       touched: false,
+      // 只有宿主给出有限非负字节数时才带 size；未知一律 undefined（渲染成空心节点）。
+      ...(typeof entry.size === 'number' && Number.isFinite(entry.size) && entry.size >= 0 ? { size: entry.size } : {}),
       // 优先�?DATA 给的 family（与 rail/关系层同丢�份扩展名规则），缺省再兜底��?
 family: entry.family ?? familyOfName(entry.name === '' ? entry.path : entry.name),
     })
@@ -690,7 +775,7 @@ clusterKey: '\u0000hub:' + info.entry.path.toLowerCase(),
     })
   }
   for (let index = 0; index < kept.length; index += 1) {
-    const radius = round2(folderNodeRadius(kept[index].ops, kept[index].touched) * radiusScale)
+    const radius = round2(folderRadiusFromSize(kept[index].size) * radiusScale)
     plans.push({
       key: kept[index].path.toLowerCase(),
       kind: 'file',
@@ -850,10 +935,11 @@ const structuralOnly = pair.typeList.every((type) => type === 'structure')
       kind: candidate.kind,
       x: placedX[at],
       y: placedY[at],
-      r: plans[at]?.radius ?? folderNodeRadius(candidate.ops, candidate.touched),
+      r: plans[at]?.radius ?? folderRadiusFromSize(candidate.size),
       family: candidate.family,
       ops: candidate.ops,
       touched: candidate.touched,
+      ...(typeof candidate.size === 'number' ? { size: candidate.size } : {}),
       index,
     }
   })

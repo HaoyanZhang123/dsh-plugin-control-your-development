@@ -39,6 +39,7 @@ export {
 
 export {
   bench,
+  benchBest,
   checkBench,
   formatBenchReport,
   makeSyntheticEdges,

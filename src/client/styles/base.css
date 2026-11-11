@@ -121,30 +121,8 @@
   background: var(--tl-surface);
 }
 
-.threadline-app .threadline-header-start {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  min-inline-size: 0;
-  flex: 0 1 auto;
-}
-
-.threadline-app .threadline-brand {
-  font-size: var(--tl-fs-title);
-  font-weight: 600;
-  line-height: var(--tl-lh-tight);
-  color: var(--tl-fg);
-  white-space: nowrap;
-}
-
-.threadline-app .threadline-workspace {
-  min-inline-size: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--tl-fg-secondary);
-  font-size: var(--tl-fs-meta);
-}
+/* header 里的品牌行（.threadline-header-start / -brand / -workspace）已删除：
+ * 用户反馈那行「脉络 + 工作区名」单独占一行很丑。工作区名改由 aria-label 承载。 */
 
 .threadline-app .threadline-range {
   display: flex;
@@ -982,14 +960,6 @@
     gap: 4px;
   }
 
-  .threadline-app .threadline-brand {
-    font-size: var(--tl-fs-subtitle);
-  }
-
-  .threadline-app .threadline-workspace {
-    display: none;
-  }
-
   .threadline-app .threadline-btn {
     padding: 0 6px;
   }
@@ -1180,7 +1150,8 @@
 
 .threadline-app .threadline-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  /* 左图是主视图，右栏是导航：按 7:5 分配（右栏比原 50% 窄约 1/6）。 */
+  grid-template-columns: minmax(0, 7fr) minmax(320px, 5fr);
   gap: 16px;
   align-items: stretch;
   padding: 16px;
@@ -1257,8 +1228,9 @@
   min-inline-size: 0;
 }
 
-/* 窄容器（<960）：回退为单页滚动 + 上下堆叠；两栏不再各自滚动。 */
-@container threadline (max-width: 959.98px) {
+/* 窄容器（<1080）：回退为单页滚动 + 上下堆叠；两栏不再各自滚动。
+   7:5 分配下右栏最小 320px，容器 <1080 时两栏会同时被压到不可用，故提前单列。 */
+@container threadline (max-width: 1079.98px) {
   .threadline-app .threadline-shell {
     overflow-y: auto;
     padding-block-end: 8px;

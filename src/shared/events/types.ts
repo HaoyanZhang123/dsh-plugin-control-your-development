@@ -11,6 +11,8 @@
  * 本文件**只有类型与常量**，没有 IO、没有副作用；下游可以直接 import 类型。
  */
 
+import type { ReasoningSample } from '../reasoning/index.ts'
+
 /* ------------------------------------------------------------------ *
  * 0. 错误壳（04 §2.3 / §2.7）
  * ------------------------------------------------------------------ */
@@ -272,6 +274,15 @@ export interface SessionDetail {
     files: FileTouch[]
     commands: CommandRecord[]
   }
+  /**
+   * 思维链样本（D-35）：每次 assistant 回复的 reasoning 文本 + provider 上报的 token。
+   * **没有 reasoning 时整个字段缺失**（区别于空数组）；聚合在 shared/reasoning 里做。
+   */
+  reasoning?: ReasoningSample[]
+  /** 思维链样本因上限被截断（必须能在 UI 说明，不静默丢）。 */
+  reasoningTruncated?: boolean
+  /** 会话实际使用的 preset（header.agentPreset 或 agent-preset/selected）。 */
+  preset?: string
 }
 
 /* ------------------------------------------------------------------ *

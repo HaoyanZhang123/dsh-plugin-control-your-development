@@ -354,6 +354,11 @@ export interface ScopeOption {
   scope: TurnScope
   label: string
   archived: boolean
+  /**
+   * 分组：`view` = 视图级范围（当前会话 / 全部会话，含归档），
+   * `sessions` = 具体未归档会话。UI 用它做 `<optgroup>`，让「全部会话」与其他项有区分度。
+   */
+  group?: 'view' | 'sessions'
 }
 
 /** TurnScope → 稳定的字符串键（用于 `<option value>` 与比较）。 */
@@ -392,27 +397,32 @@ export function rootSessions(sessions: readonly TurnStripSession[]): TurnStripSe
 export function buildScopeOptions(
   sessions: readonly TurnStripSession[],
   t: Translator,
-  options?: { privacyMode?: boolean },
+  options?: { privacyMode?: boolean; currentSessionId?: string },
 ): ScopeOption[] {
   const currentLabel = turnLabel(TURN_COPY.scopeCurrent, '●', t)
   const allLabel = turnLabel(TURN_COPY.scopeAll, '⋯', t)
-  const roots = rootSessions(sessions).slice().sort((a, b) => {
-    if (a.archived !== b.archived) return a.archived ? 1 : -1
-    return b.updatedAt - a.updatedAt
-  })
+  /* 具体会话列表只放**当前工作区未归档**的根会话（用户口径）：
+   * 归档会话不再逐条列出，只归入「全部会话（含归档）」这一个汇总范围。 */
+  const roots = rootSessions(sessions)
+    .filter((session) => session.archived !== true)
+    .slice()
+    .sort((a, b) => b.updatedAt - a.updatedAt)
   const items: ScopeOption[] = [
-    { value: 'current', scope: { kind: 'current' }, label: currentLabel, archived: false },
-    { value: 'all', scope: { kind: 'all' }, label: allLabel, archived: false },
+    { value: 'current', scope: { kind: 'current' }, label: currentLabel, archived: false, group: 'view' },
+    { value: 'all', scope: { kind: 'all' }, label: allLabel, archived: true, group: 'view' },
   ]
+  const currentId = options?.currentSessionId ?? ''
   roots.forEach((session, index) => {
+    /* 当前会话已经在第一项里，具体列表不再重复列它。 */
+    if (currentId !== '' && session.id === currentId) return
     const base = session.title !== undefined && session.title !== '' ? session.title : session.id.slice(0, 8)
     const title = options?.privacyMode === true ? t('inspector.session') + ' ' + String(index + 1) : base
-    const archivedSuffix = session.archived ? ' · ' + t('session.archived') : ''
     items.push({
       value: 'session:' + session.id,
       scope: { kind: 'session', sessionId: session.id },
-      label: title + archivedSuffix,
-      archived: session.archived,
+      label: title,
+      archived: false,
+      group: 'sessions',
     })
   })
   return items

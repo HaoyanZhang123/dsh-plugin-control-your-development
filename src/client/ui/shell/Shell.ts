@@ -45,6 +45,8 @@ export interface ThreadlineShellProps {
   graphSlot?: React.ReactNode
   /** 左列：时间轴（48px）。 */
   timelineSlot?: React.ReactNode
+  /** 左列：时间轴区域内的关系证据覆盖层（受控；null = 不显示）。 */
+  timelineEvidenceSlot?: React.ReactNode
   /** 左列：轮次带标题（locale）。 */
   turnStripTitle?: string
   turnStripCollapsed?: boolean
@@ -53,6 +55,8 @@ export interface ThreadlineShellProps {
   turnStripSlot?: React.ReactNode
   /** 右列：目录卡片两列（33 §2）。 */
   railSlot?: React.ReactNode
+  /** 宿主是否偏好减少动效（挂到插件根，供样式层取消位移）。 */
+  reducedMotion?: boolean
   className?: string
   testId?: string
 }
@@ -65,7 +69,10 @@ export function ThreadlineShell(props: ThreadlineShellProps): React.ReactElement
     'section',
     { className: 'threadline-left', 'data-region': SHELL_REGIONS.map, 'data-threadline-left': '' },
     React.createElement('div', { className: 'threadline-graph-slot', 'data-threadline-graph-slot': '' }, props.graphSlot ?? null),
-    React.createElement(TimelineSlot, { testId: 'timeline' }, props.timelineSlot ?? null),
+    React.createElement(TimelineSlot, {
+      testId: 'timeline',
+      ...(props.timelineEvidenceSlot === undefined ? {} : { evidenceSlot: props.timelineEvidenceSlot }),
+    }, props.timelineSlot ?? null),
     React.createElement(
       TurnStripSlot,
       {
@@ -92,6 +99,9 @@ export function ThreadlineShell(props: ThreadlineShellProps): React.ReactElement
       className: ['threadline-app', props.className].filter(Boolean).join(' '),
       'data-threadline-app': '',
       'data-locale': locale,
+      /* 插件根上的 reduced-motion 标记：样式层用它取消位移类动效
+       * （tokens.css 只能把时长归零，transform 仍会瞬移到位）。 */
+      'data-reduced-motion': props.reducedMotion === true ? 'true' : 'false',
       'data-testid': props.testId,
     },
     React.createElement(

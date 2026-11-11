@@ -23,6 +23,14 @@ export const LIMITS = {
   maxCommands: 2000,
   /** 单会话 messageId→turn 映射条数（04 §3.7）。 */
   maxMessageTurns: 10_000,
+  /**
+   * 单个会话保留的思维链样本数上限（D-35）。
+   *
+   * 一条样本 = 一次 assistant 回复的 reasoning 集合（不是一句话），
+   * 2000 条足以覆盖超长会话，同时给 host 内存一个硬边界；
+   * 超限必须标 `reasoningTruncated`，不许静默丢。
+   */
+  maxReasoningSamples: 2000,
   /** 单 workspace 文件节点上限（04 §3.7）。 */
   maxFileNodes: 20_000,
   /** 单 workspace 共现边上限（04 §4.4）。 */

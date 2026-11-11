@@ -41,6 +41,7 @@ import { ErrorBoundary, ThreadlineShell, type RangeKey } from '../ui/shell/index
 import { Button, Chip, ProgressPill } from '../ui/common/index.ts'
 import { FileGraph } from '../ui/map/index.ts'
 import { FileTreeRail } from '../ui/rail/index.ts'
+import { EvidencePanel, type EvidenceModel } from '../ui/map/evidence.ts'
 import { useDirectoryTree, type TreeEntry } from '../data/index.ts'
 // 派生计算（R06）：边端点邻接索引 + 轮次关系计数 + 当前目录内边过滤。
 // 这三个函数与 tab 里的旧内联实现**逐 key 等价**（R06 与 Lead 各验一次），但把
@@ -300,6 +301,11 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
   // 1.2.0 返工：右栏是工作区根目录浏览器，目录状态由 tree 数据层持有（不再有 drillPath/pin）。
   const [railView, setRailView] = React.useState<'cards' | 'list'>('cards')
   const [hoverPath, setHoverPath] = React.useState<string | null>(null)
+  /** 选中的文件夹（工作区相对路径）。与文件选中互斥：单击只选中，双击才进入。 */
+  const [selectedFolder, setSelectedFolder] = React.useState<string | null>(null)
+  const setFolderSelection = setSelectedFolder
+  /** 关系证据（受控）：由图组件上报，渲染在时间线区域并完全覆盖它（D-35）。 */
+  const [evidence, setEvidence] = React.useState<EvidenceModel | null>(null)
   const [now, setNow] = React.useState<number>(() => props.now ?? Date.now())
   // 切工作区/会话重置播放头与右栏视图（目录状态由 useDirectoryTree 按 sessionId 自己隔离）。
   React.useEffect(() => {
@@ -827,17 +833,38 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
         setState((previous) => selectionReducer(previous, { type: 'blank' }))
         return
       }
-      if (path === selectedPath) {
-        setState((previous) => selectionReducer(previous, { type: 'blank' }))
-        return
-      }
+      /* 幂等：点已选中的文件**保持选中**，不取消。
+       * 取消只走点空白 / Esc。旧实现在这里 toggle，导致双击时
+       * 第一次 click 选中、第二次 click 取消 → 用户看到"选中又弹回去"。 */
+      if (path === selectedPath) return
+      setFolderSelection(null)
       applyFocus(select.file(path))
     },
     [applyFocus, selectedPath],
   )
-  // 右栏目录导航（M4）：进入目录 / 回退 / 更新；三者都清掉文件选中与 hover，避免证据浮层被回灌。
+  /* 文件夹单击 = 选中（幂等）：与文件选中互斥，切换时清掉文件选中与证据。 */
+  const selectFolder = React.useCallback((path: string | null) => {
+    if (path === null) {
+      setFolderSelection(null)
+      return
+    }
+    setFolderSelection((previous) => (previous === path ? previous : path))
+    setState((previous) => selectionReducer(previous, { type: 'blank' }))
+  }, [])
+  /* 文件夹双击 = 进入该目录（右栏与左图共用同一入口）。 */
+  const enterFolder = React.useCallback(
+    (path: string) => {
+      setFolderSelection(null)
+      setHoverPath(null)
+      setState((previous) => selectionReducer(previous, { type: 'blank' }))
+      tree.navigate(path)
+    },
+    [tree],
+  )
+  // 右栏目录导航（M4）：进入目录 / 回退 / 更新；三者都清掉文件与文件夹选中、以及 hover，避免证据浮层被回灌。
   const clearSelectionAndHover = React.useCallback(() => {
     setHoverPath(null)
+    setFolderSelection(null)
     setState((previous) => selectionReducer(previous, { type: 'blank' }))
   }, [])
   const onNavigate = React.useCallback(
@@ -934,7 +961,20 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
       : null
 
   /* ---------------- 左列：图（或列表视图） ---------------- */
-  const workspaceLoading = nodes.length === 0 && (coverage.state === 'loading' || data.graph.applied !== true)
+  /**
+   * 首屏门控（性能根因，D-35）：**目录树已就绪就不再等扫描**。
+   *
+   * 旧实现是 `nodes.length === 0 && (coverage.loading || !graph.applied)`，
+   * 于是"目录已经读到了、但活动扫描还没出首个快照"时整块图仍是骨架 ——
+   * 用户看到的就是"点进脉络要等很久"。
+   *
+   * 现在：只要当前目录 listing 可用（ready/empty，或有 stale 内容），就直接画目录图；
+   * 活动数据（ops/关系边）到了再叠加。扫描缺失时用图上的「未触碰」语义表达，
+   * 而不是拿加载态盖住已经拿到的真实目录。
+   */
+  const treeReady = tree.state.status === 'ready' || tree.state.status === 'empty' || tree.state.listing !== null
+  const workspaceLoading =
+    !treeReady && nodes.length === 0 && (coverage.state === 'loading' || data.graph.applied !== true)
   const emptyState = graphEmptyStateOf(
     { degradeKind: data.degrade.kind, hasFiles: nodes.length > 0, hasSessions: scope.sessions.length > 0 },
     t,
@@ -1019,8 +1059,11 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
         ...(mode2 === 'folder' ? { allEdges: edges } : {}),
         visibleAt: playhead,
         onHoverFile,
+        onEvidence: setEvidence,
         turn: activeTurn === null || turnStatus === null ? null : { turn: activeTurn, status: turnStatus },
         selectedPath: selectedFileInGraph,
+        selectedFolderPath: selectedFolder,
+        hoveredPath: hoverPath,
         onSelectFile: selectFile,
         onOpenFile: props.openPath,
         onEnterFolder: mode2 === 'folder' ? onNavigate : undefined,
@@ -1083,6 +1126,7 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
       headerActionsSlot: headerActions,
       ...(nowStrip === null ? {} : { nowStrip }),
       graphSlot,
+      reducedMotion: reduced,
       timelineSlot: h(Timeline, {
         range,
         domain,
@@ -1096,6 +1140,20 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
         ...(listView === 'list' ? { announce: () => '' } : {}),
         testId: 'timeline',
       }),
+      /* 关系证据覆盖在时间线卡片上（同一区域、同一高度），关闭时清选中与证据。 */
+      ...(evidence === null
+        ? {}
+        : {
+            timelineEvidenceSlot: h(EvidencePanel, {
+              model: evidence,
+              t,
+              onClose: () => {
+                setEvidence(null)
+                setFolderSelection(null)
+                setState((previous) => selectionReducer(previous, { type: 'blank' }))
+              },
+            }),
+          }),
       turnStripTitle: t('inspector.turn'),
       turnStripCollapsed: false,
       turnStripHeadSlot: h(SessionSelector, {
@@ -1104,6 +1162,7 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
         scope: turnScope,
         onScopeChange: (next: TurnScope) => setTurnScope(next),
         privacyMode: hidden,
+        currentSessionId: sessionId,
       }),
       turnStripSlot: h(TurnStrip, {
         t,
@@ -1151,8 +1210,13 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
         onBack: onBackFolder,
         onRefresh: onRefreshFolder,
         onSelectFile: selectFile,
+        onSelectFolder: selectFolder,
+        onEnterFolder: enterFolder,
         ...(props.openPath === undefined ? {} : { onOpenFile: props.openPath }),
-        onClearSelection: () => setState((previous) => selectionReducer(previous, { type: 'blank' })),
+        onClearSelection: () => {
+          setFolderSelection(null)
+          setState((previous) => selectionReducer(previous, { type: 'blank' }))
+        },
         selectedPath,
         hoveredPath: hoverPath,
         onHoverFile,

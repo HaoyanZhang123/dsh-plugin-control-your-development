@@ -74,12 +74,22 @@ export interface FileGraphProps {
   turn?: FileGraphTurn | null
   /** 当前选中的文件（图内点击）。 */
   selectedPath?: string | null
+  /**
+   * 受控 hover（右栏 → 左图的跨栏联动）；`undefined` = 用组件内部 hover。
+   * 显式 `null` = 外部没有 hover。
+   */
+  hoveredPath?: string | null
   onSelectFile?: (path: string | null) => void
   onOpenFile?: (path: string) => void
   /** hover 文件节点（用于右栏/轮次联动）；离开节点传 null。 */
   onHoverFile?: (path: string | null) => void
-  /** 点文件夹枢纽 → 让右栏进入该目录。 */
+  /** 点文件夹枢纽 → 让右栏进入该目录（双击 / Shift+Enter）。 */
   onEnterFolder?: (path: string) => void
+  /** 当前选中的文件夹枢纽（单击只选中；与文件选中互斥）。 */
+  selectedFolderPath?: string | null
+  onSelectFolder?: (path: string | null) => void
+  /** 证据数据上报（父级放进时间线区域渲染）。 */
+  onEvidence?: (model: import('./evidence.ts').EvidenceModel | null) => void
   /** 退出本轮视图（再点该轮 / 点空白 / Esc）。 */
   onExitTurn?: () => void
   /** 播放头（null = 跟随现在）；非 null 时 firstAt 晚于它的节点隐藏。 */
@@ -138,11 +148,15 @@ export function FileGraph(props: FileGraphProps): React.ReactElement {
       ...(props.allEdges === undefined ? {} : { allEdges: props.allEdges }),
       currentPath: props.currentPath ?? '',
       selectedPath: props.selectedPath,
+      ...(props.hoveredPath === undefined ? {} : { hoveredPath: props.hoveredPath }),
       visibleAt: props.visibleAt,
       onSelectFile: props.onSelectFile,
       onOpenFile: props.onOpenFile,
       onHoverFile: props.onHoverFile,
       onEnterFolder: props.onEnterFolder,
+      ...(props.selectedFolderPath === undefined ? {} : { selectedFolderPath: props.selectedFolderPath }),
+      ...(props.onSelectFolder === undefined ? {} : { onSelectFolder: props.onSelectFolder }),
+      ...(props.onEvidence === undefined ? {} : { onEvidence: props.onEvidence }),
       now: props.now,
       formatTime: props.formatTime,
       locale: props.locale,
@@ -448,48 +462,28 @@ function TurnMap(props: TurnMapProps): React.ReactElement {
     return elements
   })
 
-  const edgeEvidencePanel =
+  /* 轮次图证据也走统一的模型上报（不再自己画一份浮层；D-35 单一执行路径）。 */
+  const turnEvidenceModel: import('./evidence.ts').EvidenceModel | null =
     activePair === null
       ? null
-      : h(
-          'div',
-          { className: 'tl-graph-evidence', [GRAPH_DATA.evidence]: 'edge', role: 'region', 'aria-label': t('graph.evidenceTitle') },
-          h(
-            'div',
-            { className: 'tl-graph-evidence-head' },
-            h('b', { className: 'tl-graph-evidence-title' }, t('graph.evidenceTitle')),
-            h(
-              'button',
-              {
-                type: 'button',
-                className: 'tl-graph-evidence-close',
-                'aria-label': t('ui.close'),
-                onClick: () => {
-                  setPinnedPairKey(null)
-                  setHoverPairKey(null)
-                },
-              },
-              '×',
-            ),
-          ),
-          h('div', { className: 'tl-graph-evidence-path' }, activePair.from + ' ↔ ' + activePair.to),
-          h(
-            'div',
-            { className: 'tl-graph-evidence-meta' },
-            h('span', null, t('graph.fileRelations', { n: activePair.count })),
-            ...activePair.typeList.map((type) => h('span', { key: type, 'data-evidence-type': type }, t(RELATION_MESSAGE_KEY[type]))),
-          ),
-          activePairGroups.length === 0
-            ? h('p', { className: 'tl-graph-evidence-empty' }, t('state.unknown'))
-            : activePairGroups.map(([type, group]) =>
-                h(
-                  'div',
-                  { key: type, className: 'tl-graph-evidence-group', 'data-evidence-type': type },
-                  h('span', { className: 'tl-graph-evidence-type' }, t(group.labelKey)),
-                  ...group.texts.map((text, index) => h('p', { key: index, className: 'tl-graph-evidence-text' }, text)),
-                ),
-              ),
-        )
+      : {
+          kind: 'edge',
+          subject: activePair.from + ' \u2194 ' + activePair.to,
+          meta: [
+            t('graph.fileRelations', { n: activePair.count }),
+            ...activePair.typeList.map((type) => t(RELATION_MESSAGE_KEY[type])),
+          ],
+          groups: activePairGroups.map(([type, group]) => ({
+            type: type as import('../../../shared/relations/index.ts').RelationType,
+            labelKey: group.labelKey,
+            texts: group.texts,
+          })),
+          emptyText: t('state.unknown'),
+        }
+  React.useEffect(() => {
+    props.onEvidence?.(turnEvidenceModel)
+  }, [turnEvidenceModel, props.onEvidence])
+  React.useEffect(() => () => props.onEvidence?.(null), [props.onEvidence])
 
   const empty = props.files.length === 0
   const emptyTitle = props.emptyTitle ?? t('graph.emptyTurn')
@@ -655,7 +649,6 @@ function TurnMap(props: TurnMapProps): React.ReactElement {
                 ...labelElements,
               ),
             ),
-      edgeEvidencePanel,
     ),
   )
 }

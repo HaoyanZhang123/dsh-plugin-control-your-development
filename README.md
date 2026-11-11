@@ -123,7 +123,7 @@ plugin/
 
 ## Releases
 
-Current release: **panel plugin v1.4.3** (stable).
+Current release: **panel plugin v1.5.0** (stable).
 
 - Changelog: [CHANGELOG.md](CHANGELOG.md)
 - GitHub Releases: https://github.com/HaoyanZhang123/dsh-plugin-control-your-development/releases

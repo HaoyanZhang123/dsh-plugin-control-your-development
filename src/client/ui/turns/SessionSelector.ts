@@ -15,6 +15,8 @@ export interface SessionSelectorProps {
   scope: TurnScope
   onScopeChange: (scope: TurnScope) => void
   privacyMode?: boolean
+  /** 当前会话 id：具体会话列表里不再重复列它。 */
+  currentSessionId?: string
   testId?: string
 }
 
@@ -22,8 +24,11 @@ export function SessionSelector(props: SessionSelectorProps): React.ReactElement
   const { t } = props
   const options = buildScopeOptions(props.sessions, t, {
     ...(props.privacyMode === undefined ? {} : { privacyMode: props.privacyMode }),
+    ...(props.currentSessionId === undefined ? {} : { currentSessionId: props.currentSessionId }),
   })
   const label = turnLabel(TURN_COPY.scopeLabel, '▾', t)
+  const viewOptions = options.filter((option) => option.group !== 'sessions')
+  const sessionOptions = options.filter((option) => option.group === 'sessions')
   return React.createElement(
     'span',
     { className: 'threadline-turn-scope' },
@@ -38,9 +43,24 @@ export function SessionSelector(props: SessionSelectorProps): React.ReactElement
           props.onScopeChange(parseScopeKey(event.currentTarget.value))
         },
       },
-      options.map((option) =>
-        React.createElement('option', { key: option.value, value: option.value }, option.label),
+      /* 视图级范围单独一组：`全部会话` 含归档、与"具体会话"语义不同，
+       * 用 optgroup 在原生控件里做出区分度（不另造一套下拉）。 */
+      React.createElement(
+        'optgroup',
+        { label: turnLabel(TURN_COPY.scopeGroupView, '◇', t) },
+        ...viewOptions.map((option) =>
+          React.createElement('option', { key: option.value, value: option.value }, option.label),
+        ),
       ),
+      sessionOptions.length === 0
+        ? null
+        : React.createElement(
+            'optgroup',
+            { label: turnLabel(TURN_COPY.scopeGroupSessions, '▸', t) },
+            ...sessionOptions.map((option) =>
+              React.createElement('option', { key: option.value, value: option.value }, option.label),
+            ),
+          ),
     ),
   )
 }

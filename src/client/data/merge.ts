@@ -65,6 +65,23 @@ export interface WorkspaceGraph {
   readonly applied: boolean
 }
 
+/** 覆盖率是否"内容相同"（进度前进但数据没变时，不该让下游重算）。 */
+function sameCoverage(left: Coverage, right: Coverage): boolean {
+  return (
+    left.total === right.total &&
+    left.scanned === right.scanned &&
+    left.failed === right.failed &&
+    left.cached === right.cached &&
+    left.loadedFiles === right.loadedFiles &&
+    left.loadedEdges === right.loadedEdges &&
+    left.loadedSessions === right.loadedSessions &&
+    left.phase === right.phase &&
+    left.known === right.known &&
+    left.truncated === right.truncated &&
+    left.complete === right.complete
+  )
+}
+
 /** 单个 snapshot 包的应用结果。 */
 export interface ApplyResult {
   graph: WorkspaceGraph
@@ -282,6 +299,48 @@ export function applySnapshot(graph: WorkspaceGraph, snapshot: {
   const truncated = snapshot.truncated === true
   const done = snapshot.done === true
   const coverage = coverageOf({ sessions, files, edges }, snapshot.progress, done, truncated)
+
+  /**
+   * **空增量 no-op**（性能根因，D-35）。
+   *
+   * 扫描是 400ms 轮询的：绝大多数快照其实"什么都没变"。
+   * 旧实现无条件新建三个 Map + 新 graph 对象 → 下游所有以 graph 身份为键的
+   * memo（结构边 / 共现边 / 引用 / finalizeGraph / 力导向布局）全部 miss 并重算，
+   * 于是"放着不动也在烧 CPU"，复杂工作区就会卡。
+   *
+   * 这里在**没有任何实质变化**时直接返回旧对象（引用相等），下游 memo 全部命中。
+   * 判据只看内容与覆盖状态；`rev` 前进但内容相同同样视为 no-op（进度不是数据）。
+   */
+  const noSignal =
+    !reset &&
+    sessionsChanged === 0 &&
+    filesAdded === 0 &&
+    filesUpdated === 0 &&
+    filesRemoved === 0 &&
+    edgesAdded === 0 &&
+    edgesUpdated === 0 &&
+    edgesRemoved === 0 &&
+    (snapshot.errors ?? []).length === 0 &&
+    graph.applied === true &&
+    sameCoverage(graph.coverage, coverage)
+  if (noSignal) {
+    return {
+      graph,
+      applied: {
+        reset: false,
+        sessions: 0,
+        filesAdded: 0,
+        filesUpdated: 0,
+        filesRemoved: 0,
+        edgesAdded: 0,
+        edgesUpdated: 0,
+        edgesRemoved: 0,
+        errors: 0,
+        truncated: false,
+        rev: graph.rev,
+      },
+    }
+  }
 
   const next: WorkspaceGraph = {
     sessions,

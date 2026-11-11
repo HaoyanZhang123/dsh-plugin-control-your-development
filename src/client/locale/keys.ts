@@ -83,6 +83,8 @@ export type MessageKey =
   | "turns.durationHour"
   | "turns.currentSession"
   | "turns.allWorklines"
+  | "turns.scopeGroupView"
+  | "turns.scopeGroupSessions"
   | "turns.completed"
   | "turns.empty"
   | "ops.read"
@@ -116,6 +118,63 @@ export type MessageKey =
   | "relations.collapsed"
   // —— §16 扩展段（2026-11-05，T21 目录总览）——
   | "map.rootCluster"
+  | "reasoning.tab"
+  | "reasoning.treemap"
+  | "reasoning.cloud"
+  | "reasoning.list"
+  | "reasoning.charsUnit"
+  | "reasoning.group"
+  | "reasoning.chars"
+  | "reasoning.tokens"
+  | "reasoning.ratio"
+  | "reasoning.lang"
+  | "reasoning.form"
+  | "reasoning.noPrefix"
+  | "reasoning.sentences"
+  | "reasoning.range"
+  | "reasoning.model"
+  | "reasoning.record"
+  | "reasoning.views"
+  | "reasoning.summary"
+  | "reasoning.coverage"
+  | "reasoning.tokenRatio"
+  | "reasoning.charRatio"
+  | "reasoning.charRatioHint"
+  | "reasoning.dimensions"
+  | "reasoning.rank"
+  | "reasoning.detail"
+  | "reasoning.selectHint"
+  | "reasoning.empty"
+  | "reasoning.noSentences"
+  | "reasoning.sentencesUnit"
+  | "reasoning.blocksUnit"
+  | "reasoning.groupsUnit"
+  | "reasoning.blocks"
+  | "reasoning.rangeWorkspace"
+  | "reasoning.rangeActive"
+  | "reasoning.rangeSession"
+  | "reasoning.all"
+  | "reasoning.other"
+  | "reasoning.recordCommitted"
+  | "reasoning.recordAll"
+  | "reasoning.dimPrefix"
+  | "reasoning.dimForm"
+  | "reasoning.dimLang"
+  | "reasoning.dimModel"
+  | "reasoning.dimPreset"
+  | "reasoning.formPlan"
+  | "reasoning.formQuestion"
+  | "reasoning.formImperative"
+  | "reasoning.formWarning"
+  | "reasoning.formStatement"
+  | "reasoning.langZh"
+  | "reasoning.langEn"
+  | "reasoning.langJa"
+  | "reasoning.langKo"
+  | "reasoning.langMixed"
+  | "reasoning.langUnknown"
+  | "reasoning.loading"
+  | "reasoning.none"
   | "map.clusterCount"
   | "map.clusterMeta"
   | "map.clusterCurrent"
@@ -132,6 +191,9 @@ export type MessageKey =
   | "turns.relationsTip"
   | "tree.root"
   | "tree.folder"
+  | "tree.name"
+  | "tree.kind"
+  | "tree.size"
   | "tree.path"
   | "tree.ops"
   | "tree.back"
@@ -255,6 +317,8 @@ export const MESSAGE_KEYS: readonly MessageKey[] = [
   "turns.durationHour",
   "turns.currentSession",
   "turns.allWorklines",
+  "turns.scopeGroupView",
+  "turns.scopeGroupSessions",
   "turns.completed",
   "turns.empty",
   "ops.read",
@@ -304,6 +368,9 @@ export const MESSAGE_KEYS: readonly MessageKey[] = [
   "turns.relationsTip",
   "tree.root",
   "tree.folder",
+  "tree.name",
+  "tree.kind",
+  "tree.size",
   "tree.path",
   "tree.ops",
   "tree.back",
@@ -349,4 +416,62 @@ export const MESSAGE_KEYS: readonly MessageKey[] = [
   "ui.close",
   "ui.expand",
   "ui.collapse",
+  // —— 思维链视图（D-35）——
+  "reasoning.tab",
+  "reasoning.treemap",
+  "reasoning.cloud",
+  "reasoning.list",
+  "reasoning.charsUnit",
+  "reasoning.group",
+  "reasoning.chars",
+  "reasoning.tokens",
+  "reasoning.ratio",
+  "reasoning.lang",
+  "reasoning.form",
+  "reasoning.noPrefix",
+  "reasoning.sentences",
+  "reasoning.range",
+  "reasoning.model",
+  "reasoning.record",
+  "reasoning.views",
+  "reasoning.summary",
+  "reasoning.coverage",
+  "reasoning.tokenRatio",
+  "reasoning.charRatio",
+  "reasoning.charRatioHint",
+  "reasoning.dimensions",
+  "reasoning.rank",
+  "reasoning.detail",
+  "reasoning.selectHint",
+  "reasoning.empty",
+  "reasoning.noSentences",
+  "reasoning.sentencesUnit",
+  "reasoning.blocksUnit",
+  "reasoning.groupsUnit",
+  "reasoning.blocks",
+  "reasoning.rangeWorkspace",
+  "reasoning.rangeActive",
+  "reasoning.rangeSession",
+  "reasoning.all",
+  "reasoning.other",
+  "reasoning.recordCommitted",
+  "reasoning.recordAll",
+  "reasoning.dimPrefix",
+  "reasoning.dimForm",
+  "reasoning.dimLang",
+  "reasoning.dimModel",
+  "reasoning.dimPreset",
+  "reasoning.formPlan",
+  "reasoning.formQuestion",
+  "reasoning.formImperative",
+  "reasoning.formWarning",
+  "reasoning.formStatement",
+  "reasoning.langZh",
+  "reasoning.langEn",
+  "reasoning.langJa",
+  "reasoning.langKo",
+  "reasoning.langMixed",
+  "reasoning.langUnknown",
+  "reasoning.loading",
+  "reasoning.none",
 ]

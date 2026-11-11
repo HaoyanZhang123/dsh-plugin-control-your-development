@@ -28,6 +28,7 @@ import { cameraTransform, DEFAULT_CAMERA, GRAPH_ZOOM_STEP, panCameraBy, resetCam
 import {
   FOLDER_LABEL_FONT_PX,
   layoutFolderGeometry,
+  applyDragOffsets,
   layoutFolderLabels,
   type FolderLayoutHub,
   type FolderLayoutHubPair,
@@ -52,6 +53,7 @@ import {
   type GraphDensity,
 } from './theme.ts'
 import { ZoomGroup } from './zoomGroup.ts'
+import type { EvidenceModel } from './evidence.ts'
 
 const h = React.createElement
 
@@ -102,13 +104,23 @@ export interface FolderMapProps {
   /** 当前目录（'' = 工作区根）。 */
   currentPath: string
   selectedPath?: string | null
+  /**
+   * 受控 hover（跨栏联动）：右栏卡片/列表的鼠标或键盘焦点落在某个路径时由父级下传。
+   * `undefined` = 不受控（用组件内部 hover）；显式 `null` = 当前没有任何外部 hover。
+   */
+  hoveredPath?: string | null
   /** 播放头（null = 跟随现在；非 null 时 firstAt 晚于它的节点隐藏）。 */
   visibleAt?: number | null
   onSelectFile?: (path: string | null) => void
   onOpenFile?: (path: string) => void
   onHoverFile?: (path: string | null) => void
-  /** 点文件夹枢纽 → 让右栏进入该目录。 */
+  /** 证据数据上报：由父级放进时间线区域渲染（本组件不再自己画浮层）。`null` = 无证据。 */
+  onEvidence?: (model: EvidenceModel | null) => void
+  /** 点文件夹枢纽 → 让右栏进入该目录（**双击 / Shift+Enter** 触发，不是单击）。 */
   onEnterFolder?: (path: string) => void
+  /** 当前选中的文件夹枢纽（与文件选中互斥；单击只选中，双击才进入）。 */
+  selectedFolderPath?: string | null
+  onSelectFolder?: (path: string | null) => void
   now: number
   formatTime?: (at: number) => string
   locale?: Locale
@@ -220,7 +232,13 @@ export function FolderMap(props: FolderMapProps): React.ReactElement {
   const formatTime = props.formatTime ?? defaultFormatTime
   const visibleAt = props.visibleAt ?? null
   const selectedKey = props.selectedPath === null || props.selectedPath === undefined ? null : caseKey(props.selectedPath)
-  const hoveredKey = hoverPath === null ? null : caseKey(hoverPath)
+  /* 受控 hover 优先：父级显式给了（含 null）就以父级为准，否则用组件内部 hover。
+   * 这样「右栏 → 左图」有唯一事实源，不会出现两套 hover 状态互相打架。 */
+  const externalHover = props.hoveredPath === undefined ? undefined : props.hoveredPath
+  const hoveredKey =
+    externalHover === undefined
+      ? (hoverPath === null ? null : caseKey(hoverPath))
+      : (externalHover === null || externalHover === '' ? null : caseKey(externalHover))
   /**
    * 生效的密度档位。「显示全部」时自动降级到骨架（§4.2.3），
    * 所以它必须在几何之前算出来 —— 枢纽间连线**按档位重新计算**（不是 CSS 隐藏）。
@@ -240,18 +258,31 @@ export function FolderMap(props: FolderMapProps): React.ReactElement {
    * hover 改的是标签，因此这里**不**把 selectedKey/hoveredKey 放进依赖 —— 悬停不重跑模拟。
    * （选中/悬浮强制可见的选点用「全部档的 limit」，由下面 enforceFocus 单独处理。）
    */
-  const geometry: FolderGeometry = React.useMemo(
+  /**
+   * **几何**（力导向）：只依赖数据/画布/上限/边集。
+   *
+   * 关键（性能根因，D-35）：**`dragOffsets` 不再进依赖**。
+   * 旧实现把拖动偏移喂进布局 → 每一次 pointermove 都重跑整场力导向 + 重叠消除（O(N²)×轮数），
+   * 复杂目录拖动直接卡死。拖动在语义上只是平移目标节点，因此改为"几何算一次，
+   * 拖动用 applyDragOffsets 叠加"（纯坐标平移，O(N)）。
+   */
+  const baseGeometry: FolderGeometry = React.useMemo(
     () =>
       layoutFolderGeometry(props.entries, props.files, {
         width,
-        height,
+        height: height,
         currentPath: props.currentPath,
-        offsets: dragOffsets,
         showAll: showAllExpanded,
         edges: props.edges,
         allEdges: props.allEdges,
       }),
-    [props.entries, props.files, props.currentPath, width, height, dragOffsets, showAllExpanded, props.edges, props.allEdges],
+    [props.entries, props.files, props.currentPath, width, height, showAllExpanded, props.edges, props.allEdges],
+  )
+
+  /** 叠加拖动偏移（纯函数、不重跑模拟）。 */
+  const geometry: FolderGeometry = React.useMemo(
+    () => applyDragOffsets(baseGeometry, dragOffsets),
+    [baseGeometry, dragOffsets],
   )
 
   /**
@@ -401,6 +432,13 @@ export function FolderMap(props: FolderMapProps): React.ReactElement {
     svg?.focus()
   }
   const selectFile = (path: string | null): void => {
+    /* 单击 = 选中，且**幂等**：点已选中的节点不会取消。
+     * 取消统一走点空白 / Esc / 关证据面板 —— 否则双击的第一次单击选中、第二次单击取消，
+     * 会先「放大又缩回」再进入，用户看到的就是闪烁。 */
+    if (path !== null && props.selectedPath !== null && props.selectedPath !== undefined && caseKey(props.selectedPath) === caseKey(path)) {
+      setInspectPath(path)
+      return
+    }
     setInspectPath(path)
     setPinnedPairKey(null)
     setHoverPairKey(null)
@@ -612,10 +650,11 @@ export function FolderMap(props: FolderMapProps): React.ReactElement {
     const hubKey = caseKey(hub.path)
     const isHoveredHub = hoveredKey === hubKey
     /**
-     * 悬停某枢纽时，**无关枢纽 dim 0.4**（03 §4.2.2：「悬停某枢纽 → 它所有枢纽间连线提亮、
-     * 其余枢纽 dim 0.4」）。判定口径 = 与该枢纽有真实枢纽间连线的伙伴。
-     * `data-dimmed` 与文件节点的 `data-dimmed` 同名字义（值是 'true'/'false'），
-     * 但挂在**枢纽组**上，QA 用 `[data-folder-hub][data-dimmed="true"]` 选择，不会与文件混淆。
+     * 悬停互通：**只有**当前枢纽与它的真实伙伴被强调，其余枢纽保持原样（不压暗）。
+     *
+     * 用户明确否掉了「hover 时其他节点变暗」：那会让整张图随着鼠标忽明忽暗。
+     * 现在的交互感来自「被悬浮的那一个更亮 + 与它相关的连线提亮」，无关元素不动。
+     * `data-dimmed` 属性保留但恒为 'false'（下游断言/样式不再依赖 dim）。
      */
     const isHubPairPartner =
       hoveredKey === null ||
@@ -625,7 +664,9 @@ export function FolderMap(props: FolderMapProps): React.ReactElement {
         const bKey = caseKey(pair.bPath)
         return (aKey === hoveredKey && bKey === hubKey) || (bKey === hoveredKey && aKey === hubKey)
       })
-    const isDimmed = hoveredKey !== null && !isHubPairPartner
+    const selectedFolderKey =
+      props.selectedFolderPath === null || props.selectedFolderPath === undefined ? null : caseKey(props.selectedFolderPath)
+    const isHubSelected = selectedFolderKey === hubKey
     // 拖动反馈与文件节点同一口径（`data-dragging`，真理来源 = dragOffsets 里有没有非零偏移）。
     const hubOffset = dragOffsets[hubKey]
     const isHubDragged = hubOffset !== undefined && (hubOffset.dx !== 0 || hubOffset.dy !== 0)
@@ -642,7 +683,8 @@ export function FolderMap(props: FolderMapProps): React.ReactElement {
         'data-hub-links': hub.linkCount,
         'data-hub-pairs': drawnHubPairs.filter((pair) => caseKey(pair.aPath) === hubKey || caseKey(pair.bPath) === hubKey).length,
         'data-hovered': isHoveredHub ? 'true' : 'false',
-        'data-dimmed': isDimmed ? 'true' : 'false',
+        'data-selected': isHubSelected ? 'true' : 'false',
+        'aria-pressed': isHubSelected ? 'true' : 'false',
         'data-dragging': isHubDragged ? 'true' : 'false',
         role: 'button',
         tabIndex: 0,
@@ -658,17 +700,27 @@ export function FolderMap(props: FolderMapProps): React.ReactElement {
           setHoverPath((value) => (value !== null && caseKey(value) === hubKey ? null : value))
           props.onHoverFile?.(null)
         },
-        // 点击枢纽**仍然是「进入该目录」**（用户已拍板，加了连线也不改点击语义）。
-        // 执行权统一交给 click（见 handleTap 注释）：真实鼠标、程序化 `.click()`、
-        // 辅助技术三条路径共用同一个入口，且拖动后的那一次 click 会被吃掉。
+        // 单击枢纽 = **选中它**（不是进入）；进入交给双击 / Shift+Enter。
+        // 理由：单击即进入会让「单击选中、双击进入」在文件夹上无法成立 ——
+        // 第一次单击就跳走了，用户看到的是"放大后又缩回/直接跳目录"。
         onClick: (event: React.MouseEvent) => {
           event.stopPropagation()
-          handleTap(hubKey, () => props.onEnterFolder?.(hub.path))
+          handleTap(hubKey, () => {
+            props.onSelectFolder?.(hub.path)
+            props.onSelectFile?.(null)
+          })
+        },
+        onDoubleClick: (event: React.MouseEvent) => {
+          event.stopPropagation()
+          props.onEnterFolder?.(hub.path)
         },
         onKeyDown: (event: React.KeyboardEvent) => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault()
-            props.onEnterFolder?.(hub.path)
+          if (event.key !== 'Enter' && event.key !== ' ') return
+          event.preventDefault()
+          if (event.shiftKey) props.onEnterFolder?.(hub.path)
+          else {
+            props.onSelectFolder?.(hub.path)
+            props.onSelectFile?.(null)
           }
         },
       },
@@ -695,9 +747,10 @@ export function FolderMap(props: FolderMapProps): React.ReactElement {
     const isFuture = hiddenKeys !== null && hiddenKeys.has(key)
     const offset = dragOffsets[key]
     const isDragged = offset !== undefined && (offset.dx !== 0 || offset.dy !== 0)
+    /* 大小未知 → 空心虚线（与 rail 的「未知」文案同义），不伪装成 0 B 小点。 */
+    const sizeUnknown = node.kind === 'file' && typeof node.size !== 'number'
     const fill = node.touched ? FAMILY_COLOR[node.family as FileFamily] : 'var(--tl-fg-caption)'
     const file = fileByKey.get(key)
-    const dimmed = focusKey !== null && !neighborKeys.has(key)
     const ariaLabel = node.touched
       ? node.name + ' · ' + t('inspector.ops') + ' ' + String(node.ops)
       : node.name + ' · ' + t('graph.untouched')
@@ -715,7 +768,8 @@ export function FolderMap(props: FolderMapProps): React.ReactElement {
         'data-hovered': isHovered ? 'true' : 'false',
         'data-dragging': isDragged ? 'true' : 'false',
         'data-future': isFuture ? 'true' : 'false',
-        'data-dimmed': dimmed ? 'true' : 'false',
+        'data-size-unknown': sizeUnknown ? 'true' : 'false',
+        'data-size': typeof node.size === 'number' ? node.size : undefined,
         'aria-hidden': isFuture ? 'true' : undefined,
         style: isFuture ? { pointerEvents: 'none' } : undefined,
         role: 'button',
@@ -758,9 +812,11 @@ export function FolderMap(props: FolderMapProps): React.ReactElement {
         r: node.r,
         fill,
         // 中性节点：低透明 + 无族色强调（不是"0 次操作"，只是没有会话数据）。
-        fillOpacity: isSelected ? 1 : node.touched ? 0.82 : 0.34,
-        stroke: isSelected || isHovered ? fill : 'var(--tl-bg)',
+        // 大小未知：空心（填充透明）+ 虚线描边，与「未知」语义一致。
+        fillOpacity: sizeUnknown ? 0 : isSelected ? 1 : node.touched ? 0.82 : 0.34,
+        stroke: isSelected || isHovered ? fill : sizeUnknown ? 'var(--tl-fg-tertiary)' : 'var(--tl-bg)',
         strokeWidth: isSelected ? 1.5 : 1.1,
+        ...(sizeUnknown ? { strokeDasharray: '2 2' } : {}),
       }),
     )
   }
@@ -805,8 +861,12 @@ export function FolderMap(props: FolderMapProps): React.ReactElement {
      * 分层归属不变（仍是 L1，`data-edge-layer="L1"`），语义与证据浮层完全不受影响。
      */
     const structuralOnly = pair.typeList.every((type) => type === 'structure')
+    /**
+     * 焦点**只提亮**、不压暗：基线透明度保持不变，被 hover/选中的那条边升到 1。
+     * 旧实现把无关边压到 0.06–0.12，用户读起来是「整张图忽明忽暗」，已否掉。
+     */
     const baseOpacity = structuralOnly ? 0.24 : item.layer === 'L1' ? 0.72 : item.layer === 'L2' ? 0.42 : 0.3
-    const opacity = focusKey === null ? baseOpacity : touchesFocus ? 0.95 : structuralOnly ? 0.06 : 0.12
+    const opacity = touchesFocus ? 1 : baseOpacity
     return h('line', {
       key: 'e:' + pair.key,
       className: 'tl-graph-edge',
@@ -843,9 +903,9 @@ export function FolderMap(props: FolderMapProps): React.ReactElement {
     const hubKey = caseKey(edge.hubPath)
     const fileKey = caseKey(edge.filePath)
     const touchesFocus = focusKey !== null && (focusKey === hubKey || focusKey === fileKey)
-    // 视觉定位是「背景上下文」：默认很淡（0.22），焦点相关才升到 0.8。
-    // 它不能盖过当前目录内文件之间的真实关系（那些是主角，线更实、有类型色）。
-    const opacity = focusKey === null ? 0.22 : touchesFocus ? 0.8 : 0.06
+    // 视觉定位是「背景上下文」：默认很淡（0.22），焦点相关才升到 1。
+    // 只提亮、不压暗其余边（用户否掉了 hover 让整图忽明忽暗的观感）。
+    const opacity = touchesFocus ? 1 : 0.22
     const strokeWidth = Math.round(Math.min(2.2, 0.7 + Math.log2(1 + Math.max(0, edge.weight)) * 0.35) * 100) / 100
     return h('line', {
       key: 'he:' + edge.hubPath + '>' + edge.filePath,
@@ -882,13 +942,9 @@ export function FolderMap(props: FolderMapProps): React.ReactElement {
     const aKey = caseKey(pair.aPath)
     const bKey = caseKey(pair.bPath)
     const touchesHubFocus = hoveredKey !== null && (hoveredKey === aKey || hoveredKey === bKey)
-    const dimmed = hoveredKey !== null && !touchesHubFocus
-    // 焦点在文件上（且那文件不是这两个枢纽之一）时也压暗，避免背景结构抢戏。
-    const fileFocused = focusKey !== null && !touchesHubFocus && focusKey === hoveredKey
+    /* 只提亮相关线，其余保持基线透明度（不再压到 0.1）。 */
     let opacity = GRAPH_HUB_PAIR_OPACITY
     if (touchesHubFocus) opacity = 1
-    else if (dimmed) opacity = 0.1
-    else if (fileFocused) opacity = 0.14
     return h('line', {
       key: 'hp:' + pair.key,
       className: 'tl-graph-edge tl-hub-pair',
@@ -900,7 +956,6 @@ export function FolderMap(props: FolderMapProps): React.ReactElement {
       'data-hub-pair-count': String(pair.count),
       // 与文件边 `data-edge-layer` 区分：枢纽间层不参与 L1/L2/L3 分层。
       'data-hub-pair-layer': 'hub',
-      'data-hub-pair-dimmed': dimmed ? 'true' : 'false',
       'data-hub-pair-focused': touchesHubFocus ? 'true' : 'false',
       x1: pair.x1,
       y1: pair.y1,
@@ -911,72 +966,53 @@ export function FolderMap(props: FolderMapProps): React.ReactElement {
     })
   }
 
-  const evidencePanel = (): React.ReactElement | null => {
-    const title = t('graph.evidenceTitle')
-    const onKeyDown = (event: React.KeyboardEvent): void => {
-      if (event.key !== 'Escape') return
-      event.preventDefault()
-      event.stopPropagation()
-      closeEvidence()
-    }
-    const closeButton = h('button', { type: 'button', className: 'tl-graph-evidence-close', onClick: closeEvidence, 'aria-label': t('ui.close') }, '×')
+  /**
+   * 证据上报（受控）：把"选中了谁 / 有哪些边"折成纯数据交给父级。
+   *
+   * 这里**只上报模型**，不再渲染浮层 —— 证据由父级放进时间线区域并完全覆盖它
+   * （D-35）。这样 folder 图与 turn 图共用同一个渲染器，Esc/关闭/焦点行为只有一份。
+   */
+  const evidenceModel: EvidenceModel | null = (() => {
     if (selectedNode !== null) {
       const file = fileByKey.get(caseKey(selectedNode.path))
-      return h(
-        'div',
-        { className: 'tl-graph-evidence', [GRAPH_DATA.evidence]: 'file', role: 'region', 'aria-label': title, onKeyDown },
-        h('div', { className: 'tl-graph-evidence-head' }, h('b', { className: 'tl-graph-evidence-title' }, title), closeButton),
-        h('div', { className: 'tl-graph-evidence-path' }, selectedNode.path),
-        h(
-          'div',
-          { className: 'tl-graph-evidence-meta' },
-          h('span', { 'data-evidence-family': selectedNode.family }, t(FAMILY_MESSAGE_KEY[selectedNode.family])),
-          // 未触碰 = 「会话中没有操作记录」，不显示「操作 0」。
-          h(
-            'span',
-            { 'data-evidence-touched': selectedNode.touched ? 'true' : 'false' },
-            selectedNode.touched ? t('inspector.ops') + ' ' + String(selectedNode.ops) : t('graph.noRecord'),
-          ),
-          file === undefined ? null : h('span', null, t('inspector.lastTouched') + ' ' + formatTime(file.lastAt)),
-          h('span', null, t('graph.fileRelations', { n: selectedEdges.length })),
-        ),
-        selectedGroups.length === 0
-          ? h('p', { className: 'tl-graph-evidence-empty' }, t('graph.noRecord'))
-          : selectedGroups.map((group) =>
-              h(
-                'div',
-                { key: group.type, className: 'tl-graph-evidence-group', 'data-evidence-type': group.type },
-                h('span', { className: 'tl-graph-evidence-type' }, t(group.labelKey)),
-                ...group.texts.map((text, index) => h('p', { key: index, className: 'tl-graph-evidence-text' }, text)),
-              ),
-            ),
-      )
+      const meta = [
+        t(FAMILY_MESSAGE_KEY[selectedNode.family]),
+        selectedNode.touched ? t('inspector.ops') + ' ' + String(selectedNode.ops) : t('graph.noRecord'),
+        ...(file === undefined ? [] : [t('inspector.lastTouched') + ' ' + formatTime(file.lastAt)]),
+        t('graph.fileRelations', { n: selectedEdges.length }),
+      ]
+      const groups: EvidenceModel['groups'] = selectedGroups.map((group) => ({
+        type: group.type,
+        labelKey: group.labelKey,
+        texts: group.texts,
+      }))
+      return {
+        kind: 'file',
+        subject: selectedNode.path,
+        meta,
+        groups,
+        emptyText: t('graph.noRecord'),
+      }
     }
     const pair = activePair
     if (pair === null) return null
-    return h(
-      'div',
-      { className: 'tl-graph-evidence', [GRAPH_DATA.evidence]: 'edge', role: 'region', 'aria-label': title, onKeyDown },
-      h('div', { className: 'tl-graph-evidence-head' }, h('b', { className: 'tl-graph-evidence-title' }, title), closeButton),
-      h('div', { className: 'tl-graph-evidence-path' }, pair.from + ' ↔ ' + pair.to),
-      h(
-        'div',
-        { className: 'tl-graph-evidence-meta' },
-        h('span', null, t('graph.fileRelations', { n: pair.count })),
-        ...pair.typeList.map((type) => h('span', { key: type, 'data-evidence-type': type }, t(RELATION_MESSAGE_KEY[type]))),
-      ),
-      activePairGroups.length === 0
-        ? h('p', { className: 'tl-graph-evidence-empty' }, t('state.unknown'))
-        : activePairGroups.map((group) =>
-            h(
-              'div',
-              { key: group.type, className: 'tl-graph-evidence-group', 'data-evidence-type': group.type },
-              h('span', { className: 'tl-graph-evidence-type' }, t(group.labelKey)),
-              ...group.texts.map((text, index) => h('p', { key: index, className: 'tl-graph-evidence-text' }, text)),
-            ),
-          ),
-    )
-  }
+    return {
+      kind: 'edge',
+      subject: pair.from + ' \u2194 ' + pair.to,
+      meta: [
+        t('graph.fileRelations', { n: pair.count }),
+        ...pair.typeList.map((type) => t(RELATION_MESSAGE_KEY[type])),
+      ],
+      groups: activePairGroups.map((group) => ({ type: group.type, labelKey: group.labelKey, texts: group.texts })),
+      emptyText: t('state.unknown'),
+    }
+  })()
+
+  React.useEffect(() => {
+    props.onEvidence?.(evidenceModel)
+  }, [evidenceModel, props.onEvidence])
+  /* 卸载时清空父级的证据，避免离开本目录后时间线里残留上一份证据。 */
+  React.useEffect(() => () => props.onEvidence?.(null), [props.onEvidence])
 
   const densityGroup = (): React.ReactElement =>
     h(
@@ -1155,6 +1191,6 @@ export function FolderMap(props: FolderMapProps): React.ReactElement {
       'data-empty': 'true',
       'aria-hidden': 'true',
     }),
-    h('div', { className: 'tl-graph-stage', ref: stageRef, 'data-graph-stage': 'true' }, stageContent(), evidencePanel()),
+    h('div', { className: 'tl-graph-stage', ref: stageRef, 'data-graph-stage': 'true' }, stageContent()),
   )
 }
