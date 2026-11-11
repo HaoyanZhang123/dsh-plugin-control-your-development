@@ -258,6 +258,8 @@ export const SPEC_KEYS: readonly string[] = [
   "reasoning.langUnknown",
   "reasoning.loading",
   "reasoning.none",
+  "reasoning.partial",
+  "reasoning.collapsed",
 ]
 
 /** §16 未列、但实现必需的接口文案（已在 zh.ts/en.ts 头部注明）。 */
@@ -287,7 +289,9 @@ test('03 §16 的 161 个 key 在 zh/en 里都存在', () => {
   }
   // 162 → 161：2026-11-08 删掉 `timeline.now`（「回到最新」按钮已删，文案无归属）。
   // 161 → 166：2026-11-11 D-35 新增右栏表头 3 条 + 会话范围分组 2 条。
-  assert.equal(SPEC_KEYS.length, 223)
+  // 223 → 224：2026-11-11 1.5.1 新增 `reasoning.partial`（读失败不能冒充「没有记录」）。
+  // 224 → 225：2026-11-11 1.5.3 新增 `reasoning.collapsed`（矩形树图合并必须可见）。
+  assert.equal(SPEC_KEYS.length, 225)
   assert.equal(new Set(SPEC_KEYS).size, SPEC_KEYS.length, 'key 清单本身有重复')
 })
 

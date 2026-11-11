@@ -174,6 +174,30 @@ test('断点齐全：1100 / 900 / 600 / 420 都有对应容器查询', () => {
   assert.equal(BREAKPOINTS.minimum, 420)
 })
 
+/**
+ * 双栏降级断点必须与 BREAKPOINTS.split 一致。
+ *
+ * 守的是 1.5.1 的真机缺陷：断点曾经是 1080，而宿主左侧栏展开时 tab 区域只有 ~820px，
+ * 于是双栏掉成单列 —— 用户的体感是「卡片只有收起侧栏才在右边」。
+ * 光断言"有这个断点"不够，必须断言**数值**：改小才是修复，改回 1080 就是回归。
+ */
+test('双栏降级断点 = BREAKPOINTS.split（不是 1080）', () => {
+  const conditions = [...BASE.matchAll(/@container\s+threadline\s+\(([^)]+)\)/g)].map((match) =>
+    match[1].replace(/\s+/g, ''),
+  )
+  const expected = 'max-width:' + String(BREAKPOINTS.split - 0.02) + 'px'
+  assert.ok(
+    conditions.includes(expected),
+    '双栏断点必须取 BREAKPOINTS.split - 0.02（' + expected + '），实际有：' + conditions.join(' | '),
+  )
+  /* 反向：旧的 1080 断点不得再出现（否则两套口径并存，单一执行路径被破坏）。 */
+  assert.equal(
+    conditions.includes('max-width:1079.98px'),
+    false,
+    '1080 的双栏降级断点必须删除（单一执行路径）',
+  )
+})
+
 test('区域高度来自规范（SHELL_METRICS 与 tokens.css 逐项一致）', () => {
   const expectations: Array<[string, number]> = [
     ['--tl-header-h', SHELL_METRICS.header],

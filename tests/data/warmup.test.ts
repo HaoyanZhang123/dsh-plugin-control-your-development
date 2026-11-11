@@ -335,14 +335,16 @@ test('T37 prefetchSessionDetail 幂等：同一 updatedAt 连调 3 次只发 1 �
   assert.equal(diag.detailDeduped >= 3, true, '第 2/3/4 次都在预取层被去重')
 })
 
-test('T37 prefetchSessionDetail：会话推进（updatedAt 变）才重拉，body 带 cwd', async () => {
+test('T37 prefetchSessionDetail：会话推进（updatedAt 变）才重拉，body 带 cwd 与 updatedAt', async () => {
   const h = harness()
   await prefetchSessionDetail(h.store, { sessionId: 's-run', updatedAt: NOW, cwd: CWD })
   const first = h.fake.callsOf('detail')[0]
   assert.equal(first.body.sessionId, 's-run')
   assert.equal(first.body.cwd, CWD)
-  // updatedAt 是**客户端判新旧用**的，不上行（host 协议没有这个字段）
-  assert.equal('updatedAt' in first.body, false)
+  /* 1.5.3 起 updatedAt **会**上行：host 用它判断"日志有没有变"，未变直接返回缓存、
+   * 不再全量读日志（实测单会话 10.9MB 要 249ms，89% 是重复解压/解析的浪费）。
+   * 旧断言「host 协议没有这个字段」已随协议扩展失效，改为正向断言。 */
+  assert.equal(first.body.updatedAt, NOW, 'updatedAt 必须上行，否则 host 无法命中缓存')
 
   await prefetchSessionDetail(h.store, { sessionId: 's-run', updatedAt: NOW + 1_000, cwd: CWD })
   const calls = h.fake.callsOf('detail')

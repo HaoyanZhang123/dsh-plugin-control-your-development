@@ -263,6 +263,8 @@ function App(): React.ReactElement {
   const [selection, setSelection] = React.useState<Selection>({ kind: 'none' })
   const [preview, setPreview] = React.useState<Selection | null>(null)
   const [hoverPath, setHoverPath] = React.useState<string | null>(null)
+  /** 选中的文件夹枢纽（与文件选中互斥；1.5.2 起夹具也走这条真实路径）。 */
+  const [selectedFolderPath, setSelectedFolderPath] = React.useState<string | null>(null)
 
   const activeTurn = React.useMemo(() => turnDetails.find((turn) => turn.n === activeTurnN) ?? null, [turnDetails, activeTurnN])
   const turnStatus = React.useMemo(() => (activeTurn === null ? null : turnFileStatusOf(activeTurn, fileIndex)), [activeTurn, fileIndex])
@@ -537,6 +539,11 @@ function App(): React.ReactElement {
       },
       onOpenFile: () => undefined,
       onHoverFile: setHoverPath,
+      /* 1.5.2：夹具以前也没传 onSelectFolder / selectedFolderPath —— 于是
+       * 「单击枢纽 = 选中」这条路径在截图与断言里根本没走到，产品侧漏接线
+       * 也就一直没被发现（真机上单击文件夹毫无反应）。这里补齐，让夹具与产品同构。 */
+      selectedFolderPath: selectedFolderPath,
+      onSelectFolder: (path: string | null) => setSelectedFolderPath(path),
       onEnterFolder: enterFolder,
       onExitTurn: exitTurn,
       visibleAt,
