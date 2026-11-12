@@ -325,8 +325,14 @@ function clampRect(inner: Rect, outer: Rect): Rect {
 
 /** 单元格间距（viewBox 单位；同时是描边与裁剪内缩量）。 */
 const TREEMAP_GAP = 2
-/** 画布内边距（与 CSS 的 padding 保持一致）。 */
-const TREEMAP_PAD = 8
+/*
+ * 注意：这里**没有** `TREEMAP_PAD`。
+ *
+ * 1.5.5 之前有一个写死的 8px 内边距常量，同时在 CSS 里也写了 `padding: 8px` ——
+ * 两处各扣一次，且 `viewBox` 又把它加回去，导致 viewBox 与容器不等比、整图被缩小。
+ * 现在内边距**只有一个事实源**：CSS 的 padding（测量时按 computed style 扣掉，
+ * 布局则直接在内容盒内进行）。不要再加常量。
+ */
 /**
  * 矩形树图里文字的排版参数（真机缺陷 B）。
  *
@@ -448,10 +454,26 @@ export function Treemap(props: TreemapProps): React.ReactElement {
   React.useEffect(() => {
     const node = svgRef.current
     if (node === null) return undefined
+    /*
+     * 量**内容盒**，不是边框盒（1.5.5 真机缺陷：树图整片空白）。
+     *
+     * 根因（实测）：`.tl-treemap` 是 `block-size: 100%` + `padding: 8px`，所以
+     * `getBoundingClientRect()` 返回的宽高**已经含 padding**。旧代码在这上面又减了
+     * `TREEMAP_PAD * 2`，再把 `size + PAD * 2` 当 viewBox 写回去 —— 两个方向都错：
+     * 实测 SVG 框 974×420，而 viewBox 写成 `0 0 736 436`（宽差 238px）。
+     * viewBox 与容器不等比时，`preserveAspectRatio="xMinYMin meet"` 会把整图等比缩小，
+     * 格子被压扁、下半截被裁掉，观感就是"树图是空的"。
+     *
+     * 现在：直接量内容盒（CSS 盒模型里的 content box），viewBox 与它**完全相等**；
+     * 布局再用同一组数字算内缩，保证"所见即所量"。
+     */
     const read = (): void => {
+      const styles = typeof getComputedStyle === 'function' ? getComputedStyle(node) : null
+      const padX = styles === null ? 0 : (Number.parseFloat(styles.paddingLeft) || 0) + (Number.parseFloat(styles.paddingRight) || 0)
+      const padY = styles === null ? 0 : (Number.parseFloat(styles.paddingTop) || 0) + (Number.parseFloat(styles.paddingBottom) || 0)
       const box = node.getBoundingClientRect()
-      const width = Math.max(80, Math.round(box.width - TREEMAP_PAD * 2))
-      const height = Math.max(60, Math.round(box.height - TREEMAP_PAD * 2))
+      const width = Math.max(80, Math.round(box.width - padX))
+      const height = Math.max(60, Math.round(box.height - padY))
       setSize((previous) => (previous.w === width && previous.h === height ? previous : { w: width, h: height }))
     }
     read()
@@ -461,8 +483,12 @@ export function Treemap(props: TreemapProps): React.ReactElement {
     return () => observer.disconnect()
   }, [])
 
+  /*
+   * 布局矩形 = viewBox 坐标系里**扣掉内边距**的那块。
+   * 内边距用 CSS 实际值（与上面测量同一来源），不再用写死的 TREEMAP_PAD 猜。
+   */
   const layout = React.useMemo(
-    () => layoutTreemap(props.groups, { x: TREEMAP_PAD, y: TREEMAP_PAD, w: size.w, h: size.h }),
+    () => layoutTreemap(props.groups, { x: 0, y: 0, w: size.w, h: size.h }),
     [props.groups, size.w, size.h],
   )
   const total = props.groups.reduce((sum, group) => sum + group.chars, 0)
@@ -472,8 +498,13 @@ export function Treemap(props: TreemapProps): React.ReactElement {
     {
       ref: svgRef,
       className: 'tl-treemap',
-      viewBox: '0 0 ' + String(size.w + TREEMAP_PAD * 2) + ' ' + String(size.h + TREEMAP_PAD * 2),
-      /* 宽高与容器一致时 meet 的缩放系数是 1（不再整体缩小）；对齐左上，避免留白抖动。 */
+      /*
+       * viewBox 必须与**内容盒像素**1:1（缩放系数 1）。
+       * 内边距已经由 CSS 的 padding 承担，所以这里不再额外加 PAD —— 再加一次就会
+       * 重新造成"viewBox 比容器大 → 整图被缩小"的缺陷。
+       */
+      viewBox: '0 0 ' + String(size.w) + ' ' + String(size.h),
+      /* 宽高一致时 meet 的缩放系数是 1（不再整体缩小）；对齐左上，避免留白抖动。 */
       preserveAspectRatio: 'xMinYMin meet',
       role: 'group',
       'aria-label': props.t('reasoning.treemap'),

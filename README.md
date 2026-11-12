@@ -105,6 +105,62 @@ Switching to the full set degrades density, labels and radius automatically.
 > The screenshots above are rendered from the real component with a synthetic fixture dataset, so the
 > file names are test data; the interface itself is not a mock-up.
 
+## The Reasoning tab
+
+A second tab, **Reasoning**, answers a different question about the same conversation: **how much thinking
+went into it, and of what kind?** It reads the `reasoning` blocks DSH already records, so it adds no
+execution cost and no writes.
+
+Three views share one selection, one KPI strip and one detail band — switching views never changes the
+page height:
+
+| View | What it shows | Best for |
+| --- | --- | --- |
+| **Treemap** | True squarified layout, area = characters. Up to 12 cells; the rest merge into an "Other" cell you can drill into. Each cell clips its own label, so long phrases never bleed into a neighbour. | Seeing which groups dominate at a glance |
+| **Word cloud** | Text as the graphic, sized by weight. Two-phase layout: canvas `measureText` first, then deterministic spiral placement with collision detection. Words that do not fit are counted, never silently dropped. | Scanning vocabulary |
+| **List** | Sortable table with ratio bars. Group and sentence rows are paged, so a dimension with tens of thousands of groups still renders instantly. | Auditing exact numbers |
+
+![Reasoning tab, treemap view: four groups sized by character count, with the KPI strip and ranking on the right](docs/images/reasoning-treemap.png)
+
+### Filters that actually filter
+
+Six controls, and every one of them changes the derived data:
+
+- **Scope** — current session (default), unarchived sessions, or the whole workspace.
+- **Turn** — a single turn, or all turns. The turn list is enumerated from the data, not hard-coded.
+- **Model** and **Preset** — enumerated from the samples that actually exist.
+- **Language** — applied at sentence level, because language is a per-sentence property; filtering it at
+  sample level would invent a second definition.
+- **Records** — committed replies only, or include interrupted attempts.
+
+An **active-filter row** appears only when something is filtered, names each condition, and offers a
+one-click reset. An empty result says *which* conditions produced it rather than claiming there is no data.
+
+### Honest numbers
+
+The three ratios have three different denominators, and the UI labels each one:
+
+| Figure | Definition |
+| --- | --- |
+| **Share of output** | `reasoningTokens / outputTokens` — how much of the reply's output was thinking |
+| **Share of context** | `reasoningTokens / totalTokens` — how much of the whole context (including input and cache) was thinking |
+| **Character share** | reasoning characters / (reasoning + answer text). Shows `—` when a scope has no answer text at all, instead of reporting an inflated percentage |
+
+Provider usage is reported **per reply**, not per sentence. So group-level token counts are distributed by
+character share within that reply — the columns sum back to the true total, and the UI marks the value as an
+estimate rather than pretending to sentence-level precision.
+
+![Reasoning tab, word cloud view: five phrases sized by weight, no overlap or overflow](docs/images/reasoning-cloud.png)
+
+![Reasoning tab, list view: sortable table with character, token and ratio columns](docs/images/reasoning-list.png)
+
+### Cost and coverage
+
+The first open reads the current session plus the four most recently updated sessions. That is deliberate —
+reading every log in a large workspace costs seconds. When the scope is wider than what is loaded, the page
+shows **"loaded N/M sessions"** with a failure count and explicit *load more* / *load all* actions, so a
+partial sample is never presented as a full-workspace statistic.
+
 ## Configuration
 
 No configuration is required. The plugin reads the session's working directory from DSH and needs no
