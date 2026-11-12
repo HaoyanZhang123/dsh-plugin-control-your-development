@@ -57,9 +57,18 @@ export function splitAssistantContent(value: unknown): ContentSplit {
   return { reasoning, answer: answers.join('\n') }
 }
 
-/** usage 里我们只关心这两个数（其它字段不参与思维链统计）。 */
+/** usage 里我们只关心这三个数（其它字段不参与思维链统计）。 */
 export interface UsageFacts {
   reasoningTokens?: number
+  /**
+   * 输出 token（1.5.5 新增）。
+   *
+   * 为什么必须有它：「思维链占输出的比例」= reasoningTokens / outputTokens，
+   * 这是唯一有意义的占比口径。旧实现用 totalTokens 当分母，而 totalTokens 是
+   * **上下文**口径（含输入 + 缓存），实测本会话中位数只有 0.13% —— 被输入稀释了。
+   */
+  outputTokens?: number
+  /** 上下文 token（含输入与缓存），只用于「占上下文」这一列的如实展示。 */
   totalTokens?: number
 }
 
@@ -82,9 +91,10 @@ export function readUsage(data: Record<string, unknown>): UsageFacts {
     const outputTokens = asFiniteNonNegative(record.outputTokens)
     if (reasoningTokens === undefined && totalRaw === undefined && outputTokens === undefined) continue
     /* totalTokens 缺省时**不自行相加**：input+output 的口径可能与 provider 的报告不同，
-     * 自行拼出来的分母会让"占总 token"变成一个我们编的数。宁可让占比未知。 */
+     * 自行拼出来的分母会让占比变成一个我们编的数。宁可让占比未知。 */
     const facts: UsageFacts = {}
     if (reasoningTokens !== undefined) facts.reasoningTokens = reasoningTokens
+    if (outputTokens !== undefined) facts.outputTokens = outputTokens
     if (totalRaw !== undefined) facts.totalTokens = totalRaw
     return facts
   }
@@ -124,6 +134,7 @@ export function samplesFromAssistantMessage(input: {
     at: input.at,
     kind: interrupted ? 'attempt' : 'committed',
     ...(usage.reasoningTokens === undefined ? {} : { tokens: usage.reasoningTokens }),
+    ...(usage.outputTokens === undefined ? {} : { outputTokens: usage.outputTokens }),
     ...(usage.totalTokens === undefined ? {} : { totalTokens: usage.totalTokens }),
     ...(model === undefined || model === '' ? {} : { model }),
     ...(input.preset === undefined || input.preset === '' ? {} : { preset: input.preset }),

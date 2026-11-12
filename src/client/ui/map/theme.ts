@@ -7,6 +7,7 @@
  * - 状态色（读/写+/写−）也走令牌；「首见」用强调色；
  * - 星图旧概念（簇/缩放/网格）已删除：这里只剩文件级图需要的数据属性与常量。
  */
+import type * as React from 'react'
 import type { FileFamily } from '../../../shared/events/index.ts'
 import type { RelationType } from '../../../shared/relations/index.ts'
 
@@ -186,6 +187,27 @@ export const GRAPH_DATA = {
   /** 内容包围盒占画布比例（力导向铺满证据）。 */
   fillRatio: 'data-graph-fill',
 } as const
+
+/**
+ * 入场错峰的**封顶序号**：只给前 N 个排延迟（再多就看不出差别，反而显得慢）。
+ * CSS 侧用 `calc(var(--tl-enter-i) * var(--tl-enter-step))` 把它换成毫秒。
+ */
+export const GRAPH_ENTER_MAX_INDEX = 30
+
+/**
+ * 入场错峰序号的**唯一生成规则**（folder 与 turn 共用，不许各写一套）。
+ *
+ * 为什么抽出来：P2 修复前 `FolderMap` 写 `Math.min(30, node.index)`，
+ * 而 `FileGraph`（turn 视图）**完全没有写** `--tl-enter-i` →
+ * 边 60ms 就开始淡入、节点却没有任何延迟，观感就是"先出现线，然后节点才加载进去"。
+ *
+ * 返回可直接展开进 `style` 的对象；`index` 缺失/非有限时按 0 处理。
+ */
+export function enterStyleOf(index: number, extra?: React.CSSProperties): React.CSSProperties {
+  const safe = Number.isFinite(index) && index > 0 ? Math.trunc(index) : 0
+  return { ...extra, '--tl-enter-i': String(Math.min(GRAPH_ENTER_MAX_INDEX, safe)) } as React.CSSProperties
+}
+
 
 /** 图容器类名（宿主/门禁按类名定位）。 */
 export const GRAPH_CLASS = 'tl-graph' as const

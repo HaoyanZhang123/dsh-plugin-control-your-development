@@ -2,6 +2,7 @@
  * ui/shell/index.ts —— 外壳的唯一出口。
  */
 export { ErrorBoundary, ERROR_STACK_LINES, stackHead, type ErrorBoundaryProps } from './ErrorBoundary.ts'
+export { ConversationSurface, type ConversationSurfaceProps } from './ConversationSurface.ts'
 export { Header, type HeaderProps } from './Header.ts'
 export { InspectorPanel, type InspectorPanelProps } from './InspectorPanel.ts'
 export { NowStrip, type NowStripProps } from './NowStrip.ts'

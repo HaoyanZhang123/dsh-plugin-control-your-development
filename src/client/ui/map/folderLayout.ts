@@ -74,8 +74,22 @@ export interface FolderLayoutHub {
   y: number
   width: number
   height: number
-  /** 名字是否放得下（放不下时卡片仍可点，完整名在 aria/title）��?*/
+  /**
+   * 是否显示名字。
+   *
+   * 语义（P2 修复）：**只在卡片本身太窄、连一个"x…"都放不下时为 false**。
+   * 名字比卡片宽不再等于"不画"——那种情况交给下面的 `labelText` 做省略。
+   * 旧实现用「整词放得下才画」，结果 5 个卡片里 4 个名字一个字都不显示。
+   */
   labelVisible: boolean
+  /**
+   * **截断后**的标签文本（放不下时带省略号，如 `project…`）。
+   *
+   * 渲染层画这个字段；`name` / `title` / `aria-label` 仍然用完整 `name`，
+   * 所以省略不会丢信息（悬停/读屏仍能拿到全名）。
+   * `labelVisible === false` 时它等于空字符串。
+   */
+  labelText: string
   /** 是否有真实的跨目录关系（false = 外围环��?*不画�?*）��?*/
   hasLinks: boolean
   /** 聚合到它的连线数�? = 无跨目录关系，tooltip �?`graph.hubEmpty`）��?*/
@@ -558,12 +572,61 @@ export function pinnedPositions(
 }
 
 /** 枢纽卡片宽度（标签放得下才显示名字，绝不画截断碎片）�?*/
-function hubCardWidth(name: string): { width: number; labelVisible: boolean } {
+/** 卡片名称区可用宽度的**下限**：再窄就连一个带省略号的单字都放不下，此时不画名字。
+    （真正的判据是 truncateToWidth 的结果，这里只是把那个阈值写成可读的常量说明。） */
+export const FOLDER_HUB_LABEL_MIN_WIDTH = 72
+
+/**
+ * 按可用宽度**省略**文本（project…），保证结果宽度 <= maxWidth。
+ *
+ * 口径：用与 hubCardWidth 同一个 textWidth()（estimateTextWidth x 1.06），
+ * 不另造一套测量。省略号本身也计入宽度 —— 否则"截完仍然溢出"就是假修复。
+ *
+ * 容差（TRUNCATE_EPSILON）：卡片宽度是 Math.round(需求) 得来的，最多比需求少 0.5px；
+ * textWidth 本身已乘 1.06 的保守系数（6% 余量，远大于 0.5px）。若不放这点容差，
+ * docs / assets / config 这类**本来整词显示**的短名会因为 0.1~0.2px 的取整差被截成 do…，
+ * 那是把"省略"用错了地方。所以容差只吸收取整误差，不放宽到能藏下半个字。
+ *
+ * 边界：
+ * - 整词放得下（含取整容差）-> 原样返回，不带省略号；
+ * - 连「一个字 + 省略号」都放不下 -> 返回空串（由 labelVisible 表达"不画"）；
+ * - 逐字符回退，中文/窄字符都走同一条路，不做特殊分支。
+ */
+function truncateToWidth(text: string, maxWidth: number): string {
+  const ELLIPSIS = '\u2026'
+  const TRUNCATE_EPSILON = 0.5
+  if (maxWidth <= 0) return ''
+  if (textWidth(text) <= maxWidth + TRUNCATE_EPSILON) return text
+  const ellipsisWidth = textWidth(ELLIPSIS)
+  if (ellipsisWidth > maxWidth) return ''
+  const chars = [...text]
+  /* 从全长往前退；一旦「前缀 + 省略号」放得下就收手。 */
+  for (let keep = chars.length - 1; keep >= 1; keep -= 1) {
+    const candidate = chars.slice(0, keep).join('') + ELLIPSIS
+    if (textWidth(candidate) <= maxWidth) return candidate
+  }
+  return ''
+}
+
+/**
+ * 枢纽卡片宽度 + 标签（P2 修复：名字放不下时**省略**，不再整个不画）。
+ *
+ * 卡片宽度保持既有钳制（FOLDER_HUB_MIN_WIDTH..FOLDER_HUB_MAX_WIDTH），**布局不变**；
+ * 变化只在标签：旧实现要求「整词放得下」才画，于是 5 个卡片里 4 个名字一个字都不显示。
+ *
+ * nameMaxWidth = 卡片宽度 - 左内边距 - 图标占位(14) - 右内边距，
+ * 与 renderHub 里图标的横向占位同源（图标画在 left+8..left+19，文本从 left+22 起）。
+ */
+function hubCardWidth(name: string): { width: number; labelVisible: boolean; labelText: string } {
   // 卡片宽度 = 左内边距 + 图标�?+ 间隙 + 文本 + 右内边距（图标画�?x-�?处��文本从 x-�?起）�?
 const wanted = Math.round(FOLDER_HUB_PAD + 14 + textWidth(name) + FOLDER_HUB_PAD)
+  const width = Math.min(FOLDER_HUB_MAX_WIDTH, Math.max(FOLDER_HUB_MIN_WIDTH, wanted))
+  const nameMaxWidth = width - FOLDER_HUB_PAD - 14 - FOLDER_HUB_PAD
+  const labelText = truncateToWidth(name, nameMaxWidth)
   return {
-    width: Math.min(FOLDER_HUB_MAX_WIDTH, Math.max(FOLDER_HUB_MIN_WIDTH, wanted)),
-    labelVisible: wanted <= FOLDER_HUB_MAX_WIDTH,
+    width,
+    labelVisible: labelText !== '',
+    labelText,
   }
 }
 
@@ -651,7 +714,7 @@ kept.sort(compareCandidates)
   const hubInfos = hubEntries.map((entry) => {
     const name = entry.name === '' ? basenameOf(entry.path) : entry.name
     const card = hubCardWidth(name)
-    return { entry, name, width: card.width, height: FOLDER_HUB_HEIGHT, labelVisible: card.labelVisible }
+    return { entry, name, width: card.width, height: FOLDER_HUB_HEIGHT, labelVisible: card.labelVisible, labelText: card.labelText }
   })
 
   /* ---------- 3. 跨目录聚合（枢纽参与结构） ---------- */
@@ -937,6 +1000,7 @@ const structuralOnly = pair.typeList.every((type) => type === 'structure')
       width: info.width,
       height: info.height,
       labelVisible: info.labelVisible,
+      labelText: info.labelText,
       hasLinks: hubLinks.length > 0,
       linkCount: hubLinks.length,
     }

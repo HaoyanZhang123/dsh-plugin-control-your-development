@@ -260,6 +260,30 @@ export const SPEC_KEYS: readonly string[] = [
   "reasoning.none",
   "reasoning.partial",
   "reasoning.collapsed",
+  // —— §16 扩展段（2026-11-12，1.5.5 思维链：覆盖率 / 加载 / Preset / 筛选行 / 词云计数）——
+  "reasoning.coverageLoaded",
+  "reasoning.coverageFailed",
+  "reasoning.loadMore",
+  "reasoning.loadAll",
+  "reasoning.loadingMore",
+  "reasoning.moreFilters",
+  "reasoning.preset",
+  "reasoning.activeFilters",
+  "reasoning.resetFilters",
+  "reasoning.filteredEmpty",
+  "reasoning.otherDrill",
+  "reasoning.otherList",
+  "reasoning.cloudSkipped",
+  "reasoning.showing",
+  "reasoning.noOptions",
+  "reasoning.sortedAsc",
+  "reasoning.sortedDesc",
+  // —— §16 扩展段（2026-11-12，1.5.5 真机复盘：轮次 / 占输出 / 占上下文 / 估算 / 无正文）——
+  "reasoning.contextRatio",
+  "reasoning.turn",
+  "reasoning.turnUnknown",
+  "reasoning.estimated",
+  "reasoning.needText",
 ]
 
 /** §16 未列、但实现必需的接口文案（已在 zh.ts/en.ts 头部注明）。 */
@@ -291,7 +315,10 @@ test('03 §16 的 161 个 key 在 zh/en 里都存在', () => {
   // 161 → 166：2026-11-11 D-35 新增右栏表头 3 条 + 会话范围分组 2 条。
   // 223 → 224：2026-11-11 1.5.1 新增 `reasoning.partial`（读失败不能冒充「没有记录」）。
   // 224 → 225：2026-11-11 1.5.3 新增 `reasoning.collapsed`（矩形树图合并必须可见）。
-  assert.equal(SPEC_KEYS.length, 225)
+  // 225 → 242：2026-11-12 1.5.5 新增 17 条思维链文案（覆盖率 N/M、继续加载/加载全部、
+  //             Preset 入口、活动筛选行、词云未显示计数、排序方向等；方案 §6.1/§6.3/§6.4）。
+  // 242 → 247：2026-11-12 1.5.5 真机复盘新增 5 条（轮次 / 轮次未知 / 占上下文 / 估算 / 无正文）。
+  assert.equal(SPEC_KEYS.length, 247)
   assert.equal(new Set(SPEC_KEYS).size, SPEC_KEYS.length, 'key 清单本身有重复')
 })
 
@@ -356,7 +383,9 @@ test('缺变量时保留占位符（宁可显示 {n}，也不伪造数字）', (
 })
 
 test('模板占位符只用 03 §16 约定的变量名（填满后不残留 {…}）', () => {
-  const vars = { n: 1, done: 1, total: 1, files: 1, dirs: 1, name: 'x', commands: 1, subagents: 1, duration: '1 分', s: 1, m: 1, h: 1, shown: 1, errors: 1, count: 1, ops: 1, time: '1', visible: 1, add: 1, del: 1, drawn: 1 }
+  const vars = { n: 1, done: 1, total: 1, files: 1, dirs: 1, name: 'x', commands: 1, subagents: 1, duration: '1 分', s: 1, m: 1, h: 1, shown: 1, errors: 1, count: 1, ops: 1, time: '1', visible: 1, add: 1, del: 1, drawn: 1,
+    // 1.5.5 思维链：覆盖率 N/M、失败数、筛选条件串（都在 §16 新表里登记过）
+    loaded: 1, failed: 1, conditions: 'x' }
   for (const key of Object.keys(zh) as MessageKey[]) {
     for (const locale of ['zh', 'en'] as const) {
       const filled = format(MESSAGES[locale][key], vars)

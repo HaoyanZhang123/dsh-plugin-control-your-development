@@ -125,6 +125,15 @@
   --tl-fs-body: var(--dsw-font-xs-13-font-size, 13px);
   --tl-fs-subtitle: var(--dsw-font-s-14-font-size, 14px);
   --tl-fs-title: var(--dsw-font-base-16-font-size, 16px);
+  /*
+   * 图注字号（1.5.5 补）。
+   *
+   * 真机缺陷：map.css 有 5 处引用 --tl-fs-caption，而这里从来没有定义过它 ——
+   * 那几条 font-size 声明失效并继承父级，于是图头/图例/缩放控件的字号随容器漂移
+   * （同一屏里两个"同级"控件字号不一样）。补一个真实存在的令牌，不去改那 5 处引用。
+   * 取 meta-sm 与 meta 之间的一档：比元数据小一号，仍是可读的 11px。
+   */
+  --tl-fs-caption: var(--dsw-font-xxxs-11-font-size, 11px);
   --tl-lh-tight: 1.4;
   --tl-lh-body: 1.5;
   --tl-lh-loose: 1.6;

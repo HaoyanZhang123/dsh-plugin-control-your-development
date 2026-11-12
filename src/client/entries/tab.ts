@@ -37,7 +37,7 @@ import {
   turnFromDetail,
   type GraphEdge,
 } from '../../shared/relations/index.ts'
-import { ErrorBoundary, ThreadlineShell, type RangeKey } from '../ui/shell/index.ts'
+import { ConversationSurface, ErrorBoundary, ThreadlineShell, type RangeKey } from '../ui/shell/index.ts'
 import { Button, Chip, ProgressPill } from '../ui/common/index.ts'
 import { FileGraph } from '../ui/map/index.ts'
 import { FileTreeRail } from '../ui/rail/index.ts'
@@ -66,7 +66,6 @@ import {
 } from '../ui/turns/index.ts'
 import { getDetailStore } from '../state/detailStore.ts'
 import { takeFocus, selectionOfFocus } from '../state/viewFocus.ts'
-import { useComposerSurface } from '../state/composerSurface.ts'
 import { consumeFocusRequest } from '../state/selection.ts'
 import { LIST_ROW_HEIGHT, listNeedsVirtualization, listWindow, markFirstUsable } from '../state/perf.ts'
 import { PrivacyProvider, maskTitle, usePrivacy, type PrivacyMode } from '../privacy/index.ts'
@@ -326,40 +325,8 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
   const [reference, setReference] = React.useState<ReferenceResolutionView | null>(null)
   const listRef = React.useRef<HTMLDivElement | null>(null)
   const markedRef = React.useRef(false)
-  const surfaceRef = React.useRef<HTMLDivElement | null>(null)
-  useComposerSurface(surfaceRef)
-  // 2.0：`conversation.view` 的宿主滚动容器是 `[data-conversation-scroll]`；它的内容高度是 auto，
-  // 所以 `block-size:100%` 只会拿到内容高度。把 surface 固定到宿主**可视高度**，外壳才是真正滚动容器。
-  React.useLayoutEffect(() => {
-    const surface = surfaceRef.current
-    if (surface === null) return undefined
-    let host: HTMLElement | null = null
-    const apply = (): void => {
-      if (host === null) return
-      const height = host.clientHeight
-      if (height > 0) surface.style.blockSize = height + 'px'
-      surface.style.minBlockSize = '0'
-    }
-    const findHost = (): void => {
-      host = surface.closest<HTMLElement>('[data-conversation-scroll]')
-      if (host === null) return
-      apply()
-      // 宿主原来可能停在会话底部；内容变短后主动清零（只做一次，不跟随用户滚动）。
-      if (host.scrollTop > 0) host.scrollTop = 0
-    }
-    findHost()
-    if (host === null) {
-      const retry = window.requestAnimationFrame(findHost)
-      return () => window.cancelAnimationFrame(retry)
-    }
-    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => apply())
-    observer?.observe(host)
-    window.addEventListener('resize', apply)
-    return () => {
-      observer?.disconnect()
-      window.removeEventListener('resize', apply)
-    }
-  }, [])
+  // 2.0：宿主 composer 隐藏 + 宿主可视高度同步，1.5.5 起收敛到 `ConversationSurface`
+  // （两个 tab 共用同一实现；原来这里另有一份手写逻辑，思维链没有 → 真机上输入框露出）。
 
   React.useEffect(() => {
     if (props.now !== undefined) return undefined
@@ -1114,10 +1081,10 @@ function TabBody(props: TabOwnerProps & { mode: PrivacyMode }): React.ReactEleme
   )
 
   return h(
-    'div',
+    ConversationSurface,
     {
-      ref: surfaceRef,
-      className: 'threadline-surface-host',
+      // 样式根由 ThreadlineShell 自己提供（它本来就是 .threadline-app），这里不再包一层同名容器。
+      rootScope: false,
       // hover 预览只在整块 tab 内有效：移出整个视图才清空（从卡片移到图/轮次时保持预览）。
       onMouseLeave: () => {
         setHoverPath(null)

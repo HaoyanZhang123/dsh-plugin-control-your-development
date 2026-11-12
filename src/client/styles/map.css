@@ -591,62 +591,58 @@
 }
 
 /*
- * 布局过渡（1.5.3 真机反馈「选中后整图布局瞬间跳过去，没有过程」）。
+ * 布局/几何动画（P2 起由 **rAF 统一驱动**，不再用 CSS transition 做几何）。
  *
- * 为什么能只靠 CSS 解决：节点的**几何**是 SVG 的 "cx/cy/r" 属性，Chrome 支持对它们
- * 做 CSS transition（实测：改 "cx" 后 60ms 处于中间值、360ms 到位）。因此不必改布局算法，
- * 只要给承载几何的元素加过渡，坐标一变就会"滑"过去。
+ * 历史（别改回去）：1.5.3 曾用 CSS transition 动画 "cx/cy/r" 与 "x/y/width/height"
+ * （实测 Chrome 确实支持），但那条路在 P2 被推翻了，原因是**多张时钟**：
+ * - 卡片 "rect" 走 CSS transition；
+ * - 文件夹图标的 "path.d" 按最新坐标**立即重算**（"d" 属性无法被 CSS 过渡）；
+ * - 标签走另一组 CSS 属性；
+ * - 边端点走 rAF（"line" 的 x1/y1/x2/y2 是表现属性，Chrome 不做 transition）。
+ * 四张表各走各的 → 中间帧四处错位（卡片在中途、图标已在终点、线又晚一拍）。
  *
- * 口径：
- * - 只过渡**位置/尺寸**（cx/cy/r/x/y/width/height），颜色态的过渡仍由各自的短时长规则管；
- * - 时长用 "--tl-dur-layout"（240ms，比交互态 120ms 长一档：这是"重排"不是"高亮"）；
- * - "data-reduced-motion='true'" 与 prefers-reduced-motion 下**全部取消**（不瞬移、也不滑）；
- * - 拖动时**不要**过渡：拖动是逐帧跟随，加过渡会拖出黏滞感（由 "[data-dragging='true']" 排除）。
+ * 现在几何只有一个来源：sceneClock.ts 的 interpolateGeometry()，由 useSceneClock
+ * 的单个 rAF 时间轴逐帧写进 DOM。**CSS 里绝不能再对几何声明 transition** ——
+ * 两条时钟叠加时 CSS 会在 rAF 之后"懒一拍"，比不做过渡更错位。
+ * 本段只保留**颜色 / 透明度 / 描边**这类短过渡（它们不参与几何）。
+ *
+ * "--tl-dur-layout" 仍然是唯一时长事实源：它现在由 useSceneClock 读出来当 rAF 时长，
+ * 并在 reduced-motion 下归零（tokens.css）。
  */
-.threadline-app .tl-ofile:not([data-dragging='true']),
-.threadline-app .tl-foldhub:not([data-dragging='true']),
-.threadline-app .tl-fnode {
-  transition: transform var(--tl-dur-layout) var(--tl-ease);
-}
 
-/* 圆形节点：位置与半径都走过渡（半径在"显示全部/收起全部"时也会变）。 */
-.threadline-app .tl-ofile .tl-ofile-core,
-.threadline-app .tl-ofile .tl-ofile-halo,
-.threadline-app .tl-ofile .tl-ofile-hit,
-.threadline-app .tl-fnode .tl-fnode-core {
+/* 圆形节点：只有颜色态过渡。位置/半径由 rAF 写，不走 CSS。 */
+.threadline-app .tl-ofile .tl-ofile-core {
   transition:
-    cx var(--tl-dur-layout) var(--tl-ease),
-    cy var(--tl-dur-layout) var(--tl-ease),
-    r var(--tl-dur-layout) var(--tl-ease),
     fill-opacity var(--tl-dur-fast) var(--tl-ease),
     stroke var(--tl-dur-fast) var(--tl-ease),
     stroke-width var(--tl-dur-fast) var(--tl-ease);
 }
 
-/* 枢纽卡片：矩形的位置与尺寸。 */
+/* 悬停光晕：只有透明度过渡（几何跟着节点走）。 */
+.threadline-app .tl-ofile .tl-ofile-halo {
+  transition: fill-opacity var(--tl-dur-fast) var(--tl-ease);
+}
+
+/* 枢纽卡片：只有颜色态过渡（x/y/width/height 由 rAF 写）。 */
 .threadline-app .tl-foldhub .tl-foldhub-card {
   transition:
-    x var(--tl-dur-layout) var(--tl-ease),
-    y var(--tl-dur-layout) var(--tl-ease),
-    width var(--tl-dur-layout) var(--tl-ease),
-    height var(--tl-dur-layout) var(--tl-ease),
     fill var(--tl-dur-fast) var(--tl-ease),
     stroke var(--tl-dur-fast) var(--tl-ease),
     stroke-width var(--tl-dur-fast) var(--tl-ease);
 }
 
-/* 标签：位置与透明度。 */
+/* 标签：只有透明度/颜色过渡（x/y 由 rAF 写，和节点同一帧）。 */
 .threadline-app .tl-ofile-label,
-.threadline-app .tl-fnode-label,
 .threadline-app .tl-foldhub-label {
   transition:
-    x var(--tl-dur-layout) var(--tl-ease),
-    y var(--tl-dur-layout) var(--tl-ease),
     opacity var(--tl-dur-base) var(--tl-ease),
     fill var(--tl-dur-fast) var(--tl-ease);
 }
 
-/* 边：端点位移走过渡，视觉上跟着节点一起滑。 */
+/*
+ * 边：端点位移**逐帧写属性**（x1/y1/x2/y2 不可 CSS 过渡，见 sceneClock.ts 的实测结论），
+ * 这里只有透明度/描边的短过渡。
+ */
 .threadline-app .tl-graph-edge,
 .threadline-app .tl-hub-edge,
 .threadline-app .tl-hub-pair {
@@ -655,11 +651,31 @@
     stroke var(--tl-dur-fast) var(--tl-ease);
 }
 
+/*
+ * **轮次图（turn 模式，FileGraph）也已由 rAF 驱动**（P3：与 folder 图共用同一内核）。
+ *
+ * 这里只保留颜色/透明度过渡。几何（cx/cy/r、x/y/width/height、line 端点）
+ * **一律不许**在 CSS 里声明 transition —— 否则 CSS 会在 rAF 之后"懒一拍"，
+ * 两条时钟叠加反而更错位（P2 已定的纪律）。
+ */
+.threadline-app .tl-fnode .tl-fnode-core {
+  transition:
+    fill-opacity var(--tl-dur-fast) var(--tl-ease),
+    stroke var(--tl-dur-fast) var(--tl-ease),
+    stroke-width var(--tl-dur-fast) var(--tl-ease);
+}
+
+.threadline-app .tl-fnode-label {
+  transition:
+    opacity var(--tl-dur-base) var(--tl-ease),
+    fill var(--tl-dur-fast) var(--tl-ease);
+}
+
 .threadline-app .tl-graph-zoom-layer {
   transition: transform var(--tl-dur-base) var(--tl-ease);
 }
 
-/* reduced-motion：取消全部布局过渡（瞬移，不做动画）。 */
+/* reduced-motion：取消全部 transition（几何本来就不在 CSS 里，这里清颜色过渡）。 */
 @media (prefers-reduced-motion: reduce) {
   .threadline-app .tl-ofile,
   .threadline-app .tl-foldhub,
@@ -885,18 +901,54 @@
   50% { opacity: 1; }
 }
 
-/* ---------- 入场动画（1.5.4） ---------- */
+/* ---------- 入场动画（1.5.4；P2 统一契约） ---------- */
 
 /*
- * 真机需求：「每一次加载出来的时候都有动画，点不同轮次、初次加载、点击进文件夹等」。
+ * 真机需求：「每一次加载出来的时候都有动画，比如点不同轮次、初次加载、点击进文件夹等」。
  *
- * 实现口径：
- * - "<svg>" 的 "key" 含轮次/目录/档位，换图即重挂载 → 动画每次重播（见 FolderMap）；
- * - 节点按序号错峰（最多 30 档、每档 12ms），观感是"从中心长出来"而不是整体弹一下；
- * - 线在节点之后淡入，避免"线先到位等节点"的旧观感；
- * - 只动 "opacity" 与极小 "translateY"（GPU 友好，不影响布局坐标与点击命中）；
- * - reduced-motion 下整段不播（下方统一 transition:none 的规则之外，再显式关掉 animation）。
+ * ## 唯一入场契约（folder 与 turn 共用这一份，别再分两套）
+ *
+ *   图层            起点延迟            时长
+ *   节点            0ms + i*12ms        --tl-dur-slow
+ *   边（三类全部）   60ms               --tl-dur-slow
+ *   标签（三类全部） 60ms               --tl-dur-slow
+ *
+ * 其中 i = --tl-enter-i（渲染层写入的错峰序号，封顶 30）。
+ * 语义：节点先起、线与标签随后跟随；节点按序号依次长出来，
+ * 所以任何时刻都不会出现「线先出来、节点还没长」。
+ *
+ * 覆盖的元素清单（folder 与 turn 两个模式的全部图层，一组规则说完）：
+ *   节点：.tl-ofile（folder 文件）/ .tl-foldhub（folder 枢纽）/ .tl-fnode（turn 文件）
+ *   边  ：.tl-graph-edge（文件↔文件，两模式共用）/ .tl-hub-edge / .tl-hub-pair
+ *   标签：.tl-ofile-label / .tl-foldhub-label / .tl-fnode-label（+ .tl-fnode-status）
+ *
+ * 曾经缺陷（这次修的）：边写死 60ms，但只有 .tl-ofile / .tl-fnode 有错峰，
+ * 且三类标签根本没有入场动画（立即以终点透明度出现）。于是在 turn 视图里
+ * 边几乎立刻淡入、节点因错峰要等、标签一开始就亮 → 观感「线先出来、节点后加载」。
+ *
+ * 只动 opacity 与极小 translateY（GPU 友好，不影响布局坐标与点击命中）；
+ * reduced-motion 下整段不播（文末统一 animation: none）。
  */
+/* 入场延迟常量的**唯一事实源**：
+   --tl-enter-step   = 节点之间的错峰步长
+   --tl-enter-offset = 边 / 标签相对节点的统一偏移
+   时长不新造一套，复用 tokens.css 的 --tl-dur-*。 */
+.threadline-app,
+.threadline-impact-root {
+  --tl-enter-step: 12ms;
+  --tl-enter-offset: 60ms;
+}
+
+@keyframes threadline-graph-label-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
 @keyframes threadline-graph-node-in {
   from {
     opacity: 0;
@@ -923,20 +975,39 @@
 :is(.threadline-app, .threadline-impact-root) .tl-graph-svg .tl-fnode,
 :is(.threadline-app, .threadline-impact-root) .tl-graph-svg .tl-foldhub {
   animation: threadline-graph-node-in var(--tl-dur-slow) var(--tl-ease) both;
+  animation-delay: calc(var(--tl-enter-i, 0) * var(--tl-enter-step));
 }
 
-:is(.threadline-app, .threadline-impact-root) .tl-graph-svg .tl-graph-edge {
+/* ---- 第二层：边（三类，统一 +60ms） ---- */
+:is(.threadline-app, .threadline-impact-root) .tl-graph-svg .tl-graph-edge,
+:is(.threadline-app, .threadline-impact-root) .tl-graph-svg .tl-hub-edge,
+:is(.threadline-app, .threadline-impact-root) .tl-graph-svg .tl-hub-pair {
   animation: threadline-graph-edge-in var(--tl-dur-slow) var(--tl-ease) both;
-  animation-delay: 60ms;
+  animation-delay: var(--tl-enter-offset);
 }
 
 /*
- * 错峰：只给前 30 个节点排延迟（再多就看不出来，反而显得慢）。
- * 用 "--tl-enter-i" 由渲染层写入序号，避免在 CSS 里写 30 条 nth-child。
+ * ---- 第三层：标签 / 轮次状态小字（跟随节点，统一 +60ms） ----
+ *
+ * 标签自己不再错峰：它们**挂在自己的节点上**，节点已经在错峰，
+ * 再叠一层会让文字和圆点分离（节点到了、字还没到）。
+ */
+:is(.threadline-app, .threadline-impact-root) .tl-graph-svg .tl-ofile-label,
+:is(.threadline-app, .threadline-impact-root) .tl-graph-svg .tl-foldhub-label,
+:is(.threadline-app, .threadline-impact-root) .tl-graph-svg .tl-fnode-label,
+:is(.threadline-app, .threadline-impact-root) .tl-graph-svg .tl-fnode-status {
+  animation: threadline-graph-label-in var(--tl-dur-slow) var(--tl-ease) both;
+  animation-delay: var(--tl-enter-offset);
+}
+
+/*
+ * 错峰只在渲染层写了 --tl-enter-i 的元素上生效（没写就退化为 0，也不错）。
+ * .tl-foldhub 也必须有：枢纽之前完全没有错峰，和文件节点不同步。
  */
 :is(.threadline-app, .threadline-impact-root) .tl-graph-svg .tl-ofile[style*='--tl-enter-i'],
-:is(.threadline-app, .threadline-impact-root) .tl-graph-svg .tl-fnode[style*='--tl-enter-i'] {
-  animation-delay: calc(var(--tl-enter-i, 0) * 12ms);
+:is(.threadline-app, .threadline-impact-root) .tl-graph-svg .tl-fnode[style*='--tl-enter-i'],
+:is(.threadline-app, .threadline-impact-root) .tl-graph-svg .tl-foldhub[style*='--tl-enter-i'] {
+  animation-delay: calc(var(--tl-enter-i, 0) * var(--tl-enter-step));
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -948,7 +1019,51 @@
   }
 }
 
-/* ---------- 画布内的空/错误态 ---------- */
+/*
+ * ---- 几何生长期间：抑制逐元素入场动画（P3） ----
+ *
+ * 场景：切目录 / 切轮次时，几何时钟让节点从画布中心**生长**到目标位置
+ * （"data-scene-motion='grow'"，由 useSceneClock 的 growing 状态写出来）。
+ *
+ * 此时如果还叠着逐元素入场动画（opacity 0→1 + translateY(-6px) + 错峰延迟），
+ * 会出现两套动画互相干扰：节点一边从中心移动、一边还在往上飘并淡入，
+ * 错峰延迟期间节点已经在移动但还没开始显形 —— 观感是"抖着长出来"。
+ *
+ * 所以生长期间把这套逐元素动画关掉，改为对**整层**做一次短淡入
+ * （"threadline-graph-layer-in"：只动 opacity，不碰任何几何属性）。
+ *
+ * **首次挂载不受影响**：首帧时钟直接到终点（renderedRef === null，不生长），
+ * data-scene-motion='idle'，下面的抑制规则不命中，逐元素动画照常播 ——
+ * 首屏仍然是"长出来"的，不会变成"突然出现"。
+ */
+:is(.threadline-app, .threadline-impact-root) .tl-graph[data-scene-motion='grow'] .tl-graph-svg .tl-ofile,
+:is(.threadline-app, .threadline-impact-root) .tl-graph[data-scene-motion='grow'] .tl-graph-svg .tl-fnode,
+:is(.threadline-app, .threadline-impact-root) .tl-graph[data-scene-motion='grow'] .tl-graph-svg .tl-foldhub,
+:is(.threadline-app, .threadline-impact-root) .tl-graph[data-scene-motion='grow'] .tl-graph-svg .tl-graph-edge,
+:is(.threadline-app, .threadline-impact-root) .tl-graph[data-scene-motion='grow'] .tl-graph-svg .tl-hub-edge,
+:is(.threadline-app, .threadline-impact-root) .tl-graph[data-scene-motion='grow'] .tl-graph-svg .tl-hub-pair,
+:is(.threadline-app, .threadline-impact-root) .tl-graph[data-scene-motion='grow'] .tl-graph-svg .tl-ofile-label,
+:is(.threadline-app, .threadline-impact-root) .tl-graph[data-scene-motion='grow'] .tl-graph-svg .tl-foldhub-label,
+:is(.threadline-app, .threadline-impact-root) .tl-graph[data-scene-motion='grow'] .tl-graph-svg .tl-fnode-label,
+:is(.threadline-app, .threadline-impact-root) .tl-graph[data-scene-motion='grow'] .tl-graph-svg .tl-fnode-status {
+  animation: none;
+}
+
+/* 整层短淡入（生长期间唯一的 opacity 动画；不碰几何）。 */
+@keyframes threadline-graph-layer-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+:is(.threadline-app, .threadline-impact-root) .tl-graph[data-scene-motion='grow'] .tl-graph-svg .tl-graph-zoom-layer {
+  animation: threadline-graph-layer-in var(--tl-dur-base) var(--tl-ease) both;
+}
+
 
 :is(.threadline-app, .threadline-impact-root) .tl-graph-stage .threadline-empty {
   position: absolute;

@@ -26,8 +26,10 @@ import type { MapEntry } from './folderLayout.ts'
 import { estimateTextWidth, GRAPH_LABEL_FONT_PX, GRAPH_STATUS_FONT_PX, placeLabels, type LabelCandidate, type OccupiedBox } from './labels.ts'
 import { aggregateEdgePairs, type EdgePair } from './pairs.ts'
 import { graphRadius, layoutFileGraph, type GraphLayout, type GraphLayoutNode, type GraphSourceFile } from './graphLayout.ts'
-import { FAMILY_COLOR, FAMILY_MESSAGE_KEY, GRAPH_CLASS, GRAPH_DATA, GRAPH_EDGE_LIMITS, GRAPH_LABEL_LIMITS, RELATION_MESSAGE_KEY, STATUS_COLOR } from './theme.ts'
+import { FAMILY_COLOR, FAMILY_MESSAGE_KEY, enterStyleOf, GRAPH_CLASS, GRAPH_DATA, GRAPH_EDGE_LIMITS, GRAPH_LABEL_LIMITS, RELATION_MESSAGE_KEY, STATUS_COLOR } from './theme.ts'
 import { ZoomGroup } from './zoomGroup.ts'
+import { DEFAULT_LAYOUT_DURATION_MS, projectGraphFrame, useNodeFramesState } from './useSceneClock.ts'
+import { enterOrigin, nodeFramesOfGraph } from './sceneClock.ts'
 
 import { graphSkeleton } from './skeleton.ts'
 
@@ -189,6 +191,9 @@ function TurnMap(props: TurnMapProps): React.ReactElement {
   const viewChanged = previousViewKey.current !== null && previousViewKey.current !== viewKey
   if (previousViewKey.current === null || viewChanged) previousViewKey.current = viewKey
 
+  /** 布局过渡时长（读 CSS 令牌 `--tl-dur-layout`；与 folder 图同一个事实源）。 */
+  const layoutDurationRef = React.useRef<number>(DEFAULT_LAYOUT_DURATION_MS)
+
   React.useEffect(() => {
     const element = stageRef.current
     if (element === null) return undefined
@@ -197,11 +202,22 @@ function TurnMap(props: TurnMapProps): React.ReactElement {
       setSize({ width: Math.round(rect.width), height: Math.round(rect.height) })
     }
     measure()
+    /* 读一次布局过渡时长（CSS 令牌是唯一事实源，这里不写死毫秒数）。 */
+    const raw = getComputedStyle(element).getPropertyValue('--tl-dur-layout').trim()
+    const parsed = raw.endsWith('ms') ? Number.parseFloat(raw) : raw.endsWith('s') ? Number.parseFloat(raw) * 1000 : NaN
+    if (Number.isFinite(parsed)) layoutDurationRef.current = parsed
     if (typeof ResizeObserver === 'undefined') return undefined
     const observer = new ResizeObserver(measure)
     observer.observe(element)
     return () => observer.disconnect()
   }, [])
+
+  /** reduced-motion：显式开关或系统偏好，取并集（与 folder 图同一口径）。 */
+  const reducedMotion = React.useMemo(() => {
+    if (props.reducedMotion === true) return true
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  }, [props.reducedMotion])
 
   const width = size.width > 0 ? size.width : 680
   const height = size.height > 0 ? size.height : TURN_STAGE_HEIGHT
@@ -209,11 +225,46 @@ function TurnMap(props: TurnMapProps): React.ReactElement {
     () => layoutFileGraph(props.files.map(toSource), { width, height, mode: 'turn' }),
     [props.files, width, height],
   )
+
+  /**
+   * **唯一几何时钟**（P3 修复）：轮次图以前**完全没有接**插值内核 ——
+   * 边用新坐标直接渲染（先出现且定住），节点只有 CSS 入场动画（再从旧位置淡入），
+   * 观感就是「关系线先出现并且固定，然后节点才连上去」。
+   *
+   * 现在与 folder 图共用同一个内核（`sceneClock.interpolateNodeFrames`）与同一条
+   * rAF 时间轴（`useSceneClock.useNodeFrames`），所以切轮次时节点/边/标签
+   * 从**同一帧**坐标一起连续形变 —— 就是用户要的「点击卡片加载关系」那个动画。
+   */
+  /**
+   * **视图身份 = 轮次号**（`restartOn`）。
+   *
+   * 这是「切轮次也要像首次加载那样从中心生长」的关键：轮次图的文件集几乎不变
+   * （只有 ops 变），若不做重启，几乎每个 key 都命中旧快照 → 全部走"旧位置→新位置"
+   * 的滑动 → 用户看到的正是「提前预订好的转场进入」。
+   *
+   * 声明视图身份后，轮次一变就丢弃旧快照，所有节点从画布中心生长到目标位置，
+   * 与 folder 图切目录的观感一致。
+   */
+  const sceneState = useNodeFramesState<GraphLayout>(
+    layout,
+    nodeFramesOfGraph,
+    projectGraphFrame,
+    enterOrigin,
+    {
+      durationMs: layoutDurationRef.current,
+      reducedMotion,
+      restartOn: 'turn:' + String(props.turn?.turn.n ?? ''),
+    },
+  )
+  const renderedLayout: GraphLayout = sceneState.frame
+  /** 几何正在生长时不播逐元素入场动画（否则两套动画打架）。 */
+  const sceneGrowing = sceneState.growing
   const nodeByKey = React.useMemo(() => {
     const map = new Map<string, GraphLayoutNode>()
-    for (const node of layout.nodes) map.set(caseKey(node.path), node)
+    /* 用**当前帧**（renderedLayout）建立索引：边端点/标签坐标都从这里取。 */
+    for (const node of renderedLayout.nodes) map.set(caseKey(node.path), node)
     return map
-  }, [layout])
+  }, [renderedLayout])
   const statusByKey = React.useMemo(() => {
     const map = new Map<string, FileTurnStatus>()
     if (props.turn !== null) for (const [path, status] of props.turn.status.byPath) map.set(caseKey(path), status)
@@ -229,11 +280,11 @@ function TurnMap(props: TurnMapProps): React.ReactElement {
     const cy = layout.height / 2
     const labelLimit = GRAPH_LABEL_LIMITS.turn
     const labelEligible = new Set<string>()
-    const sortedByOps = layout.nodes.slice().sort((left, right) => (right.ops - left.ops) || (left.path < right.path ? -1 : 1))
+    const sortedByOps = renderedLayout.nodes.slice().sort((left, right) => (right.ops - left.ops) || (left.path < right.path ? -1 : 1))
     for (const node of sortedByOps.slice(0, labelLimit)) labelEligible.add(caseKey(node.path))
     if (selectedKey !== null) labelEligible.add(selectedKey)
     if (focusKey !== null) labelEligible.add(focusKey)
-    for (const node of layout.nodes) {
+    for (const node of renderedLayout.nodes) {
       const key = caseKey(node.path)
       if (!labelEligible.has(key)) continue
       const isSelected = selectedKey === key
@@ -276,27 +327,36 @@ function TurnMap(props: TurnMapProps): React.ReactElement {
       })
     }
     return { placements: placeLabels(candidates, occupied, 6) }
-  }, [layout, statusByKey, selectedKey, focusKey, t])
+    /* 依赖 `renderedLayout`（当前帧）而不是 `layout`（终点帧）：
+     * 标签坐标必须跟着圆点一起走，否则文字会和节点分离。 */
+  }, [renderedLayout, statusByKey, selectedKey, focusKey, t])
   const placementByKey = React.useMemo(() => new Map(placements.map((item) => [item.key, item])), [placements])
+
+  /**
+   * 「画哪些边」只看**终点帧**的节点集合（存在性与聚合是数据性质，不随动画变），
+   * 这样 `aggregateEdgePairs` 不会每帧重跑（那是 O(E) 的活）。
+   * 端点坐标在渲染时从 `nodeByKey`（当前帧）现算 —— 见 renderEdge。
+   */
+  const turnNodeByKey = React.useMemo(() => {
+    const map = new Map<string, GraphLayoutNode>()
+    for (const node of layout.nodes) map.set(caseKey(node.path), node)
+    return map
+  }, [layout])
 
   const visibleEdges = React.useMemo(() => {
     const edges = props.edges ?? []
     const nodeFiltered: GraphEdge[] = []
     for (const edge of edges) {
-      const from = nodeByKey.get(caseKey(edge.from))
-      const to = nodeByKey.get(caseKey(edge.to))
+      const from = turnNodeByKey.get(caseKey(edge.from))
+      const to = turnNodeByKey.get(caseKey(edge.to))
       if (from === undefined || to === undefined) continue
       nodeFiltered.push(edge)
     }
     const pairs = aggregateEdgePairs(nodeFiltered)
     const limited = pairs.slice(0, GRAPH_EDGE_LIMITS.turn)
-    const result = limited.flatMap((pair) => {
-      const from = nodeByKey.get(caseKey(pair.from))
-      const to = nodeByKey.get(caseKey(pair.to))
-      return from === undefined || to === undefined ? [] : [{ pair, from, to }]
-    })
+    const result = limited.map((pair) => ({ pair, fromPath: pair.from, toPath: pair.to }))
     return { list: result, total: pairs.length }
-  }, [props.edges, nodeByKey])
+  }, [props.edges, turnNodeByKey])
 
   const activePair: EdgePair | null = React.useMemo(() => {
     const key = pinnedPairKey ?? hoverPairKey
@@ -352,7 +412,7 @@ function TurnMap(props: TurnMapProps): React.ReactElement {
   const summary = props.turn !== null ? props.turn.status.summary : null
   const deleteText = summary === null ? '' : summary.deleteCommands === null ? t('turnStatus.unknown') : String(summary.deleteCommands)
 
-  const nodeElements = layout.nodes.map((node) => {
+  const nodeElements = renderedLayout.nodes.map((node) => {
     const key = caseKey(node.path)
     const status = statusByKey.get(key)
     const parts = statusParts(status, t)
@@ -379,6 +439,12 @@ function TurnMap(props: TurnMapProps): React.ReactElement {
         'data-selected': isSelected ? 'true' : 'false',
         role: 'button',
         tabIndex: isSelected || (selectedKey === null && node.index === 0) ? 0 : -1,
+        /* 入场错峰（P2 修复）：与 folder 图共用 `enterStyleOf` 这一条生成规则。
+         *
+         * 之前这里**完全没有**写 `--tl-enter-i` → 节点 0ms 起、边 60ms 起，
+         * 而 folder 图是节点按序号错峰、边 60ms 起。两种模式的时序不一致，
+         * 在 turn 视图里就表现为「先出现线，然后节点才加载进去」。 */
+        style: enterStyleOf(node.index),
         'aria-label':
           node.name + ' · ' + t('inspector.ops') + ' ' + node.ops + (parts.length === 0 ? '' : ' · ' + parts.map((part) => part.text).join(' ')),
         onPointerEnter: () => {
@@ -421,7 +487,7 @@ function TurnMap(props: TurnMapProps): React.ReactElement {
     )
   })
 
-  const labelElements = layout.nodes.flatMap((node) => {
+  const labelElements = renderedLayout.nodes.flatMap((node) => {
     const label = placementByKey.get(node.path)
     if (label === undefined || !label.visible) return []
     const key = caseKey(node.path)
@@ -498,6 +564,14 @@ function TurnMap(props: TurnMapProps): React.ReactElement {
       'data-zoom': String(camera.scale),
       'data-reduced-motion': props.reducedMotion === true ? 'true' : 'false',
       'data-animate': viewChanged ? 'true' : 'false',
+      /**
+       * 场景运动状态（P3）：`grow` = 几何正在从中心生长。
+       *
+       * CSS 据此抑制 `.tl-fnode` 的逐元素入场动画（含 translateY 与错峰延迟），
+       * 避免"节点一边从中心移动、一边还在淡入"的双重动画打架。
+       * 首次挂载不走这里（时钟直接到终点、不生长），CSS 入场动画照常播放。
+       */
+      'data-scene-motion': sceneGrowing ? 'grow' : 'idle',
       'data-testid': props.testId,
     },
     h(
@@ -582,7 +656,16 @@ function TurnMap(props: TurnMapProps): React.ReactElement {
               'svg',
               {
                 className: 'tl-graph-svg',
-                key: 'svg:turn:' + String(props.turn?.turn.n ?? ''),
+                /*
+                 * **不给 svg 加 key**（P3，与 folder 图同一条纪律）。
+                 *
+                 * 旧实现是 `key: 'svg:turn:' + n` —— 切轮次会整张重建 SVG。
+                 * 那会让 `useNodeFrames` 的当前可见帧与生长动画**全部作废**：
+                 * 新的空场景直接以终点坐标挂载，用户看到的就是"提前预订好的转场"。
+                 *
+                 * 场景根常驻后，切轮次由几何时钟负责生长；元素级入场动画由
+                 * `data-scene-motion` 在生长期间抑制。
+                 */
                 viewBox: '0 0 ' + String(layout.width) + ' ' + String(layout.height),
                 preserveAspectRatio: 'xMidYMid meet',
                 role: 'group',
@@ -595,7 +678,18 @@ function TurnMap(props: TurnMapProps): React.ReactElement {
               h(
                 'g',
                 { className: 'tl-graph-zoom-layer', 'data-zoom-layer': 'true', transform: cameraTransform(camera) },
-                ...visibleEdges.list.flatMap(({ pair, from, to }) => {
+                ...visibleEdges.list.flatMap(({ pair, fromPath, toPath }) => {
+                  /**
+                   * **端点从当前帧现算**（P3 修复的核心，别改回读 `turnNodeByKey`）。
+                   *
+                   * `turnNodeByKey` 是**终点帧**的静态坐标；用它画边就会出现
+                   * 「关系线先出现并且固定，然后节点才连上去」。
+                   * 这里取 `nodeByKey`（= `renderedLayout`，当前可见帧），
+                   * 于是线和节点永远在同一帧上，端点偏差恒为 0。
+                   */
+                  const from = nodeByKey.get(caseKey(fromPath))
+                  const to = nodeByKey.get(caseKey(toPath))
+                  if (from === undefined || to === undefined) return []
                   const touchingFocus = focusKey !== null && (caseKey(pair.from) === focusKey || caseKey(pair.to) === focusKey)
                   const opacity =
                     focusKey === null ? (pair.typeList.includes('structure') ? 0.28 : 0.42) : touchingFocus ? 0.85 : 0.08

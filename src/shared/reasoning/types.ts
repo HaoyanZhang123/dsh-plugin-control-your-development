@@ -52,9 +52,23 @@ export interface ReasoningGroup {
   chars: number
   /** 「思维链 + 助手回复」的字符数（用于字符占比的分母，精确）。 */
   answerChars: number
-  /** provider 上报的 reasoningTokens 之和（仅齐备样本）。 */
+  /**
+   * provider 上报的 reasoningTokens 之和（1.5.5 起按字符比例**分配**到各组）。
+   *
+   * 口径说明（必须能向用户解释）：provider 只上报"整段" reasoningTokens，
+   * 不存在逐句精确值。所以同一段 thought 内，token 按各组的字符占比分配 ——
+   * 这是**估算**，不是伪造精度：它保证「每组的 token 加起来 = 该段真实 token」。
+   * 旧实现只把整段 token 记给"字符占优"的那一组，导致 6280 个组里绝大多数显示"未知"。
+   */
   tokens: number
-  /** provider 上报的 totalTokens 之和（仅齐备样本）。 */
+  /**
+   * provider 上报的 outputTokens 之和（同样按字符比例分配）。
+   *
+   * 为什么需要它：「占总 token」的正确分母是**输出**（思维链是输出的一部分），
+   * 而不是上下文 totalTokens（后者含输入与缓存，实测会把 reasoning 占比稀释到 0.1%~2.7%）。
+   */
+  outputTokens: number
+  /** provider 上报的 totalTokens 之和（上下文口径，仅齐备样本）。 */
   totalTokens: number
   /** 贡献了 token 的样本字符数（覆盖率分子）。 */
   knownChars: number
@@ -79,15 +93,36 @@ export interface ReasoningTotals {
   chars: number
   answerChars: number
   tokens: number
+  /** provider 上报的 outputTokens 之和（「占总 token」的分母，1.5.5 起）。 */
+  outputTokens: number
   totalTokens: number
   knownChars: number
   blocks: number
   sentences: number
   /** token 覆盖率 = knownChars / chars；`chars === 0` 时为 null。 */
   coverage: number | null
-  /** 占总 token；`totalTokens === 0` 时为 null（未知，不是 0%）。 */
+  /**
+   * 思维链占**输出**的比例 = tokens / outputTokens。
+   *
+   * 1.5.5 语义纠正：旧实现是 tokens / totalTokens（上下文口径，含输入与缓存），
+   * 实测本会话 151 条样本该比值中位数只有 **0.13%**、最大 2.66% —— 那不是
+   * "思维链在输出里占多少"，而是"思维链在整个上下文里占多少"，被输入稀释了。
+   * 按输出算，同批样本中位数是 **58.2%**，才是有意义的数。
+   * `outputTokens === 0`（provider 未上报）时为 null（未知，不是 0%）。
+   */
   tokenRatio: number | null
-  /** 字符占比；分母为 0 时为 null。 */
+  /**
+   * 思维链占**上下文**的比例 = tokens / totalTokens（如实展示，不再冒充"占总 token"）。
+   * `totalTokens === 0` 时为 null。
+   */
+  contextRatio: number | null
+  /**
+   * 字符占比；分母为 0 时为 null。
+   *
+   * 1.5.5：`answerChars === 0`（该范围内所有回复都没有正文，只有 reasoning + 工具调用）
+   * 时**必须返回 null**。实测本会话 150 条带 reasoning 的回复里只有 10 条有正文，
+   * 旧口径会算出 99.2% 这种"思维链占了几乎所有字符"的假结论。
+   */
   charRatio: number | null
 }
 

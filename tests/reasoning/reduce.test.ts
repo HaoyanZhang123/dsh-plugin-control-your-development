@@ -50,13 +50,20 @@ test('内容拆分：字符串内容没有 reasoning（不臆造）', () => {
 
 /* ---------------- usage 读取 ---------------- */
 
-test('usage：优先 data.usage；缺 totalTokens 时不自行拼分母', () => {
+test('usage：优先 data.usage；不自行拼分母（totalTokens 缺失就保持缺失）', () => {
   assert.deepEqual(readUsage({ usage: { reasoningTokens: 12, totalTokens: 100 } }), {
     reasoningTokens: 12,
     totalTokens: 100,
   })
-  // 只有 outputTokens：不给 totalTokens（不拿 input+output 假造分母）
-  assert.deepEqual(readUsage({ usage: { reasoningTokens: 12, outputTokens: 40 } }), { reasoningTokens: 12 })
+  /*
+   * 1.5.5 口径变更：`outputTokens` 现在是**一级字段**（「占输出」的分母），
+   * 不再被丢弃。旧断言期望它被吞掉，那会让「占总 token」再次失去正确分母。
+   * 仍然不拿 input+output 假造 totalTokens —— 那条纪律不变。
+   */
+  assert.deepEqual(readUsage({ usage: { reasoningTokens: 12, outputTokens: 40 } }), {
+    reasoningTokens: 12,
+    outputTokens: 40,
+  })
   // 完全没有 usage
   assert.deepEqual(readUsage({}), {})
   // 非法值当作缺失

@@ -119,7 +119,7 @@ try {
     query: 'view=cloud',
     outPng: join(OUT_DIR, 'reasoning-cloud.png'),
     actions: [
-      { type: 'waitFor', selector: '.tl-cloud-tile' },
+      { type: 'waitFor', selector: '.tl-cloud-word' },
       { type: 'wait', ms: 150 },
     ],
   })

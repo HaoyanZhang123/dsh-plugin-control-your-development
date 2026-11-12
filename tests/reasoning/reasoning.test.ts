@@ -24,6 +24,7 @@ function sample(patch: Partial<ReasoningSample> = {}): ReasoningSample {
     text: 'I need to check the tree listing.',
     answerText: 'Here is the answer.',
     tokens: 100,
+    outputTokens: 200,
     totalTokens: 1000,
     sessionId: 's1',
     turn: 1,
@@ -101,31 +102,43 @@ test('句首短语：命中已知前缀时保留原文大小写；未知前缀�
 
 test('token 缺失：字符照常统计，但 token 与占比必须是未知（不是 0）', () => {
   const result = aggregateReasoning(
-    [sample({ tokens: undefined }), sample({ text: 'We need another check.', totalTokens: undefined })],
+    [sample({ tokens: undefined }), sample({ text: 'We need another check.', outputTokens: undefined })],
     'prefix',
   )
   assert.equal(result.totals.chars > 0, true, '字符仍要统计')
   assert.equal(result.totals.tokens, 0, '没有上报就是 0 累加量')
-  assert.equal(result.totals.totalTokens, 0)
+  assert.equal(result.totals.outputTokens, 0)
   assert.equal(result.totals.tokenRatio, null, '占比必须是未知，不能是 0%')
   assert.equal(result.totals.coverage, 0, '覆盖率为 0（一个都没上报）')
 })
 
-test('token 齐备：占比 = reasoningTokens / totalTokens；覆盖率反映有多少字符带 token', () => {
-  const known = sample({ text: 'I need this.', answerText: 'ok', tokens: 150, totalTokens: 1000 })
+test('token 齐备：占比 = reasoningTokens / outputTokens；覆盖率反映有多少字符带 token', () => {
+  /*
+   * 1.5.5 口径变更（有据）：分母从 totalTokens 改为 **outputTokens**。
+   * 理由：totalTokens 是上下文口径（含输入与缓存），实测本会话 151 条样本该比值
+   * 中位数只有 0.13% —— 那不是"思维链占输出多少"。按输出算中位数是 58.2%。
+   * `contextRatio` 另外如实保留 totalTokens 口径。
+   */
+  const known = sample({ text: 'I need this.', answerText: 'ok', tokens: 150, outputTokens: 500, totalTokens: 1000 })
   const unknown = sample({ text: 'We need that.', answerText: 'ok', tokens: undefined })
   const result = aggregateReasoning([known, unknown], 'prefix')
   assert.equal(result.totals.tokens, 150)
+  assert.equal(result.totals.outputTokens, 500)
   assert.equal(result.totals.totalTokens, 1000)
-  assert.equal(result.totals.tokenRatio, 0.15)
+  assert.equal(result.totals.tokenRatio, 0.3)
+  assert.equal(result.totals.contextRatio, 0.15)
   assert.equal(result.totals.coverage !== null && result.totals.coverage > 0 && result.totals.coverage < 1, true)
 })
 
 test('字符占比与 token 占比是两个独立口径，不互相换算', () => {
-  const result = aggregateReasoning([sample({ text: 'abcdef', answerText: 'abcd', tokens: 10, totalTokens: 100 })], 'prefix')
-  // 字符：6 / (6 + 4) = 0.6；token：10 / 100 = 0.1
+  const result = aggregateReasoning(
+    [sample({ text: 'abcdef', answerText: 'abcd', tokens: 10, outputTokens: 100, totalTokens: 1000 })],
+    'prefix',
+  )
+  // 字符：6 / (6 + 4) = 0.6；占输出：10 / 100 = 0.1；占上下文：10 / 1000 = 0.01
   assert.equal(Math.round((result.totals.charRatio ?? 0) * 100), 60)
   assert.equal(Math.round((result.totals.tokenRatio ?? 0) * 100), 10)
+  assert.equal(Math.round((result.totals.contextRatio ?? 0) * 100), 1)
 })
 
 test('分组：按维度切分且字符总数守恒（不重复计）', () => {
@@ -183,11 +196,13 @@ test('排序：字符降序 + 键升序（并列时确定）', () => {
   }
 })
 
-test('hasTokens：只有两个字段都齐备才算已知', () => {
+test('hasTokens：tokens + outputTokens 齐备才算已知（totalTokens 降级为可选）', () => {
+  /* 1.5.5 口径变更：必需项从 totalTokens 改成 outputTokens（占比的分母）。 */
   assert.equal(hasTokens(sample()), true)
   assert.equal(hasTokens(sample({ tokens: undefined })), false)
-  assert.equal(hasTokens(sample({ totalTokens: 0 })), false)
+  assert.equal(hasTokens(sample({ outputTokens: 0 })), false, 'outputTokens 为 0 不能当分母')
   assert.equal(hasTokens(sample({ tokens: Number.NaN })), false)
+  assert.equal(hasTokens(sample({ totalTokens: 0 })), true, 'totalTokens 缺失不影响"有 token"判定')
 })
 
 test('空文本不产生块与句子（不让空 reasoning 冒充有效样本）', () => {

@@ -177,6 +177,28 @@ export type MessageKey =
   | "reasoning.none"
   | "reasoning.partial"
   | "reasoning.collapsed"
+  | "reasoning.coverageLoaded"
+  | "reasoning.coverageFailed"
+  | "reasoning.loadMore"
+  | "reasoning.loadAll"
+  | "reasoning.loadingMore"
+  | "reasoning.moreFilters"
+  | "reasoning.preset"
+  | "reasoning.activeFilters"
+  | "reasoning.resetFilters"
+  | "reasoning.filteredEmpty"
+  | "reasoning.otherDrill"
+  | "reasoning.otherList"
+  | "reasoning.cloudSkipped"
+  | "reasoning.showing"
+  | "reasoning.noOptions"
+  | "reasoning.sortedAsc"
+  | "reasoning.sortedDesc"
+  | "reasoning.contextRatio"
+  | "reasoning.turn"
+  | "reasoning.turnUnknown"
+  | "reasoning.estimated"
+  | "reasoning.needText"
   | "map.clusterCount"
   | "map.clusterMeta"
   | "map.clusterCurrent"
@@ -478,4 +500,26 @@ export const MESSAGE_KEYS: readonly MessageKey[] = [
   "reasoning.none",
   "reasoning.partial",
   "reasoning.collapsed",
+  "reasoning.coverageLoaded",
+  "reasoning.coverageFailed",
+  "reasoning.loadMore",
+  "reasoning.loadAll",
+  "reasoning.loadingMore",
+  "reasoning.moreFilters",
+  "reasoning.preset",
+  "reasoning.activeFilters",
+  "reasoning.resetFilters",
+  "reasoning.filteredEmpty",
+  "reasoning.otherDrill",
+  "reasoning.otherList",
+  "reasoning.cloudSkipped",
+  "reasoning.showing",
+  "reasoning.noOptions",
+  "reasoning.sortedAsc",
+  "reasoning.sortedDesc",
+  "reasoning.contextRatio",
+  "reasoning.turn",
+  "reasoning.turnUnknown",
+  "reasoning.estimated",
+  "reasoning.needText",
 ]

@@ -45,6 +45,7 @@ import { aggregateEdgePairs, dragThresholdExceeded, type EdgePair } from './pair
 import {
   FAMILY_COLOR,
   FAMILY_MESSAGE_KEY,
+  enterStyleOf,
   GRAPH_CLASS,
   GRAPH_DATA,
   GRAPH_HUB_PAIR_OPACITY,
@@ -54,7 +55,7 @@ import {
   type GraphDensity,
 } from './theme.ts'
 import { ZoomGroup } from './zoomGroup.ts'
-import { readEdgeFrames, syncEdges } from './edgeSync.ts'
+import { useSceneFrameState } from './useSceneClock.ts'
 import type { EvidenceModel } from './evidence.ts'
 
 const h = React.createElement
@@ -189,14 +190,6 @@ export function FolderMap(props: FolderMapProps): React.ReactElement {
   /** 「显示全部」状态：false = 40 档（默认），true = 全部档。 */
   const [showAllExpanded, setShowAllExpanded] = React.useState(false)
   const dragRef = React.useRef<DragState | null>(null)
-  /**
-   * 关系线端点的上一帧快照（1.5.4：真机反馈「节点在动，线早就在那等着了」）。
-   *
-   * 为什么线必须单独处理：`<line>` 的端点属性**不能被 CSS transition 动画**
-   * （实测：写 `transition: x1 …` 后改属性，70ms 就已经是终点值，`getComputedStyle` 也读不到 x1）。
-   * 所以线只能在提交 DOM 之后用 rAF 逐帧插值，和节点共用同一时长/缓动 —— 见 `edgeSync.ts`。
-   */
-  const edgeFramesRef = React.useRef<ReadonlyMap<string, { key: string; x1: number; y1: number; x2: number; y2: number }>>(new Map())
   /** 布局过渡时长（读 CSS 令牌 `--tl-dur-layout`；读不到就用 280ms）。 */
   const layoutDurationRef = React.useRef<number>(280)
   /**
@@ -286,6 +279,9 @@ export function FolderMap(props: FolderMapProps): React.ReactElement {
    * 旧实现把拖动偏移喂进布局 → 每一次 pointermove 都重跑整场力导向 + 重叠消除（O(N²)×轮数），
    * 复杂目录拖动直接卡死。拖动在语义上只是平移目标节点，因此改为"几何算一次，
    * 拖动用 applyDragOffsets 叠加"（纯坐标平移，O(N)）。
+   *
+   * **hover / 选中也不进依赖**（P2 保持原状，别改坏）：悬停只改标签与描边，
+   * 不重跑力导向、不重排坐标。
    */
   const baseGeometry: FolderGeometry = React.useMemo(
     () =>
@@ -300,8 +296,51 @@ export function FolderMap(props: FolderMapProps): React.ReactElement {
     [props.entries, props.files, props.currentPath, width, height, showAllExpanded, props.edges, props.allEdges],
   )
 
-  /** 叠加拖动偏移（纯函数、不重跑模拟）。 */
+  /**
+   * reduced-motion：显式开关（`data-reduced-motion` 同源）或系统偏好，**取并集**。
+   * 为 true 时几何时钟直接到终点帧（不播动画），信息一点不少。
+   */
+  const reducedMotion = React.useMemo(() => {
+    if (props.reducedMotion === true) return true
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  }, [props.reducedMotion])
+
+  /**
+   * **唯一几何时钟**（P2）：`baseGeometry` 变化时用**单个 rAF 时间轴**把
+   * `previous → next` 插值出来，返回"当前可见帧"。
+   *
+   * 为什么不再让 CSS 做这件事（1.5.3 的做法，P2 已推翻）：
+   * 卡片走 CSS transition、文件夹图标的 `path.d` 按最新坐标立即重算、标签走另一组
+   * CSS 属性、边走另一个人工的 rAF —— 四张表各走各的，中间帧必然错位。
+   * 现在只有这一条时间轴：`renderedBase` 一帧一帧地推进，所有元素都从它取坐标。
+   *
+   * 可打断：新目标到来时从**当前可见帧**继续插值（见 `useSceneClock.ts`）。
+   *
+   * **视图身份 = 当前目录**（`restartOn`）：换目录时丢弃旧快照，所有节点从画布中心
+   * **生长**到新位置。以前切目录"碰巧"表现为生长（两次目录的文件几乎不重合，
+   * 自然走"新节点"分支）；现在显式声明，行为确定、与轮次图观感一致。
+   * 同一目录内切密度/缩放/拖动仍保留原有的平滑插值。
+   */
+  const sceneState = useSceneFrameState(baseGeometry, {
+    durationMs: layoutDurationRef.current,
+    reducedMotion,
+    /* 拖动中不插值（拖动是逐帧跟随，再插值会黏滞）。 */
+    immediate: dragRef.current !== null,
+    restartOn: props.currentPath,
+  })
+  const renderedBase: FolderGeometry = sceneState.frame
+  /** 几何正在生长时不播逐元素入场动画（否则两套动画打架）。 */
+  const sceneGrowing = sceneState.growing
+
+  /** 叠加拖动偏移（纯函数、不重跑模拟）—— 偏移叠在**插值结果**之上。 */
   const geometry: FolderGeometry = React.useMemo(
+    () => applyDragOffsets(renderedBase, dragOffsets),
+    [renderedBase, dragOffsets],
+  )
+
+  /** 叠加拖动偏移后的**目标**几何（终点帧；只用于"决定画什么/标签落在哪"，不用于逐帧坐标）。 */
+  const targetGeometry: FolderGeometry = React.useMemo(
     () => applyDragOffsets(baseGeometry, dragOffsets),
     [baseGeometry, dragOffsets],
   )
@@ -315,23 +354,32 @@ export function FolderMap(props: FolderMapProps): React.ReactElement {
    * - 但「切档要重新计算」也满足：这里是**真的重新算了一遍集合**，DOM 里根本没有那些元素，
    *   不是 CSS 隐藏（`data-hub-pair` 数量随档位真实变化）。
    * 截断规则与 `computeHubPairs` 完全相同（同一个 `truncateHubPairs`），不会出现第二套口径。
+   *
+   * **必须取自 `geometry`（当前可见帧）而不是目标帧**：端点要跟着节点走。
+   * `truncateHubPairs` 只筛集合、保留每条的 `x1/y1/x2/y2`，所以端点仍是本帧的。
    */
   const drawnHubPairs = React.useMemo(
     () => truncateHubPairs(geometry.hubPairs, hubPairPartnersFor(activeDensity)),
     [geometry.hubPairs, activeDensity],
   )
 
-  // 选中/悬浮的节点若被 40 档挤掉了，仍然要画出来（规格：悬停/选中强制可见）。
+  /**
+   * 选中/悬浮的节点若被 40 档挤掉了，仍然要画出来（规格：悬停/选中强制可见）。
+   *
+   * **用目标几何判断，不要用逐帧几何**：`geometry` 每帧都是新对象，
+   * 挂在它上面会让下面的 `focusedGeometry`（一次完整力导向）**每帧重跑一次** ——
+   * 正是 D-35 那类"逐帧重跑模拟"的坑。
+   */
   const focusedMissing = React.useMemo(() => {
     const keys: string[] = []
     for (const key of [hoveredKey, selectedKey]) {
       if (key === null || key === '') continue
-      if (geometry.nodes.some((node) => caseKey(node.path) === key)) continue
+      if (targetGeometry.nodes.some((node) => caseKey(node.path) === key)) continue
       if (keys.includes(key)) continue
       keys.push(key)
     }
     return keys
-  }, [hoveredKey, selectedKey, geometry])
+  }, [hoveredKey, selectedKey, targetGeometry])
 
   // 强制可见的节点走"全部档选点"再挑出来（保证坐标与 40 档一致的部分不重算两次）。
   const focusedGeometry: FolderGeometry | null = React.useMemo(() => {
@@ -349,9 +397,9 @@ export function FolderMap(props: FolderMapProps): React.ReactElement {
 
   const extraNodes = React.useMemo(() => {
     if (focusedGeometry === null) return [] as FolderLayoutNode[]
-    const existing = new Set(geometry.nodes.map((node) => caseKey(node.path)))
+    const existing = new Set(targetGeometry.nodes.map((node) => caseKey(node.path)))
     return focusedGeometry.nodes.filter((node) => focusedMissing.includes(caseKey(node.path)) && !existing.has(caseKey(node.path)))
-  }, [focusedGeometry, focusedMissing, geometry])
+  }, [focusedGeometry, focusedMissing, targetGeometry])
 
   const nodes: FolderLayoutNode[] = React.useMemo(
     () => (extraNodes.length === 0 ? geometry.nodes : [...geometry.nodes, ...extraNodes]),
@@ -362,33 +410,6 @@ export function FolderMap(props: FolderMapProps): React.ReactElement {
     () => layoutFolderLabels({ ...geometry, nodes }, { selectedKey, hoveredKey, hiddenKeys }),
     [geometry, nodes, selectedKey, hoveredKey, hiddenKeys],
   )
-
-  /**
-   * 让关系线和节点**同步**移动（1.5.4 真机反馈「节点在动，线早就在位置上等着了」）。
-   *
-   * 为什么不能只靠 CSS：`<line>` 的 `x1/y1/x2/y2` 是表现属性，Chrome 不对它们做过渡
-   * （实测：写 transition 后 70ms 已是终点值；`getComputedStyle` 读不到 x1）。
-   * 用 `<g transform>` 也能动，但那只能表达平移 —— 端点各自移动时线会"缩"，必须逐帧改属性。
-   *
-   * 时机：`useLayoutEffect` 里 DOM 已是新坐标，而用户眼睛还停在旧位置；
-   * 因此先读旧快照、把线钉回旧值，再用 rAF 推到新值（时长/缓动与节点 transition 一致）。
-   */
-  React.useLayoutEffect(() => {
-    const stage = stageRef.current
-    if (stage === null) return undefined
-    const previous = edgeFramesRef.current
-    const reduce =
-      typeof window !== 'undefined' &&
-      typeof window.matchMedia === 'function' &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    const cancel = syncEdges(stage, previous, {
-      durationMs: reduce ? 0 : layoutDurationRef.current,
-      disabled: dragRef.current !== null,
-    })
-    /* 动画结束后把"最终端点"存成下一帧的起点（读 DOM 真值，不做估算）。 */
-    edgeFramesRef.current = readEdgeFrames(stage)
-    return cancel
-  }, [geometry, nodes, labels, props.edges, props.allEdges, props.files, showAllExpanded])
 
   const nodeByKey = React.useMemo(() => {
     const map = new Map<string, FolderLayoutNode>()
@@ -694,7 +715,7 @@ export function FolderMap(props: FolderMapProps): React.ReactElement {
       t('inspector.file') +
       (geometry.hubCount > 0 ? ' · ' + t('map.folderCount', { count: geometry.hubCount }) : '')
 
-  const renderHub = (hub: FolderLayoutHub): React.ReactElement => {
+  const renderHub = (hub: FolderLayoutHub, hubIndex: number): React.ReactElement => {
     const hubKey = caseKey(hub.path)
     const isHoveredHub = hoveredKey === hubKey
     /**
@@ -733,6 +754,10 @@ export function FolderMap(props: FolderMapProps): React.ReactElement {
         'data-hovered': isHoveredHub ? 'true' : 'false',
         'data-selected': isHubSelected ? 'true' : 'false',
         'aria-pressed': isHubSelected ? 'true' : 'false',
+        /* 枢纽也要错峰（P2 修复：之前枢纽完全没有 --tl-enter-i，
+         * 于是它比文件节点先出现，与"节点先起"的契约不一致）。
+         * 序号 = 文件节点之后接着排，用同一个 enterStyleOf 规则。 */
+        style: enterStyleOf(nodes.length + hubIndex),
         'data-dragging': isHubDragged ? 'true' : 'false',
         role: 'button',
         tabIndex: 0,
@@ -781,9 +806,10 @@ export function FolderMap(props: FolderMapProps): React.ReactElement {
           'M' + String(left + 8) + ' ' + String(top + 9) +
           ' h4 l2 2.2 h5 a1.4 1.4 0 0 1 1.4 1.4 v4.6 a1.4 1.4 0 0 1 -1.4 1.4 h-11 a1.4 1.4 0 0 1 -1.4 -1.4 v-6.4 a1.4 1.4 0 0 1 1.4 -1.4 z',
       }),
-      // 名字放不下：卡片只留图标（完整名在 title/aria），绝不画截断碎片。
+      // 省略号只影响可见文本；完整名始终在 title / aria-label / data-hub-name 里，
+      // 悬停与读屏拿到的仍是全名，不因显示省略而丢信息。
       hub.labelVisible
-        ? h('text', { className: 'tl-foldhub-label', x: left + 22, y: hub.y + 4, 'data-hub-label': hub.path }, hub.name)
+        ? h('text', { className: 'tl-foldhub-label', x: left + 22, y: hub.y + 4, 'data-hub-label': hub.path }, hub.labelText)
         : null,
     )
   }
@@ -819,12 +845,10 @@ export function FolderMap(props: FolderMapProps): React.ReactElement {
         'data-size-unknown': sizeUnknown ? 'true' : 'false',
         'data-size': typeof node.size === 'number' ? node.size : undefined,
         'aria-hidden': isFuture ? 'true' : undefined,
-        /* 入场动画的错峰序号（1.5.4）：CSS 只给前 30 个排延迟，再多就看不出差别。
+        /* 入场动画的错峰序号（1.5.4 / P2）：与 turn 视图共用 `enterStyleOf`
+         * 这一条生成规则，不各写一套。CSS 只给前 30 个排延迟（再多就看不出差别）。
          * 用自定义属性而不是 nth-child，避免"节点顺序变了延迟就乱"的耦合。 */
-        style: {
-          ...(isFuture ? { pointerEvents: 'none' as const } : {}),
-          '--tl-enter-i': String(Math.min(30, node.index)),
-        } as React.CSSProperties,
+        style: enterStyleOf(node.index, isFuture ? { pointerEvents: 'none' as const } : undefined),
         role: 'button',
         tabIndex: isSelected || (selectedKey === null && node.index === 0) ? 0 : -1,
         'aria-label': ariaLabel,
@@ -1127,29 +1151,19 @@ export function FolderMap(props: FolderMapProps): React.ReactElement {
       {
         className: 'tl-graph-svg',
         /*
-         * 入场动画（1.5.4 真机需求「每一次加载出来的时候都有动画，比如点不同轮次、
-         * 初次加载、点击进文件夹等」）。
+         * **不给 svg 加 key**（P2 修正，别再改回去）。
          *
-         * 做法：用 **key** 强制重挂载，让进场动画每次都能重新播一遍。
-         * - 换轮次（now）、换目录（currentPath）、切「显示全部」、密度档位变化
-         *   —— 这些都是"换了一张图"，都该重新入场；
-         * - 拖动/选中/悬浮**不在 key 里**：那些是同一张图内的状态变化，
-         *   重新入场会闪，而且会打断布局过渡。
+         * 旧实现给 `key` 塞了 `props.now`、密度档位、`showAllExpanded`、节点数 ——
+         * 本意是「换了一张图就重播入场动画」。但 `props.now` 在 `entries/tab.ts` 里
+         * **每 30 秒变一次**，于是数据完全没变时图也会周期性重挂载：
+         * 整张 SVG 连同 `<g>` 场景根一起重建、入场动画重播、`useSceneFrame` 的
+         * 当前可见帧被丢弃 → 用户每半分钟看到图闪一下。
          *
-         * 动画本身在 CSS（`threadline-graph-enter`）：节点按序号做极小的延迟错峰，
-         * 线随后淡入，整体 260ms 内完成；reduced-motion 下整段不播。
+         * 现在：**场景根常驻**。入场动画由 CSS keyframes 挂在
+         * `.tl-ofile` / `.tl-foldhub` / `.tl-graph-edge` 上，新元素进入 DOM 时
+         * 天然会播一次（真正的"换图"= 节点 path 变了 = 新元素），
+         * 同一元素保留时不重播 —— 这恰好是想要的语义。
          */
-        key:
-          'g:' +
-          String(props.now ?? 0) +
-          '\u0000' +
-          props.currentPath +
-          '\u0000' +
-          (showAllExpanded ? 'all' : 'fold') +
-          '\u0000' +
-          density +
-          '\u0000' +
-          String(geometry.nodes.length),
         viewBox: '0 0 ' + String(geometry.width) + ' ' + String(geometry.height),
         preserveAspectRatio: 'xMidYMid meet',
         role: 'group',
@@ -1175,7 +1189,7 @@ export function FolderMap(props: FolderMapProps): React.ReactElement {
           const element = renderEdge(item)
           return element === null ? [] : [element]
         }),
-        ...geometry.hubs.map(renderHub),
+        ...geometry.hubs.map((hub, hubIndex) => renderHub(hub, hubIndex)),
         ...nodes.map(renderNode),
         ...labelElements,
       ),
@@ -1204,6 +1218,14 @@ export function FolderMap(props: FolderMapProps): React.ReactElement {
       'data-label-count': labels.filter((label) => label.visible).length,
       'data-zoom': String(camera.scale),
       'data-reduced-motion': props.reducedMotion === true ? 'true' : 'false',
+      /**
+       * 场景运动状态（P3）：`grow` = 几何正在从中心生长。
+       *
+       * CSS 据此抑制 `.tl-ofile/.tl-foldhub` 的逐元素入场动画（它们含 translateY 与错峰延迟），
+       * 避免"节点一边从中心移动、一边还在淡入"的双重动画打架。
+       * 首次挂载不走这里（那时时钟直接到终点、不生长），CSS 入场动画照常播放。
+       */
+      'data-scene-motion': sceneGrowing ? 'grow' : 'idle',
       'data-testid': props.testId,
     },
     h(

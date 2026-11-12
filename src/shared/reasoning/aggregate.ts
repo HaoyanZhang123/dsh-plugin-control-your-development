@@ -33,7 +33,14 @@ export interface ReasoningSample {
   answerText?: string
   /** provider 上报的 reasoningTokens；缺省 = 未知。 */
   tokens?: number
-  /** provider 上报的 totalTokens；缺省 = 未知。 */
+  /**
+   * provider 上报的 outputTokens；缺省 = 未知。
+   *
+   * 「思维链占输出多少」= tokens / outputTokens，是唯一有意义占比口径
+   * （见 `ReasoningTotals.tokenRatio` 的说明）。
+   */
+  outputTokens?: number
+  /** provider 上报的 totalTokens（上下文口径，含输入与缓存）；缺省 = 未知。 */
   totalTokens?: number
   sessionId: string
   turn: number | null
@@ -67,14 +74,22 @@ export function samplesToSentences(sample: ReasoningSample): ReasoningSentence[]
 }
 
 /** 样本是否带齐 token 维度（两者都是有限非负数）。 */
+/**
+ * 样本是否带齐 token 维度。
+ *
+ * 1.5.5 口径变更：必需项从 `tokens + totalTokens` 改成 **`tokens + outputTokens`**。
+ * 原因：`totalTokens` 是**上下文**口径（含输入与缓存），拿它当分母算出的
+ * 「占总 token」实测中位数只有 0.13%，没有解释力；有意义的分母是 `outputTokens`。
+ * `totalTokens` 降级为可选（只用于「占上下文」那一列的如实展示，缺了就显示未知）。
+ */
 export function hasTokens(sample: ReasoningSample): boolean {
   return (
     typeof sample.tokens === 'number' &&
     Number.isFinite(sample.tokens) &&
     sample.tokens >= 0 &&
-    typeof sample.totalTokens === 'number' &&
-    Number.isFinite(sample.totalTokens) &&
-    sample.totalTokens > 0
+    typeof sample.outputTokens === 'number' &&
+    Number.isFinite(sample.outputTokens) &&
+    sample.outputTokens > 0
   )
 }
 
@@ -133,6 +148,7 @@ function emptyGroup(key: string): ReasoningGroup {
     chars: 0,
     answerChars: 0,
     tokens: 0,
+    outputTokens: 0,
     totalTokens: 0,
     knownChars: 0,
     blocks: 0,
@@ -166,31 +182,58 @@ export interface AggregateResult {
 }
 
 /**
+ * 聚合选项（1.5.5：语言筛选真正进入派生管线）。
+ *
+ * 为什么语言筛选必须在**这一层**做，而不是在样本层：
+ * `ReasoningSample` 没有 `lang`（语言是逐句判定的），样本层过滤只能靠"猜这条样本是什么语言"，
+ * 那会造出第二套统计口径。正确做法是：聚合时**只统计语言匹配的句子** ——
+ * 字符、token、分组、句子明细全部同一个口径，与「按语言看思维链」这句话的字面意思一致。
+ *
+ * 副作用（已知且有意）：一条样本的 reasoningTokens 是整段的，句子被筛掉一部分后
+ * token 仍按"样本主要归属组"计入 —— 与原有的 token 归因近似是同一条规则，不新增偏差来源。
+ */
+export interface AggregateOptions {
+  /** 只统计该语言的句子；`'all'` 或省略 = 不筛。 */
+  lang?: ReasoningLang | 'all'
+}
+
+/**
  * 聚合（纯函数，确定性）。
  *
- * token 归属规则：一条样本的 reasoningTokens 是**整段**的，不能平均摊到句子上；
- * 因此 token 只会累加到该样本所属的分组 —— 若一段思维链里出现多个句式，
- * 它的 token 会算进"主要句式"所在组（按字符占优的那个），并在 UI 上以覆盖率说明。
- * 这样做的好处：不伪造"每句精确 token"；代价：细分组的 token 有归因近似。
+ * **token 归属规则（1.5.5 重做；这是"观测不到"的根因）**：
+ * provider 只上报**整段** reasoningTokens / outputTokens / totalTokens，不存在逐句精确值。
+ * 旧实现把整段 token 只记给"字符占优"的那一组 → 其余组一律 `tokens = 0`，
+ * 于是 6280 个组里绝大多数显示「未知」。这不是数据缺失，是口径把数据丢了。
+ *
+ * 现在：同一段 thought 内，token 按各组的**字符占比分配**。
+ * - 守恒：各组分配之和 = 该段真实 token（不放大、不缩水）；
+ * - 诚实：这是估算，UI 必须能标注（`reasoning.estimated`）；
+ * - 不摊到句子：句子级仍然没有 token（那是 provider 根本不给的量级）。
  */
 export function aggregateReasoning(
   samples: readonly ReasoningSample[],
   dimension: ReasoningDimension,
+  options?: AggregateOptions,
 ): AggregateResult {
+  const langFilter = options?.lang ?? 'all'
   const byKey = new Map<string, ReasoningGroup>()
   const sentences: ReasoningSentence[] = []
   let chars = 0
   let answerChars = 0
   let tokens = 0
+  let outputTokens = 0
   let totalTokens = 0
   let knownChars = 0
+  let knownBlocks = 0
   let blocks = 0
 
   for (const sample of samples) {
-    const sampleSentences = samplesToSentences(sample)
-    const sampleChars = countChars(sample.text)
-    const sampleAnswerChars = countChars(sample.answerText ?? '')
+    const allSentences = samplesToSentences(sample)
+    /* 语言筛选：句子级剔除，后续所有统计（字符/token/分组/明细）都只看保留下来的句子。 */
+    const sampleSentences = langFilter === 'all' ? allSentences : allSentences.filter((sentence) => sentence.lang === langFilter)
+    const sampleChars = sampleSentences.reduce((sum, sentence) => sum + sentence.chars, 0)
     if (sampleChars === 0) continue
+    const sampleAnswerChars = countChars(sample.answerText ?? '')
     blocks += 1
     chars += sampleChars
     answerChars += sampleAnswerChars
@@ -198,20 +241,45 @@ export function aggregateReasoning(
     const tokenKnown = hasTokens(sample)
     if (tokenKnown) {
       tokens += sample.tokens as number
+      outputTokens += sample.outputTokens as number
       totalTokens += sample.totalTokens as number
       knownChars += sampleChars
+      knownBlocks += 1
     }
 
-    /* 该样本的 token 归到"字符占优"的那一组，避免摊薄成假精度。 */
+    /* 该段 thought 内，每个分组的字符量（token 分配的分母）。 */
     const localFormChars: Partial<Record<ReasoningForm, number>> = {}
     const localLangChars: Partial<Record<ReasoningLang, number>> = {}
     const localPerKey = new Map<string, number>()
+    const localPerKeySentences = new Map<string, number>()
     for (const sentence of sampleSentences) {
       bumpForm(localFormChars, sentence.form, sentence.chars)
       bumpLang(localLangChars, sentence.lang, sentence.chars)
       const key = groupKeyOf(sentence, dimension)
       localPerKey.set(key, (localPerKey.get(key) ?? 0) + sentence.chars)
+      localPerKeySentences.set(key, (localPerKeySentences.get(key) ?? 0) + 1)
     }
+
+    for (const [key, value] of localPerKey) {
+      const group = byKey.get(key) ?? emptyGroup(key)
+      group.chars += value
+      group.sentences += localPerKeySentences.get(key) ?? 0
+      if (tokenKnown) {
+        /*
+         * 按字符占比分配这一段 thought 的 token（守恒：各组之和 = 整段）。
+         * 用**浮点累加、最后统一取整**的口径会在组数很多时丢几个 token，
+         * 这里直接按比例累加并在 UI 里取整显示 —— 误差 < 1 token/组，远小于 provider 精度。
+         */
+        const share = sampleChars > 0 ? value / sampleChars : 0
+        group.tokens += (sample.tokens as number) * share
+        group.outputTokens += (sample.outputTokens as number) * share
+        group.totalTokens += (sample.totalTokens as number) * share
+        group.knownChars += value
+      }
+      byKey.set(key, group)
+    }
+    /* 每组的 answerChars 只在"样本归属组"上计一次，避免分母被多组重复计。
+     * 归属组 = 该段字符量最大的那组（与旧实现同一口径，只是不再用它独占 token）。 */
     let ownerKey: string | null = null
     let ownerChars = -1
     for (const [key, value] of localPerKey) {
@@ -220,23 +288,10 @@ export function aggregateReasoning(
         ownerKey = key
       }
     }
-
-    for (const [key, value] of localPerKey) {
-      const group = byKey.get(key) ?? emptyGroup(key)
-      group.chars += value
-      group.sentences += sampleSentences.filter((sentence) => groupKeyOf(sentence, dimension) === key).length
-      if (tokenKnown && key === ownerKey) {
-        group.tokens += sample.tokens as number
-        group.totalTokens += sample.totalTokens as number
-        group.knownChars += value
-        group.blocks += 1
-      }
-      byKey.set(key, group)
-    }
-    /* 每组的 answerChars 只在"样本归属组"上计一次，避免分母被多组重复计。 */
     if (ownerKey !== null) {
       const owner = byKey.get(ownerKey) ?? emptyGroup(ownerKey)
       owner.answerChars += sampleAnswerChars
+      if (tokenKnown) owner.blocks += 1
       byKey.set(ownerKey, owner)
     }
     /* 模型 / preset / 语言 / 句式分布：按句子字符累加。 */
@@ -256,19 +311,29 @@ export function aggregateReasoning(
     group.lang = dominantLang(group.langs)
     groups.push(group)
   }
-  /* 语言/句式的"主要项"用于 UI 的次要标签；这里写回 forms 的主项便于消费方直接读。 */
   const totals: ReasoningTotals = {
     chars,
     answerChars,
     tokens,
+    outputTokens,
     totalTokens,
     knownChars,
     blocks,
     sentences: sentences.length,
     coverage: chars > 0 ? knownChars / chars : null,
-    tokenRatio: totalTokens > 0 ? tokens / totalTokens : null,
-    charRatio: chars + answerChars > 0 ? chars / (chars + answerChars) : null,
+    /* 思维链占**输出**（有意义的口径）；outputTokens 缺失 → 未知，不是 0%。 */
+    tokenRatio: outputTokens > 0 ? tokens / outputTokens : null,
+    /* 占上下文（如实展示，不再冒充"占总 token"）。 */
+    contextRatio: totalTokens > 0 ? tokens / totalTokens : null,
+    /*
+     * 字符占比：**没有正文时必须为 null**。
+     * 实测本会话 150 条带 reasoning 的回复里只有 10 条有普通文本块，
+     * 旧口径会算出 99.2%（"思维链占了几乎所有字符"）—— 那是分母缺失，不是事实。
+     */
+    charRatio: answerChars > 0 ? chars / (chars + answerChars) : null,
   }
+  /* knownBlocks 目前只用于说明覆盖率口径的分子，避免"有 token 的块数"被误读成 blocks。 */
+  void knownBlocks
   return { groups, totals, sentences }
 }
 

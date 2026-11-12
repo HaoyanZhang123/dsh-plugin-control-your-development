@@ -9,6 +9,256 @@
 
 ## [Unreleased]
 
+## [1.5.5] - 2026-11-12
+
+> 一次**结构性正确性**修复：先修「连不上、切换闪、筛选不一致、宿主输入框露出」，
+> 再让两个页面的精修都建在同一个几何/状态口径上。布局、配色体系与原生 Shell **未改**。
+> 依据：`DSH 脉络与思维链 UI 优化交接方案`（审计基线 v1.5.4 / commit `36f2044`）。
+> 证据：`output/_verify/threadline/T95-p1-surface/`、`T96-p1-filter/`、`T97-final/`、
+> `P2-map-graphscene/`。
+
+### 修复
+
+- **思维链页底部仍然露出宿主会话输入框（说了"独占一屏"，实际只加了类名）。**
+  **根因**：只有「脉络」tab 接了 `useComposerSurface` + 宿主可视高度同步；思维链的
+  `ReasoningSurface` 只补了 `class="threadline-app"` 和样式根，**两个机制都没有**。
+  `reasoning.css` 的 `block-size:100%` 替代不了宿主高度测量 —— 宿主滚动容器的内容高度是
+  `auto`，`100%` 只会拿到内容高度，外壳不会变成真正的滚动容器。
+  **修法**：新增 `ui/shell/ConversationSurface.ts`，把「composer 隐藏 + 宿主可视高度 + 样式根」
+  收敛成唯一实现，两个 tab 共用；`entries/tab.ts` 里那份手写逻辑删除（`useComposerSurface`
+  与 `surfaceRef` 在该文件内 grep 归 0）。审批/提问/计划复核的 composer 仍由 `surface.css` 显式排除。
+
+- **思维链的「语言」下拉是个摆设（选了任何语言，图表一个字都不变）。**
+  **根因**：`filterSamples()` 明确不做语言过滤（语言是逐句判定的，样本级没有该字段），
+  而 `deriveReasoning()` 也从没调用过已经存在的 `sentencesByLang()`。
+  **修法**：语言筛选下沉到聚合层 —— `aggregateReasoning(samples, dim, { lang })` 按句剔除后
+  重算字符/token/分组/句子明细（一个口径，不新增第二套统计）。语言选项改从
+  `derived.allSentences`（**筛选前**）枚举，否则选了中文之后英语/混合会从下拉里消失。
+
+- **Preset 是个隐性状态：有 `filter.preset`、注释写着"五个筛选"，但工具栏只渲染四个。**
+  **修法**：新增 `presetOptionsOf()`（从真实样本枚举，不写死）+ 工具栏「更多筛选」入口。
+
+- **脉络页「文件夹 ↔ 文件夹」的线不跟着节点动。**
+  **根因**：`edgeSync.ts` 的 `edgeKeyOf()` 只认 `data-edge-id` / `data-hub-edge-hub|file`，
+  而 `renderHubPair()` 输出的是 `data-hub-pair-*` → 这类边从未被插值。
+  **修法**：删除整条 `edgeSync` 路径，改由 `sceneClock.ts` 用 hub A/B 的**当前帧坐标**派生端点。
+
+- **边快照读早了（存下来的是旧帧，不是注释说的"动画结束后"）。**
+  **根因**：`syncEdges()` 会把 DOM 钉回旧坐标，紧接着 `readEdgeFrames()` 读到的就是被钉回的值。
+  **修法**：快照机制整体删除；`useSceneClock.ts` 以"当前可见帧"为起点，不再从 DOM 读。
+
+- **节点、文件夹图标、标签、三类边各用不同时钟 → 中间帧四处错位。**
+  **修法**：`interpolateGeometry()` 在同一帧插值 nodes/hubs（含卡片 `width/height`），
+  渲染层全部从这一帧取坐标；`map.css` 删除 `cx/cy/r`、`x/y/width/height`、标签坐标的 CSS 几何过渡
+  （保留颜色/透明度/描边的短过渡）。统一时钟只同步坐标，**不重排布局**。
+
+- **SVG 每 30 秒自己被重建一次，入场动画周期性重播。**
+  **根因**：`<svg>` 的 `key` 串含 `props.now`，而 `now` 在 tab 里每 30s 刷新一次。
+  **修法**：删除整个 key（场景根常驻）；`props.now` 在该组件内出现次数归 0。入场动画改由元素级
+  CSS keyframes 承担，不再依赖重挂载。
+
+- **`--tl-fs-caption` 令牌从未定义，`map.css` 里 5 处引用集体失效。**
+  **修法**：在 `tokens.css` 补上该令牌（取 meta-sm 与 meta 之间的一档）；不改那 5 处引用。
+
+### 改进
+
+- **矩形树图**：真 squarified 布局（同输入同输出）；`ResizeObserver` 读真实容器尺寸并以**相同尺寸**
+  设 `viewBox`（窄屏是重新布局，不是把 960px 的图整体缩小）；每格独立 `clipPath`（名称与数值不越界）；
+  颜色按 `group.key` 哈希**稳定映射**（筛选/排序后同一组不换色）；最多 12 格，其余并入「其他」，
+  「其他」可下钻到被合并的分组列表。
+- **词云**：两阶段布局 —— Canvas `measureText` 量真实包围盒 → 大词优先 + 确定性螺旋候选点 →
+  相交继续找 → 放不下则降字号 → 仍放不下则**跳过并计数**（`未显示 N 项`，不静默丢失）。
+  修了一个功能性缺陷：原来喂的是合并后的 ≤12 组，词云永远只有 11 个词、「未显示」永不出现；
+  现在喂全量分组，放不下的事实才真的可见。
+- **列表**：表头改成真 `<button>` + `aria-sort` + 方向箭头；分组与句子分页增量渲染
+  （`显示 N/M`）；键盘 ↑↓ 移动、Enter 选择、Esc 清除，与图形视图共享同一个选中状态。
+- **自研可访问 Listbox**：`button + listbox + option` 语义；↑↓ / Home / End / Enter / Esc / Tab、
+  字符前缀搜索、点击外部关闭并归还焦点；替换全部原生 `select`，不引入任何 UI 库。
+- **覆盖率与按需加载**：常驻显示「已加载 N/M 个会话」+ 失败数 + 「继续加载 / 加载全部」；
+  `loaded` 只数**真的拿到 detail** 的会话，失败单独计数 —— 不用"请求发出去了"冒充已加载。
+- **空态可解释**：区分「筛选滤空了」与「本来就没有记录」，前者列出具体条件并给「重置」。
+  活动筛选行只在有非默认筛选时出现，不占高度。
+
+### 测试
+
+- 新增 `tests/reasoning/filter-pipeline.test.ts`（12 条）专守「控件改了必须真的改变数据」：
+  每条先断言筛选前后**确实不同**，再断言结果**符合预期**。反向验证（把 `langFilter` 短路成 `'all'`
+  模拟旧行为）实测 **5 条真的红**并点名「语言筛选没有改变字符总数」。
+- 新增 `tests/ui-map/scene-clock.test.ts`（10 条）：在 progress = 0/0.25/0.5/0.75/1 采样，
+  断言端点偏差。反向验证（端点改回读静态值）实测红并点名 `p=0 hub:src>README.md x1`。
+- 新增 `tests/reasoning/{viz-layout,listbox,reasoning-view}.test.ts`。
+- 重写两条已漂移的守卫：`reasoning-surface.test.ts`（从"源码里字面出现 className"→
+  "入口必须经过共用表面 + 表面必须真的隐藏 composer/同步高度"）、
+  `layout-transition.test.ts`（从"用 CSS 过渡做布局动画"→"几何由 rAF 驱动、CSS 不得再对几何声明过渡"）。
+- 修正 `tests/harness/run-reasoning.mjs` 与 `reasoning.css` 里已失效的 `.tl-cloud-tile` 选择器
+  （组件早已输出 `.tl-cloud-word`）。
+- 全量 `node --test`：**1023 tests / pass 1023 / fail 0**；`typecheck` exit 0；
+  `build` 两次逐字节一致；`emit-styles --check` exit 0。
+
+### 文案
+
+- 新增 17 条（§16 表格同步）：`reasoning.coverageLoaded|coverageFailed|loadMore|loadAll|loadingMore|
+  moreFilters|preset|activeFilters|resetFilters|filteredEmpty|otherDrill|otherList|cloudSkipped|
+  showing|noOptions|sortedAsc|sortedDesc`。`SPEC_KEYS` 225 → 242。
+
+### 真机复核第二轮（同日，用户验收 8 条反馈）
+
+安装后用户在真机上逐条验收，回报 8 个问题。全部先复现、定位根因，再改根因。
+
+- **思维链「token 显示观测不到，比例对吗」（这条是统计口径错，不是数据缺）。**
+  **实测取证**（本会话 `session-6bf1e99a…`，1896 行）：带 reasoning 的 assistant 消息 150 条，
+  其中 `reasoningTokens`/`totalTokens` 齐备 **150/150 —— 一条都不缺**。
+  **根因三条**：① `aggregateReasoning` 把整段 token 只记给"字符占优"的那一组，
+  其余组一律 0 → 6280 个组里绝大多数显示"未知"；② 「占总 token」用
+  `reasoningTokens / totalTokens`，而 `totalTokens` 是上下文口径（含输入与缓存，
+  实测 26639 里 cacheRead 就有 20480），该比值中位数只有 **0.13%**、最大 2.66%，
+  没有解释力；③ 「字符占比」的分母只算"普通文本块"，而 150 条回复里只有 **10 条**有正文
+  （其余只有 reasoning + tool-call），分母几乎为空 → 算出 **99.7%** 这种假数。
+  **修法**：token 改为在同一段 thought 内**按各组字符占比分配**（守恒：各组之和 = 整段真实值，
+  UI 标注「估算」）；「占输出」改用 `tokens / outputTokens`（同批样本中位数 **58.2%**）；
+  新增「占上下文」列如实保留上下文口径；`charRatio` 在 `answerChars === 0` 时返回 **null**
+  （显示 `—`，不再是 99%）。`hasTokens` 必需项随之改为 `tokens + outputTokens`。
+
+- **思维链「整体统计口径有问题，应该只统计这一个对话」。**
+  **修法**：`DEFAULT_FILTER.range` 从 `workspace` 改为 **`session`**；新增 `filter.turn` 与
+  轮次下拉（`derived.turnOptions` 从**轮次过滤前**枚举，否则选 T3 后其他轮次会消失）；
+  全工作区仍可从范围下拉显式切换。`range === 'session'` 时不再渲染「已加载 N/M」覆盖率条
+  （当前会话是完备的，没有覆盖率问题）。
+
+- **思维链「左侧『句式开头』『句式类型』排成几列很乱」。**
+  **根因**：`reasoning.css` 两处容器查询把 `.tl-reasoning-nav` 改成 `flex-direction: row; wrap`。
+  **修法**：两处 override 全删，任何宽度下恒为单列。
+
+- **思维链「矩形树图格内文字对不上，很多地方空着；特别小的可以不显示，大的一定要显示」。**
+  **根因**：阈值 `54×26` / `84×44` 太粗（大而窄的格整片空白），且文字画在 `x+8` 后靠
+  `clipPath` **硬切**（出现 `Actually t` / `I should` 这种残片）。
+  **修法**：阈值降到 `40×20`（名称）/ `64×40`（数值）；按格子真实可用宽度做省略号截断，
+  `clipPath` 降级为纯兜底。实测 1440→260px 六档零越界，200px 时出现省略且无任何中间残片。
+
+- **思维链「顶部『当前工作区』『全部』这些下拉不知所云，也没显示全」。**
+  **根因**：换成自研 Listbox 时把**可见标签**丢了，`label` 只进了 `aria-label`/`title`
+  → 五个按钮上只有值（全是"全部"）。
+  **修法**：按钮前补 `<span class="tl-listbox-caption">`；按钮上限 190 → 260px。
+
+- **思维链「点了详情之后，最上面的『字符数』『思维链』一栏就被遮住」。**
+  **根因**：`.tl-reasoning` 是 column flex，子项默认 `flex-shrink: 1`；总高超出时 KPI 被压缩，
+  而它自身 `overflow: hidden` → 数值被裁掉。不是 sticky 遮挡。
+  **修法**：工具栏 / 覆盖率条 / 活动筛选行 / KPI / 详情带全部 `flex: 0 0 auto`，
+  KPI 加 `min-block-size: fit-content`；超高时靠根容器滚动，不再压扁。
+  实测 1440×1000 / 1440×600 / 1440×600+详情 / 900×600 四档，KPI 被裁 0px。
+
+- **脉络「点具体轮次时，先出现线然后节点才加载进去」。**
+  **根因**：folder 与 turn 的入场时序**不是同一套**——边写死 `animation-delay: 60ms`，
+  节点有 `--tl-enter-i` 错峰，`TurnMap` 的节点**完全没写** `--tl-enter-i`，
+  三类标签**根本没有入场动画**（一上来就是终点透明度）。
+  **修法**：收敛成单一契约 `theme.ts:enterStyleOf()` + 两条 CSS 常量
+  `--tl-enter-step: 12ms` / `--tl-enter-offset: 60ms`，分三层：节点 0ms 起按序错峰 →
+  边 +60ms → 标签 +60ms。folder 与 turn 共用同一组选择器，不再各写一份。
+
+- **脉络「有些文件夹不显示名称」（5 个卡片只出 1 个名字）。**
+  **根因**：`labelVisible: wanted <= FOLDER_HUB_MAX_WIDTH`（132px）——名字一超 132px
+  就**一个字都不画**，不是"放不下"而是"没做省略"。
+  **修法**：新增 `truncateToWidth()`（同一套 `textWidth()`，省略号计入宽度，逐字符回退）
+  与 `FolderLayoutHub.labelText`；卡片宽度钳制不变（布局不变），渲染用 `labelText`，
+  `title`/`aria-label`/`data-hub-name` 仍用完整 `name`（省略不丢信息）。
+  0.5px 容差用于抵消 `Math.round` 取整差（否则 `docs`/`assets` 会被截成 `do…`）。
+
+### 测试（第二轮）
+
+- 新增 `tests/reasoning/token-semantics.test.ts`（11 条）守 token 分配守恒与三个分母。
+  **反向验证**：把分配改回"只给一个组"，**9/11 真的红**并点名「每组都应分到 token，实际只有 1 组」。
+- 新增 `tests/reasoning/reasoning-fixes.test.ts`（16 条）覆盖导航单列 / 树图标签 / Listbox caption /
+  KPI 不被压缩 / `range === 'session'` 不渲染覆盖率条。
+- 新增 `tests/ui-map/hub-label.test.ts`（10 条），含**反向断言**「短名必须整词显示」。
+- 重写 `tests/ui-map/graph-enter.test.ts`（12 条）守「两种模式共用同一入场规则」。
+  **反向验证**：删掉 `FileGraph` 的 `--tl-enter-i`，真的红并点名。
+- 全量 `node --test`：**1067 tests / pass 1067 / fail 0**；`typecheck` exit 0；
+  `build`×2 逐字节一致（`index 9477a7ffc82d` / `client e38f1fc3d7fa`）；
+  `emit-styles --check` exit 0；项目 smoke **7/7**；工厂 `ready.py` 全量 **PASS 196 / FAIL 0**。
+
+### 真机复核第三轮（同日，用户验收 2 条反馈）
+
+两条里有一条是**我上一轮修错了层次**，记在这里避免以后再犯。
+
+- **思维链「下拉列表还是没显示完整」（语言下拉只剩 `33.4k` 这堆数字，语言名整列消失）。**
+  **根因两条叠加**：① `.tl-listbox` 是 `inline-flex`（宽度收缩到按钮），而弹层的
+  `min-inline-size: 100%` 是相对**这个收缩宽度**解析的 —— 「语言」这种短按钮的弹层只有按钮那么宽；
+  ② 选项网格 `14px minmax(0, 1fr) auto` 里 `minmax(0, 1fr)` 的**下限是 0**，
+  在窄弹层里先被压成零宽（连省略号都没东西可省），而 `auto` 那列（字符量 meta）按内容撑开
+  → 名称列归零，只剩数字。
+  **修法**：弹层改 `inline-size: max-content` + `min-inline-size: 100%` +
+  `max-inline-size: min(340px, calc(100vw - 24px))`（内容驱动且不超出视口）；
+  名称列改 `minmax(auto, 1fr)`（下限按内容）；新增 `data-align="end"` 右对齐兜底
+  （纯 CSS 不知道弹层实际宽度，由 `Listbox` 开合后实测一次右边缘）。
+
+- **脉络「点不同轮次还是关系线先出现并固定，然后节点才连上去」。**
+  **上一轮我修错了层次**：只统一了 CSS 入场动画时序（给 `tl-fnode` 补 `--tl-enter-i`），
+  但症状里的「线**固定**」说明真正的问题是**没有位置插值** ——
+  `FolderMap` 在 P2 已接 `useSceneFrame`，而 **`FileGraph`（轮次图）从来没接过**
+  （`useSceneFrame`/`interpolateGeometry` 在 `FileGraph.ts` 里 0 命中）。
+  于是切轮次时边用**新坐标直接渲染**（先出现且定住），节点只有 CSS 入场动画从旧位置淡入。
+  **修法**：把插值内核抽象成「按 key 的节点坐标快照」——
+  `NodeFrame` + `interpolateNodeFrames()`，`FolderGeometry` 与 `GraphLayout` 各写一个薄适配器
+  （`nodeFramesOfFolder` / `nodeFramesOfGraph`），`useNodeFrames<T>` 泛型时钟供两者共用；
+  轮次图的边端点与标签坐标全部取自**当前帧** `nodeByKey`，不再读 `layout` 里的静态值。
+  `interpolateGeometry` / `useSceneFrame` 退化为薄封装（单一执行路径：`lerp` 定义 1 处、
+  `interpolateNodeFrames` 定义 1 处、`requestAnimationFrame` 只在 `useSceneClock.ts`）。
+
+### 测试（第三轮）
+- 新增 `tests/reasoning/listbox-layout.test.ts`（5 条结构性断言）。
+  **两次反向验证**：退回 `minmax(0,1fr)` → 1 条真红并点名；删掉 `max-content` → 2 条真红并点名；
+  恢复后 5/5 绿。
+- 新增 `tests/ui-map/turn-scene.test.ts`（13 条）：轮次图在 progress = 0/0.25/0.5/0.75/1
+  采样，端点偏差**严格 = 0**，边端点 `x1` 单调连续（340 → 304 → 269 → 233 → 198）。
+  **过程发现（值得记住）**：纯函数测试测不到渲染层接线 —— 把 `nodeByKey` 换成读静态坐标时
+  内核测试全绿。因此补了**源码级断言**守住「边起点必须取当前帧 `nodeByKey`」，
+  反向验证现在才能真红并点名。
+- 全量 `node --test`：**1085 tests / pass 1085 / fail 0**；`build`×2 一致
+  （`index 9477a7ffc82d` / `client d396228ffe73`）；`emit-styles --check` exit 0；
+  项目 smoke **7/7**；工厂 `ready.py` **PASS 196 / FAIL 0**，验证记录 CURRENT。
+
+### 真机复核第四轮（同日，"轮次图要生长，不要转场"）
+
+用户第三次强调同一条，前两轮**我都修错了层次**，记在这里。
+
+> 「我是希望关系线和节点一起**生长出来**，而不是提前预订好的那样**转场进入**。」
+
+**前两轮错在哪**：
+- 第一轮只统了 CSS 入场动画时序（补 `--tl-enter-i`）——症状里的"线**固定**"说明不是动画问题。
+- 第二轮把轮次图接上统一时钟（`useNodeFrames`）——但那只是让线跟着节点**滑动**，
+  仍然是"从旧布局滑到新布局"，不是"生长"。
+
+**真正的根因**：`interpolateNodeFrames` 的语义是「同一 key 在旧快照里存在 → 从旧坐标滑到新坐标」。
+于是两种模式的观感差异**不是路径不同，而是 key 重合度不同**：
+
+| 场景 | 旧 key 命中 | 表现 |
+| --- | --- | --- |
+| 切目录 | 多数字文件不在旧图里 → 走「无旧值」分支 | 从画布中心长出（像生长） |
+| 切轮次 | 文件几乎完全相同、只有 ops 变 → 几乎全部命中 | 从旧位置滑过去（就是"预订好的转场"） |
+
+**修法**：给时钟加 `restartOn`（视图身份）。值变化时用**空快照**喂给同一个
+`interpolateNodeFrames` → 每个 key 都命中「无旧值」→ 全部从 `enterOrigin()` 生长。
+不新增第二个插值函数（`sceneStartFrames()` 是唯一的重置规则）。
+- `FileGraph`：`restartOn: 'turn:' + 轮次号`；`FolderMap`：`restartOn: currentPath`。
+- 顺带修掉第二个"转场感"来源：**`FileGraph` 的 SVG 有 `key: 'svg:turn:' + n`**，
+  切轮次整张重建 → 生长动画直接作废（新场景以终点坐标挂载）。已删除，与 folder 图同一条
+  「场景根常驻」纪律。
+- **双重动画冲突**：几何在生长时，逐元素 `translateY(-6px)` + 错峰淡入会叠加成"抖着长出来"。
+  现在时钟对外暴露 `growing`，渲染层写 `data-scene-motion='grow'`，CSS 据此关掉逐元素动画、
+  改为整层短淡入。**首次挂载不受影响**（首帧不生长 → `idle` → 逐元素动画照常播，
+  首屏不会变成"突然出现"）。
+- 删掉 `.tl-fnode` 系列残留的 CSS 几何过渡（turn 图已归 rAF，留着就是两条时钟）。
+
+**测试**：新增 `tests/ui-map/scene-restart.test.ts`（7 条），关键三条：
+「`restartOn` 变化后同一 key 在 `p=0` 位于 origin」「反向：不重置快照时从 T1 坐标起步」
+「`restartOn` 不变时仍是旧位置→新位置插值（不是每次都从中心重来）」。
+**反向验证（Lead 亲自复核）**：把重置逻辑删掉 → **3 条真红**并点名；
+恢复后 7/7 绿。`layout-transition.test.ts` 里一条「turn 图必须保留 CSS 几何过渡」的旧断言
+方向反转（那是 turn 图还没接 rAF 时的事实），已说明理由并改语义，不是放宽。
+
+**门禁**：全量 **1093/1093**；`build`×2 一致（`client ef73e641941c`）；
+`emit-styles --check` exit 0；项目 smoke **7/7**；工厂 `ready.py` **PASS 196 / FAIL 0**。
+
 ## [1.5.4] - 2026-11-11
 
 > 真机反馈八项：关系线与节点动画不同步、思维链独占一屏、配色饱和度、词云、模型筛选、

@@ -110,6 +110,24 @@ export {
 } from './camera.ts'
 export { ZoomGroup, type ZoomGroupProps } from './zoomGroup.ts'
 export {
+  applyFolderFrame,
+  collectEdgeEndpoints,
+  easeLayout,
+  edgeEndpointDeviation,
+  enterOrigin,
+  hasNode,
+  interpolateGeometry,
+  interpolateNodeFrames,
+  nodeFrameEndpointDeviation,
+  nodeFramesOfFolder,
+  nodeFramesOfGraph,
+  type EdgeEndpointSample,
+  type FileEdgeRef,
+  type NodeFrame,
+  type RenderedEdge,
+} from './sceneClock.ts'
+export { DEFAULT_LAYOUT_DURATION_MS, projectGraphFrame, sceneStartFrames, useNodeFrames, useNodeFramesState, useSceneFrame, useSceneFrameState, type SceneClockOptions } from './useSceneClock.ts'
+export {
   aggregateEdgePairs,
   DRAG_THRESHOLD_PX,
   dragThresholdExceeded,

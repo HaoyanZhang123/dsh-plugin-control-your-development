@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/cover.png" alt="Threadline cover: a force-directed relation graph above a dual-track timeline" width="100%">
+  <img src="assets/cover.png" alt="Threadline cover: a file-relation graph of folder cards and file dots on the left, an activity histogram with a playhead below it, and the project name on the right" width="100%">
 </p>
 
 <h1 align="center">Threadline / 脉络</h1>
@@ -123,28 +123,44 @@ plugin/
 
 ## Project status
 
-> ⚠️ **This is an unfinished release (v1.5.4) and still being iterated on. More polish is coming.**
+> **v1.5.5 is the default version on npm (`latest`) and is still being iterated on.**
 >
-> It is not a stub — it works — but it is **usable rather than finished**:
+> It works, but a few things are worth knowing up front:
 >
-> - **The Reasoning tab is the focus of this release.** It is functionally complete
->   (treemap / word cloud / list, five filter dimensions, Top-50 aggregation), but its
->   **visuals and interaction are still being adjusted** — palette, density and type scale will change.
->   Known and not fully solved: word-cloud labels can overlap when there are many groups.
+> - **The Reasoning tab is functionally complete.** Treemap / word cloud / list, and all six filters
+>   (range, turn, model, language, record, preset) genuinely change the derived data. The language and
+>   preset filters actually take effect, and the page honestly reports "loaded N/M sessions".
+>   List rows are paged rather than rendered all at once. Visuals and interaction will keep being adjusted.
 > - **"Standalone page" is a visual claim, not an architectural one.** A DSH UI plugin can only
 >   register into an existing slot (this one uses `conversation.view`); there is no public API for
->   opening an independent window or route. The Reasoning tab now fills the area, has an opaque
+>   opening an independent window or route. The Reasoning tab fills the area, has an opaque
 >   background and scrolls internally, but it is **still rendered inside the conversation container**.
 > - **Performance** only gained an "unchanged log is not re-read" cache. The first open still pays a
 >   full scan; going further needs incremental log reading, which conflicts with this project's
 >   "permanently read-only" rule — not decided yet.
+> - **Upgrades are not automatic.** An already-installed copy must be uninstalled and reinstalled to
+>   pick up a new version (host limitation).
 >
-> So: **install it, but treat the Reasoning tab as a preview.** The Threadline side
-> (timeline / relation graph) is stable. For concrete problems, please file an issue with the scenario.
+> For concrete problems, please file an issue with the scenario.
 
 ## Releases
 
-Current release: **panel plugin v1.5.4** (unfinished, actively being polished).
+Current release: **panel plugin v1.5.5** (npm `latest`, actively being polished).
+
+> **v1.5.5**: one structural correctness pass. Both tabs now share a single `ConversationSurface`
+> (the Reasoning tab no longer leaks the host input box); Threadline collapses nodes, folder cards,
+> icons, labels and all three edge classes onto **one rAF geometry clock**, with edge endpoints derived
+> per frame from the current node coordinates — the separate `edgeSync` interpolation path is gone, and
+> the SVG no longer remounts when `now` / turn / density / node count changes. The language and preset
+> filters now really feed the derivation pipeline; the treemap is a true squarified layout with
+> per-cell clipping, key-stable colors and a drillable "Other"; the word cloud measures text on a canvas
+> and detects collisions (words that do not fit are counted, not silently dropped); lists are paged.
+> v1.5.4 fixed eight items from real-device feedback (per-frame edge interpolation, node entry animation,
+> the Reasoning tab filling the host area, a muted pastel palette, a real word cloud, the model filter
+> enumerating real sample values instead of hard-coded names, the layout rework, and treemap Top 50).
+> v1.5.3 fixed the rail list tail misalignment, added layout transitions, colored the treemap and capped
+> it at Top 10, and gave host `/detail` an `updatedAt` cache hit.
+> See the 1.5.5 / 1.5.4 / 1.5.3 / 1.5.1 sections in [CHANGELOG.md](CHANGELOG.md).
 
 - Changelog: [CHANGELOG.md](CHANGELOG.md)
 - GitHub Releases: https://github.com/HaoyanZhang123/dsh-plugin-control-your-development/releases
