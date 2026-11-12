@@ -179,7 +179,7 @@ plugin/
 
 ## Project status
 
-> **v1.5.5 is the default version on npm (`latest`) and is still being iterated on.**
+> **v1.5.6 is the default version on npm (`latest`) and is still being iterated on.**
 >
 > It works, but a few things are worth knowing up front:
 >
@@ -201,22 +201,28 @@ plugin/
 
 ## Releases
 
-Current release: **panel plugin v1.5.5** (npm `latest`, actively being polished).
+Current release: **panel plugin v1.5.6** (npm `latest`, actively being polished).
 
-> **v1.5.5**: one structural correctness pass. Both tabs now share a single `ConversationSurface`
-> (the Reasoning tab no longer leaks the host input box); Threadline collapses nodes, folder cards,
-> icons, labels and all three edge classes onto **one rAF geometry clock**, with edge endpoints derived
-> per frame from the current node coordinates — the separate `edgeSync` interpolation path is gone, and
-> the SVG no longer remounts when `now` / turn / density / node count changes. The language and preset
-> filters now really feed the derivation pipeline; the treemap is a true squarified layout with
-> per-cell clipping, key-stable colors and a drillable "Other"; the word cloud measures text on a canvas
-> and detects collisions (words that do not fit are counted, not silently dropped); lists are paged.
+> **v1.5.6**: bug-fix release on top of 1.5.5. The graph no longer flashes twice on load — it used to
+> paint once with a fallback canvas size and then re-lay out at the real size, which read as two separate
+> entrances (the measurement now happens before paint). The Reasoning tab no longer renders blank: its
+> view-entrance animation used `fill-mode: both` with a zero-opacity start frame, so any frame in which the
+> animation did not advance left the whole layer invisible. Treemap geometry was also corrected so the
+> `viewBox` matches the content box instead of double-subtracting padding. The README now documents the
+> Reasoning tab with real screenshots.
+> v1.5.5 was the structural pass: both tabs share a single `ConversationSurface` (the Reasoning tab no
+> longer leaks the host input box); Threadline collapses nodes, folder cards, icons, labels and all three
+> edge classes onto **one rAF geometry clock**, with edge endpoints derived per frame from the current node
+> coordinates — the separate `edgeSync` interpolation path is gone. The language and preset filters now
+> really feed the derivation pipeline; the treemap is a true squarified layout with per-cell clipping,
+> key-stable colors and a drillable "Other"; the word cloud measures text on a canvas and detects
+> collisions; lists are paged.
 > v1.5.4 fixed eight items from real-device feedback (per-frame edge interpolation, node entry animation,
 > the Reasoning tab filling the host area, a muted pastel palette, a real word cloud, the model filter
 > enumerating real sample values instead of hard-coded names, the layout rework, and treemap Top 50).
 > v1.5.3 fixed the rail list tail misalignment, added layout transitions, colored the treemap and capped
 > it at Top 10, and gave host `/detail` an `updatedAt` cache hit.
-> See the 1.5.5 / 1.5.4 / 1.5.3 / 1.5.1 sections in [CHANGELOG.md](CHANGELOG.md).
+> See the 1.5.6 / 1.5.5 / 1.5.4 / 1.5.3 / 1.5.1 sections in [CHANGELOG.md](CHANGELOG.md).
 
 - Changelog: [CHANGELOG.md](CHANGELOG.md)
 - GitHub Releases: https://github.com/HaoyanZhang123/dsh-plugin-control-your-development/releases

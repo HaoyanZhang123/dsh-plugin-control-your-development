@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-control-your-development",
-  "version": "1.5.5",
+  "version": "1.5.6",
   "description": "脉络 / Threadline —— 把一段对话对工作区做了什么（文件、命令、子智能体、决策）串成一条可下钻的时间线，只读地嵌进 DSH 会话页、每轮操作区与输入框命令",
   "type": "module",
   "main": "lib/index.js",

@@ -205,12 +205,29 @@ export function FolderMap(props: FolderMapProps): React.ReactElement {
   const panRef = React.useRef<PanState | null>(null)
   const suppressClickRef = React.useRef(false)
 
-  React.useEffect(() => {
+  /*
+   * 量画布尺寸。
+   *
+   * **必须是 `useLayoutEffect`（1.5.5 修「节点图闪两下，像加载了两次」）。**
+   *
+   * 根因：`size` 的初值是 `{width:0, height:0}`，于是首帧用兜底尺寸（720×420）
+   * 算出一份几何并绘制出来；随后的测量把 `size` 改成真实尺寸（例如 958×420），
+   * `baseGeometry` 变成**新对象** → 几何时钟判定"目标变了" → 又播一遍形变。
+   * 用户看到的就是两次入场。
+   *
+   * `useEffect` 在**浏览器绘制之后**才跑，所以那第一帧一定会被看见。
+   * 改成 `useLayoutEffect` 后，测量发生在绘制之前：第一帧就已经是真实尺寸，
+   * 不会再有"先画错的、再改对的"。
+   *
+   * 这是修根因（首帧就用正确尺寸），而不是给第二次动画加节流/去抖把它藏起来。
+   */
+  React.useLayoutEffect(() => {
     const element = stageRef.current
     if (element === null) return undefined
     const measure = (): void => {
       const rect = element.getBoundingClientRect()
-      setSize({ width: Math.round(rect.width), height: Math.round(rect.height) })
+      const next = { width: Math.round(rect.width), height: Math.round(rect.height) }
+      setSize((previous) => (previous.width === next.width && previous.height === next.height ? previous : next))
     }
     measure()
     /* 读一次布局过渡时长（CSS 令牌是唯一事实源，这里不写死毫秒数）。 */

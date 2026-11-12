@@ -194,12 +194,20 @@ function TurnMap(props: TurnMapProps): React.ReactElement {
   /** 布局过渡时长（读 CSS 令牌 `--tl-dur-layout`；与 folder 图同一个事实源）。 */
   const layoutDurationRef = React.useRef<number>(DEFAULT_LAYOUT_DURATION_MS)
 
-  React.useEffect(() => {
+  /*
+   * 量画布尺寸。**必须 `useLayoutEffect`**：与 `FolderMap` 同一根因同一修法。
+   *
+   * `size` 初值为 0 → 首帧用兜底尺寸算出一份布局并绘制；`useEffect` 在绘制之后
+   * 才测量并把 `size` 改成真实值 → 布局对象换新 → 几何时钟再播一遍 → 用户看到
+   * 「闪两下」。改到绘制之前测量后，第一帧就是正确尺寸。
+   */
+  React.useLayoutEffect(() => {
     const element = stageRef.current
     if (element === null) return undefined
     const measure = (): void => {
       const rect = element.getBoundingClientRect()
-      setSize({ width: Math.round(rect.width), height: Math.round(rect.height) })
+      const next = { width: Math.round(rect.width), height: Math.round(rect.height) }
+      setSize((previous) => (previous.width === next.width && previous.height === next.height ? previous : next))
     }
     measure()
     /* 读一次布局过渡时长（CSS 令牌是唯一事实源，这里不写死毫秒数）。 */
